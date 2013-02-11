@@ -1,102 +1,47 @@
-#include <stdlib.h>
-#include <string.h>
-#include <stdio.h>
-#include <unistd.h>
-#include <signal.h>
-#include <setjmp.h>
-#include <ucontext.h>
-#include <assert.h>
+#include "anemu.h"
 
-#include <r_types.h>
-#include <r_asm.h>
+int main(int argc, char ** argv) {
+    emu_register_handler(&emu_handler);
+    execute_instr();
 
-/* #define TRAP_BKPT   1 */
-/* #define TRAP_TRACE  2 */
-/* #define TRAP_BRANCH 3 */
-/* #define TRAP_HWBKPT 4 */
-
-#if HAVE_SETRLIMIT
-# include <sys/types.h>
-# include <sys/time.h>
-# include <sys/resource.h>
-#endif
-
-#define SIGNAL SIGPROF
-/* #define SIGNAL SIGSEGV */
-#define SEGV_FAULT_ADDR (void *)0xdeadbeef
-#define SIGJMP_REG_COUNT 10
-#define RETRY_COUNT 2
-
-#define cpu(reg) (emu.current.uc_mcontext.arm_##reg)
-
-static struct emu {
-ucontext_t original;
-ucontext_t current;
-    int        initialized;     /* boolean */
-    /* taint_t taint; */
-} emu;
-
-static struct r_asm_t *rasm;    /* rasm2 diassembler */
-
-void dbg_dump_env(sigjmp_buf env) {
-    static const char *sigjmp_buf_names[] = {"v1", "v2", "v3", "v4", "v5", "v6", 
-                                             "sl", "fp", "sp", "lr"};
-
-    int i;
-    for (i = 0; i < SIGJMP_REG_COUNT; i++) {
-        printf("dbg: %s = 0x%0x\n", sigjmp_buf_names[i], env->__jmpbuf[i]);
-    }
+    return 0;
 }
 
-/*
- * Signal context structure - contains all info to do with the state
- * before the signal handler was invoked.  Note: only add new entries
- * to the end of the structure.
- */
-/* 
-struct sigcontext {
-    unsigned long trap_no;
-    unsigned long error_code;
-    unsigned long oldmask;
-    unsigned long arm_r0;
-    unsigned long arm_r1;
-    unsigned long arm_r2;
-    unsigned long arm_r3;
-    unsigned long arm_r4;
-    unsigned long arm_r5;
-    unsigned long arm_r6;
-    unsigned long arm_r7;
-    unsigned long arm_r8;
-    unsigned long arm_r9;
-    unsigned long arm_r10;
-    unsigned long arm_fp;
-    unsigned long arm_ip;
-    unsigned long arm_sp;
-    unsigned long arm_lr;
-    unsigned long arm_pc;
-    unsigned long arm_cpsr;
-    unsigned long fault_address;
-};
-*/
+/* int __attribute__((aligned(0x1000))) execute_instr() */
+/* Simulate a native binary executing */
+int execute_instr() {
+    int val = 0x1337;
 
-#define SIGCONTEXT_REG_COUNT 21
+    int ret = test_asm(val);
+    printf("ret = %x\n", ret);
 
-void dbg_dump_ucontext(ucontext_t *uc) {
-    static const char *sigcontext_names[] = {"trap_no", "error_code", "oldmask",
-                                             "r0", "r1", "r2", "r3", "r4", "r5",
-                                             "r6", "r7", "r8", "r9", "r10",
-                                             "fp", "ip", "sp", "lr", "pc", "cpsr",
-                                             "fault_address"};
-    static int i;
-    for (i = 0; i < SIGCONTEXT_REG_COUNT; i++) {
-        printf("dbg: %-14s = 0x%0lx\n", 
-               sigcontext_names[i],
-               ((unsigned long *)&uc->uc_mcontext)[i]);
-    }
+    printf("execute_instr: finished\n");
+
+    return ret;
 }
 
-int regs_clean() {
+int test_c(int arg) {
+    int ret = test_asm(arg);
+    printf("test_c ret = %x\n", ret);
+        
+    return ret;
+}
+
+int emu_regs_clean() {
     return 0;                   /* TODO */
+}
+
+/* SIGTRAP handler used for single-stepping */
+void emu_handler(int sig, siginfo_t *si, void *ucontext) {
+    printf("emu_handler: SIG %d with TRAP code: %d pc: 0x%lx addr: 0x%x\n", 
+           sig, 
+           si->si_code, 
+           (*(ucontext_t *)ucontext).uc_mcontext.arm_pc, 
+           (int) si->si_addr);
+
+    emu_init();                 /* one time emu state initialization */
+    emu_start((ucontext_t *)ucontext);
+    emu_stop();
 }
 
 void emu_init() {
@@ -117,18 +62,6 @@ void emu_init() {
     printf("emu_init : finished\n");
 }
 
-const char* disas(unsigned int pc) {
-    /* printf("emu: %0lx: %0x\n", cpu(pc), *(unsigned int *)cpu(pc)); // if all else fails */
-    static RAsmOp rop;
-
-    static const int len = 4;         /* diassemble 4 bytes (A32) */
-    r_asm_set_pc(rasm, pc);
-    r_asm_disassemble(rasm, &rop, (const unsigned char *)pc, len);
-    printf("disas: %x %08x %s\n", pc, *(const unsigned int *)pc, rop.buf_asm);
-
-    return rop.buf_asm;
-}
-
 void emu_start(ucontext_t *ucontext) {
     printf("emu_start: saving original ucontext ...\n");
     dbg_dump_ucontext(ucontext);
@@ -144,7 +77,7 @@ void emu_start(ucontext_t *ucontext) {
     const char *assembly;
     while(1) {
         // 1. decode instr
-        assembly = disas(cpu(pc));
+        assembly = emu_disas(cpu(pc));
         if (strncmp(assembly, special, strlen(special)) == 0) {
             printf("emu_start: special op %s being skipped\n", special);
             cpu(pc) += 4;
@@ -158,38 +91,15 @@ void emu_start(ucontext_t *ucontext) {
 }
 
 void emu_stop() {
-    printf("emu_stop : stopping emu...\n");
-
     printf("emu_stop : resuming exec pc old = 0x%0lx new = 0x%0lx\n", 
            emu.original.uc_mcontext.arm_pc, 
            emu.current.uc_mcontext.arm_pc);
-    /* mainloop->__jmpbuf[9]); */
 
-    /* siglongjmp(mainloop, ++count); */
-    setcontext((const ucontext_t *)&emu.current);
-    printf("emu_stop : this is never executed\n");
+    setcontext((const ucontext_t *)&emu.current); /* never returns */
 }
 
-/* SIGTRAP handler used for single-stepping */
-/* Mismatch breakpoint will re-trigger trap on each executed instruction */
-static void ss_handler(int sig, siginfo_t *si, void *ucontext)
-{
-    printf("ss_handler: SIG %d with TRAP code: %d pc: 0x%lx addr: 0x%x\n", 
-           sig, 
-           si->si_code, 
-           (*(ucontext_t *)ucontext).uc_mcontext.arm_pc, 
-           (int) si->si_addr);
-
-    emu_init();                 /* one time emu state initialization */
-    emu_start((ucontext_t *)ucontext);
-    emu_stop();
-}
-
-int execute_instr();
-
-// Setup emulation handler.
-void register_handler(void* sig_handler)
-{
+/* Setup emulation handler. */
+void emu_register_handler(void* sig_handler) {
 #if HAVE_SETRLIMIT
     /* Be recursion friendly */
     struct rlimit rl;
@@ -223,49 +133,31 @@ void register_handler(void* sig_handler)
     sigaction (SIGTRAP, &sa, NULL);
 }
 
-extern int test(int a);
+const char* emu_disas(unsigned int pc) {
+    /* printf("emu: %0lx: %0x\n", cpu(pc), *(unsigned int *)cpu(pc)); // if all else fails */
+    static RAsmOp rop;
 
-int test2(int arg) {
-    int a = test(arg);
-    printf("test a = %x\n", a);
-        
-    return a;
+    static const int len = 4;         /* diassemble 4 bytes (A32) */
+    r_asm_set_pc(rasm, pc);
+    r_asm_disassemble(rasm, &rop, (const unsigned char *)pc, len);
+    printf("disas: %x %08x %s\n", pc, *(const unsigned int *)pc, rop.buf_asm);
+
+    return rop.buf_asm;
 }
 
-int main(int argc, char ** argv)
-{
-    register_handler(&ss_handler);
+/* Debugging */
 
-    /* execute_instr(); */
-    int a = test2(0x1336);
-    printf("test a = %x\n", a);
-    
-    return 0;
-}
-
-/* int __attribute__((aligned(0x1000))) execute_instr() */
-int execute_instr()
-{
-    unsigned int a = 0x1337;
-
-    asm volatile (
-                  ".balign 0x1000,0\n\t"
-                  /* "bkpt #1\n\t" */
-                  "mov  r0, r0\n\t"
-                  "movw r1, #0x6699\n\t"
-                  "movt %[a], #0xdead\n\t"
-                  "add  %[a], %[a], #1\n\t"
-                  /* "ldr  %[a], [fp, #-12]" */
-                  : [a] "=r" (a)     /* output */
-                  : "0" (a)          /* input */
-                  : "cc", "r0", "r1" /* clobbers */
-                  );
-    
-    printf("a = 0x%x\n", a);
-    /* asm volatile ("bkpt"); */
-    printf("execute_instr: finished\n");
-    /* assert(a != (0x1336 + RETRY_COUNT)); */
-    printf("haxx0red!\n");
-
-    return 0;
+#define SIGCONTEXT_REG_COUNT 21
+static void dbg_dump_ucontext(ucontext_t *uc) {
+    static const char *sigcontext_names[] = {"trap_no", "error_code", "oldmask",
+                                             "r0", "r1", "r2", "r3", "r4", "r5",
+                                             "r6", "r7", "r8", "r9", "r10",
+                                             "fp", "ip", "sp", "lr", "pc", "cpsr",
+                                             "fault_address"};
+    static int i;
+    for (i = 0; i < SIGCONTEXT_REG_COUNT; i++) {
+        printf("dbg: %-14s = 0x%0lx\n", 
+               sigcontext_names[i],
+               ((unsigned long *)&uc->uc_mcontext)[i]);
+    }
 }

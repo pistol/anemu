@@ -1,8 +1,8 @@
 .text
-.global test
+.global test_asm
 .balign 0x1000,0x0
 
-test:
+test_asm:
         bkpt 0x1
         add  r0, r0, #1
         movt r0, #0xdead
