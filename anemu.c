@@ -62,13 +62,36 @@ void emu_init() {
     printf("emu_init : finished\n");
 }
 
+/* inline unsigned long emu_reg_value(const char* reg) { */
+/*     return 0; */
+/* } */
+
+#define emu_reg_value(reg) cpu(reg)
+
+/* inline void emu_reg_set(const char* reg, unsigned long val) { */
+/*     cpu(*reg) = val; */
+/* } */
+
+#define emu_reg_set(reg, val) cpu(reg) = (val)
+
+void emu_mathop() {
+    /* const char Rd[] = "r0"; */
+    /* const char Rn[] = "r0"; */
+    /* const int  imm  = 0x1; */
+
+    /* emu_reg_set(r0, emu_reg_value(r0) + imm); */
+    /* int val = emu_reg_value(r0) + imm; */
+    /* cpu(r0) = val; */
+    /* emu_reg_set(r0, val); */
+}
+
 void emu_start(ucontext_t *ucontext) {
     printf("emu_start: saving original ucontext ...\n");
     dbg_dump_ucontext(ucontext);
     emu.current = emu.original = *ucontext;
     printf("emu_start: starting emulation ...\n");
     
-    /* int n = 7; */
+    int n = 6;
     /* printf("emu_start: emulating %d opcodes ...\n", n); */
     /* while(n-- && !regs_clean) { */
     
@@ -76,15 +99,31 @@ void emu_start(ucontext_t *ucontext) {
     static const char special[] = {"bkpt 0x0002"};
     const char *assembly;
     while(1) {
+        // TODO: check if Thumb mode
+
+        
         // 1. decode instr
         assembly = emu_disas(cpu(pc));
+        emu_darm(cpu(pc));      /* testin darm */
         if (strncmp(assembly, special, strlen(special)) == 0) {
             printf("emu_start: special op %s being skipped\n", special);
             cpu(pc) += 4;
             break;
         }
+
         // 2. emu instr
         /* *(unsigned int *)(cpu(fp) - 12) = 0xbadcab1e; */
+
+#define OT_MATH 0x1
+        int op_type = OT_MATH;
+        switch(op_type) {
+        case OT_MATH:
+            emu_mathop();
+            break;
+        default:
+            printf("Unknown op type\n");
+        }
+
         cpu(pc) += 4;
     }
     printf("emu_start: finished\n");
@@ -143,6 +182,18 @@ const char* emu_disas(unsigned int pc) {
     printf("disas: %x %08x %s\n", pc, *(const unsigned int *)pc, rop.buf_asm);
 
     return rop.buf_asm;
+}
+
+void emu_darm(unsigned int pc) {
+    static struct _darm darm;
+    const unsigned int ins = *(const unsigned int *)pc;
+    if (darm_dis(&darm, ins)) {
+        printf("darm : %x %08x <invalid instruction>\n", pc, ins);
+    } else {
+        printf("darm : %x %08x %s\n", pc, ins, darm_str(&darm, pc));
+    }
+
+    return;
 }
 
 /* Debugging */

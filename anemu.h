@@ -1,7 +1,5 @@
-#ifndef _ANEMU_H
-#define _ANEMU_H
-
-#include "anemu.h"
+#ifndef _INCLUDE_ANEMU_H_
+#define _INCLUDE_ANEMU_H_
 
 #include <stdlib.h>
 #include <string.h>
@@ -20,6 +18,8 @@
 # include <sys/time.h>
 # include <sys/resource.h>
 #endif
+
+#include "darm.h"
 
 #define SIGNAL SIGTRAP
 #define SEGV_FAULT_ADDR (void *)0xdeadbeef
@@ -80,6 +80,7 @@ void emu_register_handler(void* sig_handler);
 int emu_regs_clean();
 
 const char* emu_disas(unsigned int pc);
+void emu_darm(unsigned int pc);
 
 /* Debugging / Internal only */
 int test_c(int arg);
@@ -87,4 +88,4 @@ extern int test_asm(int arg);
 static int execute_instr();
 static void dbg_dump_ucontext(ucontext_t *uc);
 
-#endif  /* _ANEMU_H */
+#endif  /* _INCLUDE_ANEMU_H_ */
