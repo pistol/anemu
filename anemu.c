@@ -137,6 +137,18 @@ void emu_stop() {
     setcontext((const ucontext_t *)&emu.current); /* never returns */
 }
 
+int emu_stop_trigger(const char *assembly) {
+    static const char special[] = {"bkpt 0x0002"};
+    /* static const char special[] = {"mov pc, lr"}; */
+
+    if (strncmp(assembly, special, strlen(special)) == 0) {
+        printf("emu_stop_trigger: special op %s being skipped\n", special);
+        cpu(pc) += 4;
+        return 1;
+    }
+    return 0;
+}
+
 /* Setup emulation handler. */
 void emu_register_handler(void* sig_handler) {
 #if HAVE_SETRLIMIT

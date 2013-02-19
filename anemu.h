@@ -73,6 +73,7 @@ struct sigcontext {
 void emu_init();
 void emu_start(ucontext_t *ucontext);
 void emu_stop();
+int emu_stop_trigger(const char *assembly);
 
 void emu_handler(int sig, siginfo_t *si, void *ucontext);
 void emu_register_handler(void* sig_handler);
