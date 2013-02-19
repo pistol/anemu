@@ -19,11 +19,10 @@
 # include <sys/resource.h>
 #endif
 
-#include "darm.h"
+#include <darm.h>
 
 #define SIGNAL SIGTRAP
 #define SEGV_FAULT_ADDR (void *)0xdeadbeef
-#define RETRY_COUNT 2
 
 #define cpu(reg) (emu.current.uc_mcontext.arm_##reg)
 
@@ -35,7 +34,8 @@ static struct emu {
 } emu;
 
 /* Internal state */
-static struct r_asm_t *rasm;    /* rasm2 diassembler */
+static struct r_asm_t *rasm;    /* rasm2 disassembler */
+static darm_t *darm;            /* darm  disassembler */
 
 /*
  * Signal context structure - contains all info to do with the state
@@ -81,7 +81,13 @@ void emu_register_handler(void* sig_handler);
 int emu_regs_clean();
 
 const char* emu_disas(unsigned int pc);
-void emu_darm(unsigned int pc);
+const darm_t* emu_darm(unsigned int pc);
+
+void emu_type_arith_shift(const darm_t * darm);
+void emu_type_arith_imm(const darm_t * darm);
+void emu_type_shift(const darm_t * darm);
+void emu_type_branch_syscall(const darm_t * darm);
+void emu_type_branch_misc(const darm_t * darm);
 
 /* Debugging / Internal only */
 int test_c(int arg);

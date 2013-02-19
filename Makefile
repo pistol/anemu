@@ -2,6 +2,7 @@ CC=/usr/bin/cc
 AS=/usr/bin/as
 
 TARGET=anemu
+DARM=../darm-v7
 
 # Debugging
 CFLAGS=-gdwarf-2 -g3 -O0
@@ -10,7 +11,7 @@ CFLAGS+=-march=armv7-a -mcpu=cortex-a9 -marm
 # Show all warnings
 CFLAGS+=-Wall
 # Includes
-# CFLAGS+=-I.
+CFLAGS+=-I$(DARM)
 # Custom defines
 CFLAGS+=-DHAVE_RLIMIT
 # R2 libs
@@ -19,8 +20,11 @@ CFLAGS+=`pkg-config --libs --cflags r_asm`
 # CFLAGS+=-l r_asm
 # CFLAGS+=-I$(RADARE)/libr/include
 
-LDFLAGS+=-L/usr/local/lib
+# LDFLAGS+=-L/usr/local/lib
 LDFLAGS+=-lr_asm
+LDFLAGS+=-L$(DARM)
+# LDFLAGS+=$(DARM)/libdarm.a
+LDFLAGS+=-ldarm
 
 ASFLAGS=-g3 -march=armv7-a -mcpu=cortex-a9
 # Assembly + Source listing
@@ -29,9 +33,7 @@ ASFLAGS=-g3 -march=armv7-a -mcpu=cortex-a9
 C=$(wildcard *.c)
 S=$(wildcard *.S)
 SRCS=$(C) $(S)
-# O=$(SRCS:=.o)
 O=$(C:.c=.o) $(S:.S=.o)
-# O=$(shell ls *.c *.S)
 
 .PHONY: all run clean
 
@@ -42,6 +44,7 @@ run: all
 
 $(TARGET): $(O)
 	@echo "Objects: $+"
+	$(MAKE) -C $(DARM)
 	$(CC) $+ $(LDFLAGS) -o $@
 
 # %.o: %.c
