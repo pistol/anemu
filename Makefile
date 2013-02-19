@@ -53,7 +53,8 @@ $(TARGET): $(O)
 # 	$(AS) $(ASFLAGS) $< -o $@
 
 %.dis: %
-	objdump -dSsClwt $^ > $^.dis
+	objdump -d $^ > $^.dis
+#	objdump -dSsClwt $^ > $^.dis
 
 clean:
 	rm -f $(TARGET) $(wildcard *.o) $(TARGET).s $(TARGET).dis
