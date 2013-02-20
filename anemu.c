@@ -66,14 +66,15 @@ void emu_init() {
     printf("emu_init : finished\n");
 }
 
+void emu_op_alu(const darm_t * d) {
+    /* char * s = d->S ? "S" : ""; */
+    printf("darm : cond = %x S = %d Rd = %2d Rn = %2d, imm = %x Rs = %2d\n",
+           d->cond, d->S,
+           d->Rd, d->Rn, d->imm, d->Rs);
 
 void emu_op_alu(const darm_t * darm) {
     switch(darm->instr) {
     case I_ADD: {
-        char * s = darm->S ? "S" : "";
-        printf("cond = %d S = %s Rd = %2d Rn = %2d, Rs = %2d\n",
-               darm->cond, s,
-               darm->Rd, darm->Rn, darm->Rs);
     }
     default:
         printf("emu_op_alu: unsupported op %d\n", darm->instr);
