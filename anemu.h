@@ -110,5 +110,7 @@ int test_c(int arg);
 extern int test_asm(int arg);
 static int execute_instr();
 static void dbg_dump_ucontext(ucontext_t *uc);
+/* static inline unsigned long REG(int reg); */
+/* static inline unsigned long * WREG(int reg); */
 
 #endif  /* _INCLUDE_ANEMU_H_ */

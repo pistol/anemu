@@ -264,6 +264,19 @@ const darm_t* emu_darm(unsigned int pc) {
     return darm;
 }
 
+/* map register number (0-15) to ucontext reg entry (r0-r10, fp, ip, sp, lr pc) */
+/*
+static inline unsigned long REG(int reg) {
+    assert(reg >= 0 && reg <= 15);
+    return ((unsigned long)uc->uc_mcontext)[reg + UCONTEXT_REG_OFFSET]);
+}
+
+static inline unsigned long * WREG(int reg) {
+    assert(reg >= 0 && reg <= 15);
+    return ((unsigned long *)&uc->uc_mcontext)[reg + UCONTEXT_REG_OFFSET]);
+}
+*/
+
 /* Debugging */
 
 #define SIGCONTEXT_REG_COUNT 21
