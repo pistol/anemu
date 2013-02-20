@@ -79,15 +79,6 @@ void emu_op_alu(const darm_t * darm) {
     default:
         printf("emu_op_alu: unsupported op %d\n", darm->instr);
     }
-
-    /* const char Rd[] = "r0"; */
-    /* const char Rn[] = "r0"; */
-    /* const int  imm  = 0x1; */
-
-    /* emu_reg_set(r0, emu_reg_value(r0) + imm); */
-    /* int val = emu_reg_value(r0) + imm; */
-    /* cpu(r0) = val; */
-    /* emu_reg_set(r0, val); */
 }
 
 void emu_op_move(const darm_t * darm) {
@@ -136,10 +127,6 @@ void emu_start(ucontext_t *ucontext) {
     dbg_dump_ucontext(ucontext);
     emu.current = emu.original = *ucontext;
     printf("emu_start: starting emulation ...\n");
-    
-    /* int n = 6; */
-    /* printf("emu_start: emulating %d opcodes ...\n", n); */
-    /* while(n-- && !regs_clean) { */
     
     cpu(pc) += 4;           /* skip first instr (bkpt) */
 
