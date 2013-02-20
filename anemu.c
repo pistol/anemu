@@ -219,12 +219,13 @@ void emu_register_handler(void* sig_handler) {
 
     /* ss.ss_sp = malloc(SIGSTKSZ); */
     ss.ss_sp = stack;
-    if (ss.ss_sp == NULL)
-        /* Handle error */;
+    if (ss.ss_sp == NULL) {
+        perror("ss.ss_sp == NULL");
+        exit(1);
+    }
     ss.ss_size = SIGSTKSZ;
     ss.ss_flags = 0;
     if (sigaltstack(&ss, NULL) == -1) {
-        /* Handle error */;
         perror("sigaltstack"); 
         exit(1);
     }
