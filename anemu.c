@@ -60,6 +60,7 @@ void emu_init() {
     r_asm_setup(rasm, arch, bits, big_endian);
 
     /* init darm */
+    printf("emu_init : initializing darm diassembler ...\n");
     darm = malloc(sizeof(darm_t));
 
     emu.initialized = 1;
