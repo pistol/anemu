@@ -72,26 +72,31 @@ void emu_op_alu(const darm_t * d) {
            d->cond, d->S,
            d->Rd, d->Rn, d->imm, d->Rs);
 
-void emu_op_alu(const darm_t * darm) {
-    switch(darm->instr) {
+    switch(d->instr) {
     case I_ADD: {
+        EMU(Rd, Rn, +, imm);
+        break;
+    }
+    case I_SUB: {
+        EMU(Rd, Rn, -, imm);
+        break;
     }
     default:
-        printf("emu_op_alu: unsupported op %d\n", darm->instr);
+        printf("emu_op_alu: unsupported op %d\n", d->instr);
     }
 }
 
-void emu_op_move(const darm_t * darm) {
+void emu_op_move(const darm_t * d) {
     printf("emu_op_move: not implemented\n");
 }
 
-void emu_type_arith_shift(const darm_t * darm) {
+void emu_type_arith_shift(const darm_t * d) {
 
-    switch(darm->instr) {
+    switch(d->instr) {
     case I_ADD:
     case I_ADC:
     case I_SUB: {
-        emu_op_alu(darm);
+        emu_op_alu(d);
         break;
     }
 #define I_INVALID -1
@@ -100,27 +105,42 @@ void emu_type_arith_shift(const darm_t * darm) {
         break;
     }
     default:
-        printf("emu_type_arith_shift: unhandled instr %d\n", darm->instr);
+        printf("emu_type_arith_shift: unhandled instr %d\n", d->instr);
 
     }
 }
 
-void emu_type_arith_imm(const darm_t * darm) {
+void emu_type_arith_imm(const darm_t * d) {
     printf("emu_type_arith_imm: not implemented\n");
 }
 
-void emu_type_shift(const darm_t * darm) {
+void emu_type_shift(const darm_t * d) {
     printf("emu_type_shift: not implemented\n");
 }
 
-void emu_type_branch_syscall(const darm_t * darm) {
+void emu_type_branch_syscall(const darm_t * d) {
     printf("emu_type_branch_syscall: not implemented\n");
 }
 
-void emu_type_branch_misc(const darm_t * darm) {
+void emu_type_branch_misc(const darm_t * d) {
     printf("emu_type_branch_misc: not implemented\n");
 }
 
+void emu_type_move_imm(const darm_t * d) {
+    printf("emu_type_move_imm: not implemented\n");
+}
+
+void emu_type_cmp_op(const darm_t * d) {
+    printf("emu_type_cmp_op: not implemented\n");
+}
+
+void emu_type_cmp_imm(const darm_t * d) {
+    printf("emu_type_cmp_imm: not implemented\n");
+}
+
+void emu_type_opless(const darm_t * d) {
+    printf("emu_type_opless: not implemented\n");
+}
 
 void emu_start(ucontext_t *ucontext) {
     printf("emu_start: saving original ucontext ...\n");
@@ -131,42 +151,62 @@ void emu_start(ucontext_t *ucontext) {
     cpu(pc) += 4;           /* skip first instr (bkpt) */
 
     static const char *assembly;
+    static const darm_t *d;
     while(1) {
         // TODO: check if Thumb mode
 
         // 1. decode instr
         assembly = emu_disas(cpu(pc)); /* rasm2 with libopcodes backend */
-        emu_darm(cpu(pc));  /* darm */
+        d = emu_darm(cpu(pc));  /* d */
 
         if (emu_stop_trigger(assembly)) break;
 
-        // 2. emu instr
+        emu_dump();
 
-        switch(darm->type) {
-        case T_ARITH1: {
-            emu_type_arith_shift(darm);
+        // 2. emu instr by type
+        switch(d->type) {
+        case T_ARITH_SHIFT: {
+            emu_type_arith_shift(d);
             break;
         }
-        case T_ARITH2: {
-            emu_type_arith_imm(darm);
+        case T_ARITH_IMM: {
+            emu_type_arith_imm(d);
             break;
         }
         case T_SHIFT: {
-            emu_type_shift(darm);
+            emu_type_shift(d);
             break;
         }
         case T_BRNCHSC: {
-            emu_type_branch_syscall(darm);
+            emu_type_branch_syscall(d);
             break;
         }
         case T_BRNCHMISC: {
-            emu_type_branch_misc(darm);
+            emu_type_branch_misc(d);
+            break;
+        }
+        case T_MOV_IMM: {
+            emu_type_move_imm(d);
+            break;
+        }
+        case T_CMP_IMM: {
+            emu_type_cmp_imm(d);
+            break;
+        }
+        case T_CMP_OP: {
+            emu_type_cmp_op(d);
+            break;
+        }
+        case T_OPLESS: {
+            emu_type_opless(d);
+            break;
         }
         default:
-            printf("emu_start: unhandled type %d\n", darm->type);
+            printf("emu_start: unhandled type %d\n", d->type);
         }
 
         cpu(pc) += 4;
+        emu_dump();
         printf("\n");
     }
     printf("emu_start: finished\n");
@@ -246,7 +286,7 @@ const darm_t* emu_darm(unsigned int pc) {
     if (armv7_disassemble(darm, ins)) {
         printf("darm : %x %08x <invalid instruction>\n", pc, ins);
     } else {
-        /* printf("darm : %x %08x %s\n", pc, ins, darm_str(darm, pc)); */
+        /* printf("d : %x %08x %s\n", pc, ins, darm_str(d, pc)); */
         printf("darm : %x %08x %s\n", pc, ins, "[darm_str not implemented]");
     }
 
