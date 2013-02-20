@@ -293,3 +293,7 @@ static void dbg_dump_ucontext(ucontext_t *uc) {
                ((unsigned long *)&uc->uc_mcontext)[i]);
     }
 }
+
+static void emu_dump() {
+    dbg_dump_ucontext(&emu.current);
+}
