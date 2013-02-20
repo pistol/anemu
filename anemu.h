@@ -25,8 +25,14 @@
 
 #define SIGNAL SIGTRAP
 #define SEGV_FAULT_ADDR (void *)0xdeadbeef
+#define UCONTEXT_REG_OFFSET 3   /* skip first 3 fields (trap_no, error_code, oldmask) of uc_mcontext */
 
 #define cpu(reg) (emu.current.uc_mcontext.arm_##reg)
+#define REG(reg) ((unsigned long *)&emu.current.uc_mcontext)[reg + UCONTEXT_REG_OFFSET]
+#define EMU(Rd, Rn, op, imm)                                      \
+    printf("EMU: r%d = r%d %s %x\n", d->Rd, d->Rn, #op, d->imm);  \
+    REG(d->Rd) = REG(d->Rn) op d->imm;
+
 #define emu_reg_value(reg) cpu(reg)
 #define emu_reg_set(reg, val) cpu(reg) = (val)
 
@@ -36,6 +42,12 @@ static struct emu {
     int        initialized;     /* boolean */
     /* taint_t taint; */
 } emu;
+
+static const char *reg_names[] = { "r0", "r1", "r2", "r3", "r4", "r5",
+                                   "r6", "r7", "r8", "r9", "r10",
+                                   "fp", "ip", "sp", "lr", "pc"};
+
+#define REG_NAME(reg) (reg_names[reg])
 
 /* Internal state */
 static struct r_asm_t *rasm;    /* rasm2 disassembler */
