@@ -10,15 +10,17 @@
 #include <ucontext.h>
 #include <assert.h>
 
-#include <r_types.h>
-#include <r_asm.h>
-
 #if HAVE_SETRLIMIT
 # include <sys/types.h>
 # include <sys/time.h>
 # include <sys/resource.h>
 #endif
 
+/* rasm2 disassembler */
+#include <r_types.h>
+#include <r_asm.h>
+
+/* darm disassembler */
 #include <darm.h>
 
 #define SIGNAL SIGTRAP
