@@ -66,17 +66,6 @@ void emu_init() {
     printf("emu_init : finished\n");
 }
 
-/* inline unsigned long emu_reg_value(const char* reg) { */
-/*     return 0; */
-/* } */
-
-#define emu_reg_value(reg) cpu(reg)
-
-/* inline void emu_reg_set(const char* reg, unsigned long val) { */
-/*     cpu(*reg) = val; */
-/* } */
-
-#define emu_reg_set(reg, val) cpu(reg) = (val)
 
 void emu_op_alu(const darm_t * darm) {
     switch(darm->instr) {

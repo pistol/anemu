@@ -25,6 +25,8 @@
 #define SEGV_FAULT_ADDR (void *)0xdeadbeef
 
 #define cpu(reg) (emu.current.uc_mcontext.arm_##reg)
+#define emu_reg_value(reg) cpu(reg)
+#define emu_reg_set(reg, val) cpu(reg) = (val)
 
 static struct emu {
     ucontext_t original;
