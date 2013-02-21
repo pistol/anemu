@@ -58,6 +58,14 @@ static const char *reg_names[] = { "r0", "r1", "r2", "r3", "r4", "r5",
 
 #define REG_NAME(reg) (reg_names[reg])
 
+#define SIGCONTEXT_REG_COUNT 21
+static const char *sigcontext_names[] = {"trap_no", "error_code", "oldmask",
+                                         "r0", "r1", "r2", "r3", "r4", "r5",
+                                         "r6", "r7", "r8", "r9", "r10",
+                                         "fp", "ip", "sp", "lr", "pc", "cpsr",
+                                         "fault_address"};
+
+
 /* Internal state */
 emu_t emu;                      /* emulator state */
 cpsr_t cpsr;                    /* cpsr NZCV flags */
@@ -114,6 +122,11 @@ void emu_type_arith_shift(const darm_t * d);
 void emu_type_arith_imm(const darm_t * d);
 void emu_type_branch_syscall(const darm_t * d);
 void emu_type_branch_misc(const darm_t * d);
+void emu_type_move_imm(const darm_t * d);
+void emu_type_cmp_imm(const darm_t * d);
+void emu_type_cmp_op(const darm_t * d);
+void emu_type_opless(const darm_t * d);
+void emu_type_dst_src(const darm_t * d);
 
 /* Debugging / Internal only */
 int test_c(int arg);

@@ -87,7 +87,7 @@ void emu_op_move(const darm_t * d) {
 }
 
 void emu_type_arith_shift(const darm_t * d) {
-
+    printf("emu_type_arith_shift:\n");
     switch(d->instr) {
     case I_ADD:
     case I_ADC:
@@ -157,7 +157,6 @@ void emu_type_move_imm(const darm_t * d) {
     }
     default:
         printf("emu_type_move_imm: unhandled instr %d\n", d->instr);
-
     }
 }
 
@@ -170,7 +169,35 @@ void emu_type_cmp_imm(const darm_t * d) {
 }
 
 void emu_type_opless(const darm_t * d) {
-    printf("emu_type_opless: not implemented\n");
+    printf("emu_type_opless:\n");
+    switch((uint32_t) d->instr) {
+    case I_NOP: {
+        /* nothing to do */
+        break;
+    }
+    case I_IVLD: {
+        printf("emu_type_opless: darm unsupported op type\n");
+        break;
+    }
+    default:
+        printf("emu_type_opless: unhandled instr %d\n", d->instr);
+    }
+}
+
+void emu_type_dst_src(const darm_t * d) {
+    printf("emu_type_dst_src:\n");
+    switch((uint32_t) d->instr) {
+    case I_MOV: {
+        REG(d->Rd) = REG(d->Rm);
+        break;
+    }
+    case I_IVLD: {
+        printf("emu_type_dst_src: darm unsupported op type\n");
+        break;
+    }
+    default:
+        printf("emu_type_dst_src: unhandled instr %d\n", d->instr);
+    }
 }
 
 void emu_start(ucontext_t *ucontext) {
@@ -231,6 +258,10 @@ void emu_start(ucontext_t *ucontext) {
         }
         case T_OPLESS: {
             emu_type_opless(d);
+            break;
+        }
+        case T_DST_SRC: {
+            emu_type_dst_src(d);
             break;
         }
         default:
