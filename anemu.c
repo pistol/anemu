@@ -68,11 +68,6 @@ void emu_init() {
 }
 
 void emu_op_alu(const darm_t * d) {
-    /* char * s = d->S ? "S" : ""; */
-    printf("darm : cond = %x S = %d Rd = %2d Rn = %2d, imm = %x Rs = %2d\n",
-           d->cond, d->S,
-           d->Rd, d->Rn, d->imm, d->Rs);
-
     switch(d->instr) {
     case I_ADD: {
         EMU(Rd, Rn, +, imm);
@@ -159,6 +154,11 @@ void emu_start(ucontext_t *ucontext) {
         // 1. decode instr
         assembly = emu_disas(cpu(pc)); /* rasm2 with libopcodes backend */
         d = emu_darm(cpu(pc));  /* d */
+
+        /* char * s = d->S ? "S" : ""; */
+        printf("darm : cond = %x S = %d Rd = %2d Rn = %2d, imm = %x Rs = %2d\n",
+               d->cond, d->S,
+               d->Rd, d->Rn, d->imm, d->Rs);
 
         if (emu_stop_trigger(assembly)) break;
 
