@@ -4,6 +4,7 @@
 
 test_asm:
         bkpt 0x1
+        mov  r1, #0x10
         add  r0, r1, #8
         sub  r0, r0, #4
         movt r0, #0xdead
