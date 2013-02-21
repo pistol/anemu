@@ -37,12 +37,19 @@
 #define emu_reg_value(reg) cpu(reg)
 #define emu_reg_set(reg, val) cpu(reg) = (val)
 
-static struct emu {
+typedef struct _cpsr_t {
+    uint8_t N;                  /* Negative result */
+    uint8_t Z;                  /* Zero result */
+    uint8_t C;                  /* Carry from operation */
+    uint8_t V;                  /* oVerflowed operation */
+} cpsr_t;
+
+typedef struct _emu_t {
     ucontext_t original;
     ucontext_t current;
     int        initialized;     /* boolean */
     /* taint_t taint; */
-} emu;
+} emu_t;
 
 static const char *reg_names[] = { "r0", "r1", "r2", "r3", "r4", "r5",
                                    "r6", "r7", "r8", "r9", "r10",
@@ -51,8 +58,10 @@ static const char *reg_names[] = { "r0", "r1", "r2", "r3", "r4", "r5",
 #define REG_NAME(reg) (reg_names[reg])
 
 /* Internal state */
-static struct r_asm_t *rasm;    /* rasm2 disassembler */
-static darm_t *darm;            /* darm  disassembler */
+emu_t emu;                      /* emulator state */
+cpsr_t cpsr;                    /* cpsr NZCV flags */
+struct r_asm_t *rasm;           /* rasm2 disassembler */
+darm_t *darm;                   /* darm  disassembler */
 
 /*
  * Signal context structure - contains all info to do with the state
