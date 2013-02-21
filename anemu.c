@@ -191,16 +191,16 @@ void emu_start(ucontext_t *ucontext) {
         d = emu_darm(cpu(pc));  /* d */
 
         /* char * s = d->S ? "S" : ""; */
-        printf("darm : cond = %x S = %d Rd = %2d Rn = %2d, imm = %x Rs = %2d\n",
+        printf("darm : cond: %x, S: %d, Rd: %2d, Rm: %2d, Rn: %2d, imm: 0x%x, Rs: %2d\n",
                d->cond, d->S,
-               d->Rd, d->Rn, d->imm, d->Rs);
+               d->Rd, d->Rn, d->Rm, d->imm, d->Rs);
 
         if (emu_stop_trigger(assembly)) break;
 
         emu_dump();
 
         // 2. emu instr by type
-        switch(d->type) {
+        switch(d->instr_type) {
         case T_ARITH_SHIFT: {
             emu_type_arith_shift(d);
             break;
