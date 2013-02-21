@@ -101,7 +101,6 @@ const darm_t* emu_darm(unsigned int pc);
 
 void emu_type_arith_shift(const darm_t * d);
 void emu_type_arith_imm(const darm_t * d);
-void emu_type_shift(const darm_t * d);
 void emu_type_branch_syscall(const darm_t * d);
 void emu_type_branch_misc(const darm_t * d);
 

@@ -110,10 +110,6 @@ void emu_type_arith_imm(const darm_t * d) {
     printf("emu_type_arith_imm: not implemented\n");
 }
 
-void emu_type_shift(const darm_t * d) {
-    printf("emu_type_shift: not implemented\n");
-}
-
 void emu_type_branch_syscall(const darm_t * d) {
     printf("emu_type_branch_syscall: not implemented\n");
 }
@@ -172,10 +168,6 @@ void emu_start(ucontext_t *ucontext) {
         }
         case T_ARITH_IMM: {
             emu_type_arith_imm(d);
-            break;
-        }
-        case T_SHIFT: {
-            emu_type_shift(d);
             break;
         }
         case T_BRNCHSC: {
