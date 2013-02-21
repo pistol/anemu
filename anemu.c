@@ -137,7 +137,28 @@ void emu_type_branch_misc(const darm_t * d) {
 }
 
 void emu_type_move_imm(const darm_t * d) {
-    printf("emu_type_move_imm: not implemented\n");
+    printf("emu_type_move_imm:\n");
+    switch((uint32_t) d->instr) {
+    case I_MOV: {
+        REG(d->Rd) = d->imm;
+        break;
+    }
+    case I_MOVT: {
+        REG(d->Rd) = (REG(d->Rd) & 0x0000ffff) | (d->imm << 16);
+        break;
+    }
+    case I_MOVW: {
+        REG(d->Rd) = (REG(d->Rd) & 0xffff0000) | (d->imm);
+        break;
+    }
+    case I_IVLD: {
+        printf("emu_type_move_imm: darm unsupported op type\n");
+        break;
+    }
+    default:
+        printf("emu_type_move_imm: unhandled instr %d\n", d->instr);
+
+    }
 }
 
 void emu_type_cmp_op(const darm_t * d) {
