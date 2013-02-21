@@ -101,12 +101,31 @@ void emu_type_arith_shift(const darm_t * d) {
     }
     default:
         printf("emu_type_arith_shift: unhandled instr %d\n", d->instr);
-
     }
 }
 
 void emu_type_arith_imm(const darm_t * d) {
-    printf("emu_type_arith_imm: not implemented\n");
+    printf("emu_type_arith_imm:\n");
+    switch(d->instr) {
+    case I_ADD: {
+        EMU(Rd, Rn, +, imm);
+        break;
+    }
+    case I_ADC: {
+        REG(d->Rd) = REG(d->Rn) + d->imm + cpsr.C;
+        break;
+    }
+    case I_SUB: {
+        EMU(Rd, Rn, -, imm);
+        break;
+    }
+    case I_IVLD: {
+        printf("emu_type_arith_imm: darm unsupported op type\n");
+        break;
+    }
+    default:
+        printf("emu_type_arith_imm: unhandled instr %d\n", d->instr);
+    }
 }
 
 void emu_type_branch_syscall(const darm_t * d) {
