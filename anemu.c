@@ -350,7 +350,7 @@ const darm_t* emu_darm(unsigned int pc) {
         printf("darm : %x %08x <invalid instruction>\n", pc, ins);
     } else {
         /* printf("d : %x %08x %s\n", pc, ins, darm_str(d, pc)); */
-        printf("darm : %x %08x %s\n", pc, ins, "[darm_str not implemented]");
+        /* printf("darm : %x %08x %s\n", pc, ins, "[darm_str not implemented]"); */
     }
 
     return darm;
