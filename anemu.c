@@ -175,8 +175,8 @@ void emu_type_opless(const darm_t * d) {
 
 void emu_start(ucontext_t *ucontext) {
     printf("emu_start: saving original ucontext ...\n");
-    dbg_dump_ucontext(ucontext);
-    emu.current = emu.original = *ucontext;
+    emu.previous = emu.current = emu.original = *ucontext;
+    emu_dump();
     printf("emu_start: starting emulation ...\n");
     
     cpu(pc) += 4;           /* skip first instr (bkpt) */
@@ -197,7 +197,7 @@ void emu_start(ucontext_t *ucontext) {
 
         if (emu_stop_trigger(assembly)) break;
 
-        emu_dump();
+        emu_dump_diff();
 
         // 2. emu instr by type
         switch(d->instr_type) {
@@ -238,7 +238,7 @@ void emu_start(ucontext_t *ucontext) {
         }
 
         cpu(pc) += 4;
-        emu_dump();
+        emu_dump_diff();
         printf("\n");
     }
     printf("emu_start: finished\n");
@@ -340,16 +340,10 @@ static inline unsigned long * WREG(int reg) {
 
 /* Debugging */
 
-#define SIGCONTEXT_REG_COUNT 21
 static void dbg_dump_ucontext(ucontext_t *uc) {
-    static const char *sigcontext_names[] = {"trap_no", "error_code", "oldmask",
-                                             "r0", "r1", "r2", "r3", "r4", "r5",
-                                             "r6", "r7", "r8", "r9", "r10",
-                                             "fp", "ip", "sp", "lr", "pc", "cpsr",
-                                             "fault_address"};
     static int i;
     for (i = 0; i < SIGCONTEXT_REG_COUNT; i++) {
-        printf("dbg: %-14s = 0x%0lx\n",
+        printf("dbg: %-14s: 0x%0lx\n",
                sigcontext_names[i],
                ((unsigned long *)&uc->uc_mcontext)[i]);
     }
@@ -357,4 +351,19 @@ static void dbg_dump_ucontext(ucontext_t *uc) {
 
 static void emu_dump() {
     dbg_dump_ucontext(&emu.current);
+}
+
+/* show register changes since last diff call */
+static void emu_dump_diff() {
+    static int i;
+    for (i = 0; i < SIGCONTEXT_REG_COUNT; i++) {
+        unsigned long current  = ((unsigned long *)&emu.current.uc_mcontext)[i];
+        unsigned long previous = ((unsigned long *)&emu.previous.uc_mcontext)[i];
+        if (current != previous) {
+            printf("dbg: %-4s: %8lx -> %8lx\n",
+                   sigcontext_names[i],
+                   previous, current);
+        }
+    }
+    emu.previous = emu.current;
 }

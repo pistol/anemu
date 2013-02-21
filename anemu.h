@@ -45,8 +45,9 @@ typedef struct _cpsr_t {
 } cpsr_t;
 
 typedef struct _emu_t {
-    ucontext_t original;
-    ucontext_t current;
+    ucontext_t original;        /* process state when trap occured */
+    ucontext_t current;         /* present process emulated state */
+    ucontext_t previous;        /* used for diff-ing two contexts */
     int        initialized;     /* boolean */
     /* taint_t taint; */
 } emu_t;
@@ -120,6 +121,7 @@ extern int test_asm(int arg);
 static int execute_instr();
 static void dbg_dump_ucontext(ucontext_t *uc);
 static void emu_dump();
+static void emu_dump_diff();
 /* static inline unsigned long REG(int reg); */
 /* static inline unsigned long * WREG(int reg); */
 
