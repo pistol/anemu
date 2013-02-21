@@ -95,8 +95,7 @@ void emu_type_arith_shift(const darm_t * d) {
         emu_op_alu(d);
         break;
     }
-#define I_INVALID -1
-    case I_INVALID: {
+    case I_IVLD: {
         printf("emu_type_arith_shift: darm unsupported op type\n");
         break;
     }
