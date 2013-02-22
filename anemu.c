@@ -13,16 +13,16 @@ int execute_instr() {
     int val = 0x1337;
 
     int ret = test_asm(val);
-    printf("ret = %x\n", ret);
+    emu_printf("ret: %x\n", ret);
 
-    printf("execute_instr: finished\n");
+    emu_printf("finished\n");
 
     return ret;
 }
 
 int test_c(int arg) {
     int ret = test_asm(arg);
-    printf("test_c ret = %x\n", ret);
+    emu_printf("ret: %x\n", ret);
         
     return ret;
 }
@@ -33,7 +33,7 @@ int emu_regs_clean() {
 
 /* SIGTRAP handler used for single-stepping */
 void emu_handler(int sig, siginfo_t *si, void *ucontext) {
-    printf("emu_handler: SIG %d with TRAP code: %d pc: 0x%lx addr: 0x%x\n", 
+    emu_printf("SIG %d with TRAP code: %d pc: 0x%lx addr: 0x%x\n",
            sig, 
            si->si_code, 
            (*(ucontext_t *)ucontext).uc_mcontext.arm_pc, 
@@ -47,7 +47,7 @@ void emu_handler(int sig, siginfo_t *si, void *ucontext) {
 void emu_init() {
     if (emu.initialized == 1) return;
 
-    printf("emu_init : initializing rasm2 diassembler ...\n");
+    emu_printf("initializing rasm2 diassembler ...\n");
 
     /* rasm2 configuration defaults */
     static const char arch[]    = {"arm"};   /* ARM ISA */
@@ -60,11 +60,11 @@ void emu_init() {
     r_asm_setup(rasm, arch, bits, big_endian);
 
     /* init darm */
-    printf("emu_init : initializing darm diassembler ...\n");
+    emu_printf("initializing darm diassembler ...\n");
     darm = malloc(sizeof(darm_t));
 
     emu.initialized = 1;
-    printf("emu_init : finished\n");
+    emu_printf("finished\n");
 }
 
     }
@@ -72,26 +72,25 @@ void emu_init() {
 }
 
 void emu_type_arith_shift(const darm_t * d) {
-    printf("emu_type_arith_shift:\n");
-    switch(d->instr) {
+    EMU_ENTRY;
+
+    switch((uint32_t) d->instr) {
     case I_ADD:
     case I_ADC:
     case I_SUB: {
         // emu_op_alu(d);
         break;
     }
-    case I_IVLD: {
-        printf("emu_type_arith_shift: darm unsupported op type\n");
         break;
     }
-    default:
-        printf("emu_type_arith_shift: unhandled instr %d\n", d->instr);
+        SWITCH_COMMON;
     }
 }
 
 void emu_type_arith_imm(const darm_t * d) {
-    printf("emu_type_arith_imm:\n");
-    switch(d->instr) {
+    EMU_ENTRY;
+
+    switch((uint32_t) d->instr) {
     case I_ADD: {
         EMU(Rd, Rn, +, imm);
         break;
@@ -104,25 +103,33 @@ void emu_type_arith_imm(const darm_t * d) {
         EMU(Rd, Rn, -, imm);
         break;
     }
-    case I_IVLD: {
-        printf("emu_type_arith_imm: darm unsupported op type\n");
-        break;
-    }
-    default:
-        printf("emu_type_arith_imm: unhandled instr %d\n", d->instr);
+        SWITCH_COMMON;
     }
 }
 
 void emu_type_branch_syscall(const darm_t * d) {
-    printf("emu_type_branch_syscall: not implemented\n");
+    EMU_ENTRY;
+
+    switch((uint32_t) d->instr) {
+        SWITCH_COMMON;
+    }
 }
 
 void emu_type_branch_misc(const darm_t * d) {
-    printf("emu_type_branch_misc: not implemented\n");
+    EMU_ENTRY;
+
+    switch((uint32_t) d->instr) {
+    case I_BKPT: {
+        /* ignore */
+        break;
+    }
+        SWITCH_COMMON;
+    }
 }
 
 void emu_type_move_imm(const darm_t * d) {
-    printf("emu_type_move_imm:\n");
+    EMU_ENTRY;
+
     switch((uint32_t) d->instr) {
     case I_MOV: {
         REG(d->Rd) = d->imm;
@@ -136,60 +143,53 @@ void emu_type_move_imm(const darm_t * d) {
         REG(d->Rd) = (REG(d->Rd) & 0xffff0000) | (d->imm);
         break;
     }
-    case I_IVLD: {
-        printf("emu_type_move_imm: darm unsupported op type\n");
-        break;
-    }
-    default:
-        printf("emu_type_move_imm: unhandled instr %d\n", d->instr);
+        SWITCH_COMMON;
     }
 }
 
 void emu_type_cmp_op(const darm_t * d) {
-    printf("emu_type_cmp_op: not implemented\n");
+    EMU_ENTRY;
+
+    switch((uint32_t) d->instr) {
+        SWITCH_COMMON;
+    }
 }
 
 void emu_type_cmp_imm(const darm_t * d) {
-    printf("emu_type_cmp_imm: not implemented\n");
+    emu_printf("not implemented\n");
 }
 
 void emu_type_opless(const darm_t * d) {
-    printf("emu_type_opless:\n");
+    EMU_ENTRY;
+
     switch((uint32_t) d->instr) {
     case I_NOP: {
         /* nothing to do */
         break;
     }
-    case I_IVLD: {
-        printf("emu_type_opless: darm unsupported op type\n");
-        break;
-    }
-    default:
-        printf("emu_type_opless: unhandled instr %d\n", d->instr);
+        SWITCH_COMMON;
     }
 }
 
 void emu_type_dst_src(const darm_t * d) {
-    printf("emu_type_dst_src:\n");
+    EMU_ENTRY;
+
     switch((uint32_t) d->instr) {
     case I_MOV: {
         REG(d->Rd) = REG(d->Rm);
         break;
     }
-    case I_IVLD: {
-        printf("emu_type_dst_src: darm unsupported op type\n");
         break;
     }
-    default:
-        printf("emu_type_dst_src: unhandled instr %d\n", d->instr);
+        SWITCH_COMMON;
     }
 }
 
 void emu_start(ucontext_t *ucontext) {
-    printf("emu_start: saving original ucontext ...\n");
+    emu_printf("saving original ucontext ...\n");
     emu.previous = emu.current = emu.original = *ucontext;
     emu_dump();
-    printf("emu_start: starting emulation ...\n");
+    emu_printf("starting emulation ...\n\n");
     
     cpu(pc) += 4;           /* skip first instr (bkpt) */
 
@@ -245,19 +245,23 @@ void emu_start(ucontext_t *ucontext) {
             emu_type_dst_src(d);
             break;
         }
+        case T_INVLD: {
+            emu_printf("darm invalid type (unsupported yet)\n");
+            break;
+        }
         default:
-            printf("emu_start: unhandled type %d\n", d->type);
+            emu_printf("unhandled type %d\n", d->type);
         }
 
         cpu(pc) += 4;
         emu_dump_diff();
         printf("\n");
     }
-    printf("emu_start: finished\n");
+    emu_printf("finished\n");
 }
 
 void emu_stop() {
-    printf("emu_stop : resuming exec pc old = 0x%0lx new = 0x%0lx\n", 
+    emu_printf("resuming exec pc old: 0x%0lx new: 0x%0lx\n",
            emu.original.uc_mcontext.arm_pc, 
            emu.current.uc_mcontext.arm_pc);
 
@@ -269,7 +273,8 @@ int emu_stop_trigger(const char *assembly) {
     /* static const char special[] = {"mov pc, lr"}; */
 
     if (strncmp(assembly, special, strlen(special)) == 0) {
-        printf("emu_stop_trigger: special op %s being skipped\n", special);
+        printf("\n");
+        emu_printf("special op %s being skipped\n", special);
         cpu(pc) += 4;
         return 1;
     }
@@ -355,7 +360,7 @@ static inline unsigned long * WREG(int reg) {
 static void dbg_dump_ucontext(ucontext_t *uc) {
     static int i;
     for (i = 0; i < SIGCONTEXT_REG_COUNT; i++) {
-        printf("dbg: %-14s: 0x%0lx\n",
+        printf("dbg: %14s: 0x%0lx\n",
                sigcontext_names[i],
                ((unsigned long *)&uc->uc_mcontext)[i]);
     }
