@@ -135,6 +135,7 @@ static int execute_instr();
 static void dbg_dump_ucontext(ucontext_t *uc);
 static void emu_dump();
 static void emu_dump_diff();
+void armv7_dump(const darm_t *d);
 /* static inline unsigned long REG(int reg); */
 /* static inline unsigned long * WREG(int reg); */
 
