@@ -180,6 +180,16 @@ void emu_type_cmp_op(const darm_t * d) {
     EMU_ENTRY;
 
     switch((uint32_t) d->instr) {
+    case I_CMP: {
+        asm volatile (
+             "cmp %[a], %[b]\n\t"                         /* updates flags */
+             "mrs %[ps], CPSR\n\t"                        /* save new cpsr */
+             : [ps] "=r" (cpu(cpsr))                      /* output */
+             : [a] "r" (REG(d->Rn)), [b] "r" (REG(d->Rm)) /* input */
+             : "cc"                                       /* clobbers condition codes */
+             );
+        break;
+    }
         SWITCH_COMMON;
     }
 }
