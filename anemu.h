@@ -22,7 +22,6 @@
 
 /* darm disassembler */
 #include <darm.h>
-#define I_IVLD -1               /* TODO: move to darm */
 
 #define SIGNAL SIGTRAP
 #define SEGV_FAULT_ADDR (void *)0xdeadbeef
