@@ -102,6 +102,8 @@ void emu_type_arith_shift(const darm_t * d) {
         // emu_op_alu(d);
         break;
     }
+    case I_EOR: {
+        REG(d->Rd) = REG(d->Rn) ^ REG(d->Rm);
         break;
     }
         SWITCH_COMMON;
