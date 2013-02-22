@@ -36,6 +36,8 @@
 #define emu_reg_value(reg) cpu(reg)
 #define emu_reg_set(reg, val) cpu(reg) = (val)
 
+#define emu_printf(...) printf("%s: ", __PRETTY_FUNCTION__); printf(__VA_ARGS__);
+#define EMU_ENTRY emu_printf("\n")
 typedef struct _cpsr_t {
     uint8_t N;                  /* Negative result */
     uint8_t Z;                  /* Zero result */
