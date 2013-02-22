@@ -67,6 +67,27 @@ void emu_init() {
     emu_printf("finished\n");
 }
 
+uint8_t emu_eval_cond(uint32_t cond) {
+    switch(cond) {
+    case 0b0000: return (  cpsr.Z == 1);                        /* EQ */
+    case 0b0001: return (  cpsr.Z == 0);                        /* NE */
+    case 0b0010: return (  cpsr.C == 1);                        /* CS */
+    case 0b0011: return (  cpsr.C == 0);                        /* CC */
+    case 0b0100: return (  cpsr.N == 1);                        /* MI */
+    case 0b0101: return (  cpsr.N == 0);                        /* PL */
+    case 0b0110: return (  cpsr.V == 1);                        /* VS */
+    case 0b0111: return (  cpsr.V == 0);                        /* VC */
+    case 0b1000: return (( cpsr.C == 1) && (cpsr.Z == 0));      /* HI */
+    case 0b1001: return (( cpsr.C == 0) && (cpsr.Z == 1));      /* LS */
+    case 0b1010: return (  cpsr.N == cpsr.V);                   /* GE */
+    case 0b1011: return (  cpsr.N != cpsr.V);                   /* LT */
+    case 0b1100: return (( cpsr.Z == 0) && (cpsr.N == cpsr.V)); /* GT */
+    case 0b1101: return (( cpsr.Z == 1) && (cpsr.N != cpsr.V)); /* LE */
+    case 0b1110: return 1;                                      /* AL */
+    case 0b1111: return 1;
+    default: {
+        emu_printf("unknown condition %x\n", cond);
+        return 0;
     }
     }
 }
