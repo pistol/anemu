@@ -132,6 +132,12 @@ void emu_type_branch_syscall(const darm_t * d) {
     EMU_ENTRY;
 
     switch((uint32_t) d->instr) {
+    case I_B: {
+        if (emu_eval_cond(d->cond)) {
+            cpu(pc) += d->imm + 4;
+        }
+        break;
+    }
         SWITCH_COMMON;
     }
 }
