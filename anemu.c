@@ -190,6 +190,7 @@ void emu_type_cmp_op(const darm_t * d) {
              : [a] "r" (REG(d->Rn)), [b] "r" (REG(d->Rm)) /* input */
              : "cc"                                       /* clobbers condition codes */
              );
+        CPSR_UPDATE_BITS;
         break;
     }
         SWITCH_COMMON;

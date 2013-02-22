@@ -54,6 +54,19 @@ typedef struct _cpsr_t {
     uint8_t V;                  /* oVerflowed operation */
 } cpsr_t;
 
+#define CPSR_N_BIT 31
+#define CPSR_Z_BIT 30
+#define CPSR_C_BIT 29
+#define CPSR_V_BIT 28
+
+#define CPSR_UPDATE_BITS                                \
+    cpsr.N = (cpu(cpsr) >> CPSR_N_BIT) & 1;             \
+    cpsr.Z = (cpu(cpsr) >> CPSR_Z_BIT) & 1;             \
+    cpsr.C = (cpu(cpsr) >> CPSR_C_BIT) & 1;             \
+    cpsr.V = (cpu(cpsr) >> CPSR_V_BIT) & 1;
+
+#define CPSR(F, Rn, op, Rm) (cpsr.F = (REG(d->Rn) op REG(d->Rm)))
+
 typedef struct _emu_t {
     ucontext_t original;        /* process state when trap occured */
     ucontext_t current;         /* present process emulated state */
