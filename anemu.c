@@ -206,6 +206,8 @@ void emu_type_dst_src(const darm_t * d) {
         REG(d->Rd) = REG(d->Rm);
         break;
     }
+    case I_NOP: {
+        /* nothing to do */
         break;
     }
         SWITCH_COMMON;
