@@ -67,23 +67,8 @@ void emu_init() {
     printf("emu_init : finished\n");
 }
 
-void emu_op_alu(const darm_t * d) {
-    switch(d->instr) {
-    case I_ADD: {
-        EMU(Rd, Rn, +, imm);
-        break;
     }
-    case I_SUB: {
-        EMU(Rd, Rn, -, imm);
-        break;
     }
-    default:
-        printf("emu_op_alu: unsupported op %d\n", d->instr);
-    }
-}
-
-void emu_op_move(const darm_t * d) {
-    printf("emu_op_move: not implemented\n");
 }
 
 void emu_type_arith_shift(const darm_t * d) {
@@ -92,7 +77,7 @@ void emu_type_arith_shift(const darm_t * d) {
     case I_ADD:
     case I_ADC:
     case I_SUB: {
-        emu_op_alu(d);
+        // emu_op_alu(d);
         break;
     }
     case I_IVLD: {
