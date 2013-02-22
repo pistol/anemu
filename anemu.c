@@ -245,7 +245,7 @@ void emu_start(ucontext_t *ucontext) {
         // 1. decode instr
         assembly = emu_disas(cpu(pc)); /* rasm2 with libopcodes backend */
         d = emu_darm(cpu(pc));         /* darm */
-        armv7_dump(d);                 /* dump internal darm_t state */
+        darm_dump(d);                  /* dump internal darm_t state */
 
         if (emu_stop_trigger(assembly)) break;
 
@@ -427,18 +427,4 @@ static void emu_dump_diff() {
         }
     }
     emu.previous = emu.current;
-}
-
-void armv7_dump(const darm_t *d) {
-    const char *mnemonic = armv7_mnemonic_by_index(d->instr);
-    const char *enctype  = armv7_enctype_by_index(d->instr_type);
-
-    printf(
-           "instr: I_%s, instr-type: T_%s, cond: %x, S: %d\n"
-           "Rd: %d, Rn: %d, Rm: %d, op-imm: %x\n"
-           "type: %d, shift-is-reg: %d, Rs: %d, shift: %d\n"
-           "E: %d, option: %d, U: %d\n",
-           mnemonic, enctype, d->cond, d->S, d->Rd, d->Rn, d->Rm,
-           d->imm, d->type, d->shift_is_reg, d->Rs, d->shift,
-           d->E, d->option, d->U);
 }
