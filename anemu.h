@@ -38,6 +38,15 @@
 
 #define emu_printf(...) printf("%s: ", __PRETTY_FUNCTION__); printf(__VA_ARGS__);
 #define EMU_ENTRY emu_printf("\n")
+
+#define SWITCH_COMMON                                                  \
+    case I_INVLD: {                                                    \
+        emu_printf("darm unsupported op type\n");                      \
+        break;                                                         \
+    }                                                                  \
+    default:                                                           \
+        emu_printf("unhandled instr %d\n", d->instr);
+
 typedef struct _cpsr_t {
     uint8_t N;                  /* Negative result */
     uint8_t Z;                  /* Zero result */
