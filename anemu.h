@@ -13,14 +13,11 @@
 #define SEGV_FAULT_ADDR (void *)0xdeadbeef
 #define UCONTEXT_REG_OFFSET 3   /* skip first 3 fields (trap_no, error_code, oldmask) of uc_mcontext */
 
-#define cpu(reg) (emu.current.uc_mcontext.arm_##reg)
-#define REG(reg) ((unsigned long *)&emu.current.uc_mcontext)[reg + UCONTEXT_REG_OFFSET]
-#define EMU(Rd, Rn, op, imm)                                      \
-    printf("EMU: r%d = r%d %s %x\n", d->Rd, d->Rn, #op, d->imm);  \
-    REG(d->Rd) = REG(d->Rn) op d->imm;
+#define CPU(reg) (emu.current.uc_mcontext.arm_##reg)
 
-#define emu_reg_value(reg) cpu(reg)
-#define emu_reg_set(reg, val) cpu(reg) = (val)
+#define EMU(stmt)                                 \
+    printf("EMU: %s\n", #stmt);                   \
+    stmt;                                         \
 
 #define emu_printf(...) printf("%s: ", __PRETTY_FUNCTION__); printf(__VA_ARGS__);
 #define EMU_ENTRY emu_printf("\n")
