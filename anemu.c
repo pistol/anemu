@@ -144,7 +144,9 @@ void emu_type_branch_syscall(const darm_t * d) {
 
     switch((uint32_t) d->instr) {
     case I_B: {
-        EMU(WREGN(PC) += d->imm + 4); /* VERIFY + 4 */
+        printf("RREGN(PC): %x\n", RREGN(PC));
+        printf("imm: %x\n", d->imm);
+        EMU(WREGN(PC) = RREGN(PC) + d->imm);
         break;
     }
         SWITCH_COMMON;
@@ -263,13 +265,14 @@ void emu_start(ucontext_t *ucontext) {
     emu_printf("saving original ucontext ...\n");
     emu.previous = emu.current = emu.original = *ucontext;
     emu_regs = (uint32_t *)&emu.current.uc_mcontext.arm_r0;
+
     emu_dump();
     emu_printf("starting emulation ...\n\n");
     
     static const char *assembly;
     static const darm_t *d;
     while(1) {
-        CPU(pc) += 4;
+        if (!emu.branched) CPU(pc) += 4;
         emu_dump_diff();
         printf("\n");
         // TODO: check if Thumb mode
@@ -448,6 +451,8 @@ static inline uint32_t emu_read_reg(darm_reg_t reg) {
 
 static inline uint32_t *emu_write_reg(darm_reg_t reg) {
     assert(reg >= 0 && reg <= 15);
+    /* if we are explicitly writing the PC, we are branching */
+    emu.branched = (reg == PC);
     return &emu_regs[reg];
 }
 

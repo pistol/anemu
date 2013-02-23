@@ -53,6 +53,7 @@ typedef struct _emu_t {
     ucontext_t previous;        /* used for diff-ing two contexts */
     ucontext_t original;        /* process state when trap occured */
     int        initialized;     /* boolean */
+    int        branched;        /* branch taken? */
     /* taint_t taint; */
 } emu_t;
 
