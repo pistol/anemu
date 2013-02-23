@@ -13,7 +13,7 @@ CFLAGS+=-Wall
 # Includes
 CFLAGS+=-I$(DARM)
 # Custom defines
-CFLAGS+=-DHAVE_RLIMIT
+CFLAGS+=-DHAVE_SETRLIMIT
 # R2 libs
 CFLAGS+=`pkg-config --libs --cflags r_asm`
 
