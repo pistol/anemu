@@ -8,6 +8,8 @@ DARM=../darm-v7
 CFLAGS=-gdwarf-2 -g3 -O0
 # ARM specific
 CFLAGS+=-march=armv7-a -mcpu=cortex-a9 -marm
+# Inline functions
+CFLAGS+=-finline-functions
 # Show all warnings
 CFLAGS+=-Wall
 # Includes
