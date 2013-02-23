@@ -236,6 +236,31 @@ void emu_type_dst_src(const darm_t * d) {
     }
 }
 
+void emu_type_memory(const darm_t * d) {
+    /* EMU_ENTRY; */
+
+    switch((uint32_t) d->instr) {
+    case I_LDR: {
+        uint32_t offset_addr = d->U ?
+            (RREG(Rn) + d->imm) :
+            (RREG(Rn) - d->imm);
+
+        uint32_t addr = d->P ?
+            offset_addr :
+            RREG(Rn);
+
+        if ((d->W == 1) || (d->P == 0)) { /* write-back */
+            EMU(WREG(Rn) = offset_addr);
+        }
+
+        emu_printf("addr: %x\n", addr);
+        EMU(WREG(Rt) = *(uint32_t *)(addr));
+        break;
+    }
+        SWITCH_COMMON;
+    }
+}
+
 void emu_start(ucontext_t *ucontext) {
     emu_printf("saving original ucontext ...\n");
     emu.previous = emu.current = emu.original = *ucontext;
@@ -295,6 +320,13 @@ void emu_start(ucontext_t *ucontext) {
         }
         case T_DST_SRC: {
             emu_type_dst_src(d);
+            break;
+        }
+        case T_STACK0:
+        case T_STACK1:
+        case T_STACK2:
+        case T_LDSTREGS: {
+            emu_type_memory(d);
             break;
         }
         case T_INVLD: {
