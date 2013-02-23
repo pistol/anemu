@@ -439,10 +439,10 @@ static void emu_dump() {
 static void emu_dump_diff() {
     static int i;
     for (i = 0; i < SIGCONTEXT_REG_COUNT; i++) {
-        unsigned long current  = ((unsigned long *)&emu.current.uc_mcontext)[i];
-        unsigned long previous = ((unsigned long *)&emu.previous.uc_mcontext)[i];
+        uint32_t current  = ((uint32_t *)&emu.current.uc_mcontext)[i];
+        uint32_t previous = ((uint32_t *)&emu.previous.uc_mcontext)[i];
         if (current != previous) {
-            printf("dbg: %-4s: %8lx -> %8lx\n",
+            printf("dbg: %-4s: %8x -> %8x\n",
                    sigcontext_names[i],
                    previous, current);
         }
