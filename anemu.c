@@ -394,26 +394,43 @@ const darm_t* emu_darm(unsigned int pc) {
 }
 
 /* map register number (0-15) to ucontext reg entry (r0-r10, fp, ip, sp, lr pc) */
-/*
-static inline unsigned long REG(int reg) {
+static inline uint32_t emu_read_reg(darm_reg_t reg) {
     assert(reg >= 0 && reg <= 15);
-    return ((unsigned long)uc->uc_mcontext)[reg + UCONTEXT_REG_OFFSET]);
+    switch(reg) {
+    case r0  :
+    case r1  :
+    case r2  :
+    case r3  :
+    case r4  :
+    case r5  :
+    case r6  :
+    case r7  :
+    case r8  :
+    case r9  :
+    case r10 :
+    case FP  :
+    case IP  :
+    case SP  :
+    case LR  : return emu_regs[reg];
+    case PC  : return emu_regs[reg] + 8; /* A32 +8, Thumb +4 */
+    default  : return -1;
+    }
+    return -1;
 }
 
-static inline unsigned long * WREG(int reg) {
+static inline uint32_t *emu_write_reg(darm_reg_t reg) {
     assert(reg >= 0 && reg <= 15);
-    return ((unsigned long *)&uc->uc_mcontext)[reg + UCONTEXT_REG_OFFSET]);
+    return &emu_regs[reg];
 }
-*/
 
 /* Debugging */
 
 static void dbg_dump_ucontext(ucontext_t *uc) {
     static int i;
     for (i = 0; i < SIGCONTEXT_REG_COUNT; i++) {
-        printf("dbg: %14s: 0x%0lx\n",
+        printf("dbg: %14s: 0x%0x\n",
                sigcontext_names[i],
-               ((unsigned long *)&uc->uc_mcontext)[i]);
+               ((uint32_t *)&uc->uc_mcontext)[i]);
     }
 }
 

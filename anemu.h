@@ -49,13 +49,21 @@ typedef struct _cpsr_t {
     cpsr.V = (CPU(cpsr) >> CPSR_V_BIT) & 1;
 
 typedef struct _emu_t {
-    ucontext_t original;        /* process state when trap occured */
     ucontext_t current;         /* present process emulated state */
     ucontext_t previous;        /* used for diff-ing two contexts */
+    ucontext_t original;        /* process state when trap occured */
     int        initialized;     /* boolean */
     /* taint_t taint; */
 } emu_t;
 
+static uint32_t *emu_regs;
+
+/* read/write register by number */
+#define RREGN(reg) emu_read_reg(reg)
+#define WREGN(reg) *emu_write_reg(reg)
+/* read/write register by darm specifier (e.g. Rd, Rm, Rn, Rt) */
+#define RREG(reg) emu_read_reg(d->reg)
+#define WREG(reg) *emu_write_reg(d->reg)
 
 #define SIGCONTEXT_REG_COUNT 21
 static const char *sigcontext_names[] = {"trap_no", "error_code", "oldmask",
@@ -63,7 +71,6 @@ static const char *sigcontext_names[] = {"trap_no", "error_code", "oldmask",
                                          "r6", "r7", "r8", "r9", "r10",
                                          "fp", "ip", "sp", "lr", "pc", "cpsr",
                                          "fault_address"};
-
 
 /* Internal state */
 emu_t emu;                      /* emulator state */
@@ -135,7 +142,7 @@ static void dbg_dump_ucontext(ucontext_t *uc);
 static void emu_dump();
 static void emu_dump_diff();
 void armv7_dump(const darm_t *d);
-/* static inline unsigned long REG(int reg); */
-/* static inline unsigned long * WREG(int reg); */
+static inline uint32_t emu_read_reg(darm_reg_t reg);
+static inline uint32_t *emu_write_reg(darm_reg_t reg);
 
 #endif  /* _INCLUDE_ANEMU_H_ */
