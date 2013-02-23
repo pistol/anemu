@@ -43,12 +43,10 @@ typedef struct _cpsr_t {
 #define CPSR_V_BIT 28
 
 #define CPSR_UPDATE_BITS                                \
-    cpsr.N = (cpu(cpsr) >> CPSR_N_BIT) & 1;             \
-    cpsr.Z = (cpu(cpsr) >> CPSR_Z_BIT) & 1;             \
-    cpsr.C = (cpu(cpsr) >> CPSR_C_BIT) & 1;             \
-    cpsr.V = (cpu(cpsr) >> CPSR_V_BIT) & 1;
-
-#define CPSR(F, Rn, op, Rm) (cpsr.F = (REG(d->Rn) op REG(d->Rm)))
+    cpsr.N = (CPU(cpsr) >> CPSR_N_BIT) & 1;             \
+    cpsr.Z = (CPU(cpsr) >> CPSR_Z_BIT) & 1;             \
+    cpsr.C = (CPU(cpsr) >> CPSR_C_BIT) & 1;             \
+    cpsr.V = (CPU(cpsr) >> CPSR_V_BIT) & 1;
 
 typedef struct _emu_t {
     ucontext_t original;        /* process state when trap occured */
