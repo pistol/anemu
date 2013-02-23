@@ -112,7 +112,7 @@ void emu_type_arith_shift(const darm_t * d) {
         break;
     }
     case I_EOR: {
-        REG(d->Rd) = REG(d->Rn) ^ REG(d->Rm);
+        EMU(WREG(Rd) = RREG(Rn) ^ RREG(Rm));
         break;
     }
         SWITCH_COMMON;
@@ -124,15 +124,15 @@ void emu_type_arith_imm(const darm_t * d) {
 
     switch((uint32_t) d->instr) {
     case I_ADD: {
-        EMU(Rd, Rn, +, imm);
+        EMU(WREG(Rd) = RREG(Rn) + d->imm);
         break;
     }
     case I_ADC: {
-        REG(d->Rd) = REG(d->Rn) + d->imm + cpsr.C;
+        EMU(WREG(Rd) = RREG(Rn) + d->imm + cpsr.C);
         break;
     }
     case I_SUB: {
-        EMU(Rd, Rn, -, imm);
+        EMU(WREG(Rd) = RREG(Rn) - d->imm);
         break;
     }
         SWITCH_COMMON;
@@ -144,9 +144,7 @@ void emu_type_branch_syscall(const darm_t * d) {
 
     switch((uint32_t) d->instr) {
     case I_B: {
-        if (emu_eval_cond(d->cond)) {
-            cpu(pc) += d->imm + 4;
-        }
+        EMU(WREGN(PC) += d->imm + 4); /* VERIFY + 4 */
         break;
     }
         SWITCH_COMMON;
@@ -170,15 +168,15 @@ void emu_type_move_imm(const darm_t * d) {
 
     switch((uint32_t) d->instr) {
     case I_MOV: {
-        REG(d->Rd) = d->imm;
+        EMU(WREG(Rd) = d->imm);
         break;
     }
     case I_MOVT: {
-        REG(d->Rd) = (REG(d->Rd) & 0x0000ffff) | (d->imm << 16);
+        EMU(WREG(Rd) = (RREG(Rd) & 0x0000ffff) | (d->imm << 16));
         break;
     }
     case I_MOVW: {
-        REG(d->Rd) = (REG(d->Rd) & 0xffff0000) | (d->imm);
+        EMU(WREG(Rd) = (RREG(Rd) & 0xffff0000) | (d->imm));
         break;
     }
         SWITCH_COMMON;
@@ -193,8 +191,8 @@ void emu_type_cmp_op(const darm_t * d) {
         asm volatile (
              "cmp %[a], %[b]\n\t"                         /* updates flags */
              "mrs %[ps], CPSR\n\t"                        /* save new cpsr */
-             : [ps] "=r" (cpu(cpsr))                      /* output */
-             : [a] "r" (REG(d->Rn)), [b] "r" (REG(d->Rm)) /* input */
+             : [ps] "=r" (CPU(cpsr))                      /* output */
+             : [a] "r" (RREG(Rn)), [b] "r" (RREG(Rm))     /* input */
              : "cc"                                       /* clobbers condition codes */
              );
         CPSR_UPDATE_BITS;
@@ -225,7 +223,7 @@ void emu_type_dst_src(const darm_t * d) {
 
     switch((uint32_t) d->instr) {
     case I_MOV: {
-        REG(d->Rd) = REG(d->Rm);
+        EMU(WREG(Rd) = RREG(Rm));
         break;
     }
     case I_NOP: {
@@ -264,6 +262,7 @@ void emu_type_memory(const darm_t * d) {
 void emu_start(ucontext_t *ucontext) {
     emu_printf("saving original ucontext ...\n");
     emu.previous = emu.current = emu.original = *ucontext;
+    emu_regs = (uint32_t *)&emu.current.uc_mcontext.arm_r0;
     emu_dump();
     emu_printf("starting emulation ...\n\n");
     
