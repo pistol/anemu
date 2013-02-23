@@ -242,21 +242,22 @@ void emu_start(ucontext_t *ucontext) {
     emu_dump();
     emu_printf("starting emulation ...\n\n");
     
-    cpu(pc) += 4;           /* skip first instr (bkpt) */
-
     static const char *assembly;
     static const darm_t *d;
     while(1) {
+        CPU(pc) += 4;
+        emu_dump_diff();
+        printf("\n");
         // TODO: check if Thumb mode
 
         // 1. decode instr
-        assembly = emu_disas(cpu(pc)); /* rasm2 with libopcodes backend */
-        d = emu_darm(cpu(pc));         /* darm */
+        assembly = emu_disas(CPU(pc)); /* rasm2 with libopcodes backend */
+        d = emu_darm(CPU(pc));         /* darm */
         darm_dump(d);                  /* dump internal darm_t state */
 
-        if (emu_stop_trigger(assembly)) break;
+        if (!emu_eval_cond(d->cond)) continue;
 
-        emu_dump_diff();
+        if (emu_stop_trigger(assembly)) break;
 
         // 2. emu instr by type
         switch(d->instr_type) {
@@ -303,10 +304,6 @@ void emu_start(ucontext_t *ucontext) {
         default:
             emu_printf("unhandled type %d\n", d->type);
         }
-
-        cpu(pc) += 4;
-        emu_dump_diff();
-        printf("\n");
     }
     emu_printf("finished\n");
 }
@@ -326,7 +323,7 @@ int emu_stop_trigger(const char *assembly) {
     if (strncmp(assembly, special, strlen(special)) == 0) {
         printf("\n");
         emu_printf("special op %s being skipped\n", special);
-        cpu(pc) += 4;
+        CPU(pc) += 4;
         return 1;
     }
     return 0;
