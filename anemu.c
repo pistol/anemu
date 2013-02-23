@@ -1,4 +1,11 @@
 #include "anemu.h"
+#include <assert.h>
+
+#if HAVE_SETRLIMIT
+# include <sys/types.h>
+# include <sys/time.h>
+# include <sys/resource.h>
+#endif
 
 int main(int argc, char ** argv) {
     emu_register_handler(&emu_handler);

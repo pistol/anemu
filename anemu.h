@@ -1,23 +1,9 @@
 #ifndef _INCLUDE_ANEMU_H_
 #define _INCLUDE_ANEMU_H_
 
-#include <stdlib.h>
-#include <string.h>
-#include <stdio.h>
-#include <unistd.h>
-#include <signal.h>
-#include <setjmp.h>
 #include <ucontext.h>
-#include <assert.h>
-
-#if HAVE_SETRLIMIT
-# include <sys/types.h>
-# include <sys/time.h>
-# include <sys/resource.h>
-#endif
 
 /* rasm2 disassembler */
-#include <r_types.h>
 #include <r_asm.h>
 
 /* darm disassembler */
