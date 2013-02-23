@@ -61,11 +61,6 @@ typedef struct _emu_t {
     /* taint_t taint; */
 } emu_t;
 
-static const char *reg_names[] = { "r0", "r1", "r2", "r3", "r4", "r5",
-                                   "r6", "r7", "r8", "r9", "r10",
-                                   "fp", "ip", "sp", "lr", "pc"};
-
-#define REG_NAME(reg) (reg_names[reg])
 
 #define SIGCONTEXT_REG_COUNT 21
 static const char *sigcontext_names[] = {"trap_no", "error_code", "oldmask",
