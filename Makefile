@@ -28,7 +28,10 @@ LDFLAGS+=-L$(DARM)
 # LDFLAGS+=$(DARM)/libdarm.a
 LDFLAGS+=-ldarm
 
-ASFLAGS=-g3 -march=armv7-a -mcpu=cortex-a9
+# Debug Symbols
+# ASFLAGS=-g3
+# ARM specific
+ASFLAGS+=-march=armv7-a -mcpu=cortex-a9
 # Assembly + Source listing
 # ASFLAGS+=-alh
 
