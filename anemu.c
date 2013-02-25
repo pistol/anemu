@@ -417,8 +417,9 @@ const darm_t* emu_darm(unsigned int pc) {
     if (armv7_disassemble(darm, ins)) {
         printf("darm : %x %08x <invalid instruction>\n", pc, ins);
     } else {
-        /* printf("d : %x %08x %s\n", pc, ins, darm_str(d, pc)); */
-        /* printf("darm : %x %08x %s\n", pc, ins, "[darm_str not implemented]"); */
+        darm_str_t str;
+        darm_str2(darm, &str, 1); /* lowercase str */
+        printf("darm : %x %08x %s\n", pc, ins, str.instr);
     }
 
     return darm;
