@@ -73,6 +73,59 @@ static uint32_t *emu_regs;
 /* process two operands according to instr type */
 #define OP(a, b) emu_dataop(d, a, b)
 
+/*
+emulating instr{S} requires saving and restoring CPSR
+
+instructions having S:
+
+ADC, ADD, AND, ASR, BIC, EOR, LSL, LSR, MLA, MOV, MUL, MVN,
+ORR, ROR, RRX, RSB, RSC, SBC, SUB,
+SMLAL, SMULL, UMLAL, UMULL
+
+formats for S instructions:
+
+<Rd> #<const>
+<Rd> <Rm>
+<Rd> <Rm> #<shift>
+<Rd> <Rm> <type>
+<Rd> <Rm>{ <shift>}
+<Rd> <Rn> #<const>
+<Rd> <Rn> <Rm>
+<Rd> <Rn> <Rm> <Ra>
+<Rd> <Rn> <Rm> <type>
+<Rd> <Rn> <Rm>{ <shift>}
+<RdLo> <RdHi> <Rn> <Rm>
+*/
+
+#define EMU_FLAGS_RdImm(instr)                                    \
+    asm volatile (#instr "s %[Rd], %[imm]\n\t" /* updates flags */      \
+                  "mrs %[cpsr], CPSR\n\t"           /* save new cpsr */ \
+                  : [Rd] "=r" (WREG(Rd)), [cpsr] "=r" (CPU(cpsr)) /* output */ \
+                  : [imm] "r" (d->imm) /* input */                      \
+                  : "cc" /* clobbers condition codes */                 \
+                  );                                                    \
+    CPSR_UPDATE_BITS;
+
+#define EMU_FLAGS_RdRnImm(instr)                                        \
+    asm volatile (#instr "s %[Rd], %[Rn], %[imm]\n\t" /* updates flags */ \
+                  "mrs %[cpsr], CPSR\n\t"           /* save new cpsr */ \
+                  : [Rd] "=r" (WREG(Rd)), [cpsr] "=r" (CPU(cpsr)) /* output */ \
+                  : [Rn] "r" (RREG(Rn)), [imm] "r" (d->imm) /* input */ \
+                  : "cc" /* clobbers condition codes */                 \
+                  );                                                    \
+    CPSR_UPDATE_BITS;
+
+#define EMU_FLAGS_RdRnRm(instr)                                         \
+    asm volatile (#instr "s %[Rd], %[Rn], %[Rm]\n\t" /* updates flags */ \
+                  "mrs %[cpsr], CPSR\n\t"           /* save new cpsr */ \
+                  : [Rd] "=r" (WREG(Rd)), [cpsr] "=r" (CPU(cpsr)) /* output */ \
+                  : [Rn] "r" (RREG(Rn)), [Rm] "r" (RREG(Rm)) /* input */ \
+                  : "cc" /* clobbers condition codes */                 \
+                  );                                                    \
+    CPSR_UPDATE_BITS;
+
+/* switch case helper for EMU_FLAGS_* */
+#define CASE(instr, handler) case I_##instr: { EMU_FLAGS_##handler(instr); break; }
 #define SIGCONTEXT_REG_COUNT 21
 static const char *sigcontext_names[] = {"trap_no", "error_code", "oldmask",
                                          "r0", "r1", "r2", "r3", "r4", "r5",
