@@ -374,7 +374,7 @@ void emu_start(ucontext_t *ucontext) {
 
         if (!emu_eval_cond(d->cond)) continue;
 
-        if (emu_stop_trigger(assembly)) break;
+        if (emu_stop_trigger()) break;
 
         // 2. emu instr by type
         switch(d->instr_type) {
@@ -440,13 +440,12 @@ void emu_stop() {
     setcontext((const ucontext_t *)&emu.current); /* never returns */
 }
 
-int emu_stop_trigger(const char *assembly) {
-    static const char special[] = {"bkpt 0x0002"};
-    /* static const char special[] = {"mov pc, lr"}; */
+uint8_t emu_stop_trigger() {
+    static const armv7_instr_t trigger = I_BKPT;
 
-    if (strncmp(assembly, special, strlen(special)) == 0) {
+    if (darm->instr == trigger) {
         printf("\n");
-        emu_printf("special op %s being skipped\n", special);
+        emu_printf("special op %s being skipped\n", armv7_mnemonic_by_index(trigger));
         CPU(pc) += 4;
         return 1;
     }
