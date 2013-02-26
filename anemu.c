@@ -135,8 +135,6 @@ void emu_type_arith_imm(const darm_t * d) {
 }
 
 void emu_type_branch_syscall(const darm_t * d) {
-    EMU_ENTRY;
-
     switch((uint32_t) d->instr) {
     case I_B: {
         printf("RREGN(PC): %x\n", RREGN(PC));

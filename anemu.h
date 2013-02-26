@@ -19,7 +19,7 @@
     printf("EMU: %s\n", #stmt);                   \
     stmt;                                         \
 
-#define emu_printf(...) printf("%s: ", __PRETTY_FUNCTION__); printf(__VA_ARGS__);
+#define emu_printf(...) printf("%s: ", __PRETTY_FUNCTION__); printf(__VA_ARGS__)
 #define EMU_ENTRY emu_printf("\n")
 
 #define SWITCH_COMMON                                                  \
