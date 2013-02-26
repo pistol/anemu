@@ -428,6 +428,8 @@ const darm_t* emu_darm(unsigned int pc) {
 /* map register number (0-15) to ucontext reg entry (r0-r10, fp, ip, sp, lr pc) */
 static inline uint32_t emu_read_reg(darm_reg_t reg) {
     assert(reg >= 0 && reg <= 15);
+    if (reg == R_INVLD) return R_INVLD;
+
     switch(reg) {
     case r0  :
     case r1  :
@@ -452,6 +454,8 @@ static inline uint32_t emu_read_reg(darm_reg_t reg) {
 
 static inline uint32_t *emu_write_reg(darm_reg_t reg) {
     assert(reg >= 0 && reg <= 15);
+    if (reg == R_INVLD) return NULL;
+
     /* if we are explicitly writing the PC, we are branching */
     emu.branched = (reg == PC);
     return &emu_regs[reg];
