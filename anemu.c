@@ -261,6 +261,26 @@ void emu_type_memory(const darm_t * d) {
     }
 }
 
+inline uint32_t emu_dataop(const darm_t *d, const uint32_t a, const uint32_t b) {
+    switch((uint32_t) d->instr) {
+    case I_CMN :
+    case I_ADD : return  a + b;
+    case I_ADC : return  a + b  +  cpsr.C;
+    case I_CMP :
+    case I_SUB : return  a - b;
+    case I_SBC : return (a - b) - !cpsr.C;
+    case I_RSC : return (b - a) - !cpsr.C;
+    case I_RSB : return  b - a;
+    case I_TEQ :
+    case I_EOR : return  a ^ b;
+    case I_AND : return  a & b;
+    case I_ORR : return  a | b;
+    case I_BIC : return  a & ~b;
+    default: emu_printf("unhandled dataop %s\n", armv7_mnemonic_by_index(d->instr));
+    }
+    return 0xdeadc0de;
+}
+
 void emu_start(ucontext_t *ucontext) {
     emu_printf("saving original ucontext ...\n");
     emu.previous = emu.current = emu.original = *ucontext;

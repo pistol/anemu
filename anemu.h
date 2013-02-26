@@ -70,6 +70,9 @@ static uint32_t *emu_regs;
 #define WMEM(addr) *(uint32_t *)(addr)
 #define RMEM(addr) WMEM(addr)   /* identical pointer cast */
 
+/* process two operands according to instr type */
+#define OP(a, b) emu_dataop(d, a, b)
+
 #define SIGCONTEXT_REG_COUNT 21
 static const char *sigcontext_names[] = {"trap_no", "error_code", "oldmask",
                                          "r0", "r1", "r2", "r3", "r4", "r5",
@@ -138,6 +141,8 @@ void emu_type_cmp_imm(const darm_t * d);
 void emu_type_cmp_op(const darm_t * d);
 void emu_type_opless(const darm_t * d);
 void emu_type_dst_src(const darm_t * d);
+
+inline uint32_t emu_dataop(const darm_t *d, const uint32_t a, const uint32_t b);
 
 /* Debugging / Internal only */
 int test_c(int arg);
