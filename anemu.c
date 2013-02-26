@@ -102,40 +102,35 @@ uint8_t emu_eval_cond(uint32_t cond) {
 }
 
 void emu_type_arith_shift(const darm_t * d) {
-    EMU_ENTRY;
-
-    switch((uint32_t) d->instr) {
-    case I_ADD:
-    case I_ADC:
-    case I_SUB: {
-        // emu_op_alu(d);
-        break;
-    }
-    case I_EOR: {
-        EMU(WREG(Rd) = RREG(Rn) ^ RREG(Rm));
-        break;
-    }
-        SWITCH_COMMON;
-    }
+    uint32_t sreg = emu_regshift(d);
+    emu_printf("sreg = %x\n", sreg);
+    EMU(WREG(Rd) = OP(RREG(Rn), sreg));
 }
 
 void emu_type_arith_imm(const darm_t * d) {
-    EMU_ENTRY;
+    if (d->S) {
+        printf("S flag, we're Screwed!\n");
 
-    switch((uint32_t) d->instr) {
-    case I_ADD: {
-        EMU(WREG(Rd) = RREG(Rn) + d->imm);
-        break;
-    }
-    case I_ADC: {
-        EMU(WREG(Rd) = RREG(Rn) + d->imm + cpsr.C);
-        break;
-    }
-    case I_SUB: {
-        EMU(WREG(Rd) = RREG(Rn) - d->imm);
-        break;
-    }
-        SWITCH_COMMON;
+        switch((uint32_t) d->instr) {
+            CASE(ADD, RdRnImm);
+            CASE(ADC, RdRnImm);
+            CASE(AND, RdRnImm);
+            CASE(ASR, RdRnImm);
+            CASE(BIC, RdRnImm);
+            CASE(EOR, RdRnImm);
+            CASE(LSL, RdRnImm);
+            CASE(LSR, RdRnImm);
+            CASE(ORR, RdRnImm);
+            CASE(ROR, RdRnImm);
+            CASE(RSB, RdRnImm);
+            CASE(RSC, RdRnImm);
+            CASE(SBC, RdRnImm);
+            CASE(SUB, RdRnImm);
+
+            SWITCH_COMMON;
+        }
+    } else {
+        EMU(WREG(Rd) = OP(RREG(Rn), d->imm));
     }
 }
 
