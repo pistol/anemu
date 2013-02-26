@@ -248,8 +248,10 @@ void emu_type_memory(const darm_t * d) {
             EMU(WREG(Rn) = offset_addr);
         }
 
-        emu_printf("addr: %x\n", addr);
-        EMU(WREG(Rt) = *(uint32_t *)(addr));
+        printf("addr: %x\n", addr);
+        EMU(WREG(Rt) = RMEM(addr));
+        break;
+    }
     case I_STR: {
         uint32_t offset_addr = d->U ?
             (RREG(Rn) + d->imm) :
