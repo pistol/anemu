@@ -56,7 +56,7 @@ test_asm:
         mov r3, #0
         mov r5, #0
         pop {r0-r3, r5}
-        pop {r0-r4}
+        pop {r0-r3}
         @ flags
         movs r0, #0x8000
         ldr r0, =bar
