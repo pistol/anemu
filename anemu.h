@@ -206,6 +206,7 @@ void emu_type_opless(const darm_t * d);
 void emu_type_dst_src(const darm_t * d);
 
 inline uint32_t emu_dataop(const darm_t *d, const uint32_t a, const uint32_t b);
+inline uint32_t emu_regshift(const darm_t *d);
 
 /* Debugging / Internal only */
 int test_c(int arg);

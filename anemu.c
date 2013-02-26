@@ -335,6 +335,23 @@ inline uint32_t emu_dataop(const darm_t *d, const uint32_t a, const uint32_t b) 
     return 0xdeadc0de;
 }
 
+inline uint32_t emu_regshift(const darm_t *d) {
+    uint32_t amount = d->shift_is_reg ? RREG(Rs) : d->shift; /* shift register value or shift constant */
+    if (amount == 0) return 0;
+    assert(amount > 0);
+
+    uint32_t val = RREG(Rm);
+
+    switch(d->type) {
+    case 0b00: return LSL(val, amount); /* LSL */
+    case 0b01: return LSR(val, amount); /* LSR */
+    case 0b10: return ASR(val, amount); /* ASR */
+    case 0b11: return ROR(val, amount); /* ROR */
+    default: emu_printf("invalid shift type %d!\n", d->type);
+    }
+    return val;
+}
+
 void emu_start(ucontext_t *ucontext) {
     emu_printf("saving original ucontext ...\n");
     emu.previous = emu.current = emu.original = *ucontext;
