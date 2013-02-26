@@ -66,6 +66,10 @@ static uint32_t *emu_regs;
 #define RREG(reg) emu_read_reg(d->reg)
 #define WREG(reg) *emu_write_reg(d->reg)
 
+/* read/write memory */
+#define WMEM(addr) *(uint32_t *)(addr)
+#define RMEM(addr) WMEM(addr)   /* identical pointer cast */
+
 #define SIGCONTEXT_REG_COUNT 21
 static const char *sigcontext_names[] = {"trap_no", "error_code", "oldmask",
                                          "r0", "r1", "r2", "r3", "r4", "r5",
