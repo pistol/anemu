@@ -126,6 +126,16 @@ formats for S instructions:
 
 /* switch case helper for EMU_FLAGS_* */
 #define CASE(instr, handler) case I_##instr: { EMU_FLAGS_##handler(instr); break; }
+
+#define BitCount(x) __builtin_popcount(x)
+#define TrailingZerosCount(x) __builtin_ctz(x)
+#define LeadingZerosCount(x) __builtin_clz(x)
+
+#define LSL(val, shift) (val << shift)
+#define LSR(val, shift) (val >> shift)
+#define ASR(val, shift) (val  / shift) /* expensive, need better alternative */
+#define ROR(val, rotate) (((val) >> (rotate)) | ((val) << (32 - (rotate))))
+
 #define SIGCONTEXT_REG_COUNT 21
 static const char *sigcontext_names[] = {"trap_no", "error_code", "oldmask",
                                          "r0", "r1", "r2", "r3", "r4", "r5",
