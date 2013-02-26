@@ -165,7 +165,11 @@ void emu_type_move_imm(const darm_t * d) {
 
     switch((uint32_t) d->instr) {
     case I_MOV: {
-        EMU(WREG(Rd) = d->imm);
+        if (d->S) {
+            EMU_FLAGS_RdImm(MOV);
+        } else {
+            EMU(WREG(Rd) = d->imm);
+        }
         break;
     }
     case I_MOVT: {
