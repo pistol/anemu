@@ -255,6 +255,60 @@ void emu_type_memory(const darm_t * d) {
 
         emu_printf("addr: %x\n", addr);
         EMU(WREG(Rt) = *(uint32_t *)(addr));
+    case I_STR: {
+        uint32_t offset_addr = d->U ?
+            (RREG(Rn) + d->imm) :
+            (RREG(Rn) - d->imm);
+
+        uint32_t addr = d->P ?
+            offset_addr :
+            RREG(Rn);
+
+        if ((d->W == 1) || (d->P == 0)) { /* write-back */
+            EMU(WREG(Rn) = offset_addr);
+        }
+
+        printf("addr: %x\n", addr);
+        /* EMU(WMEM(addr) = RREG(Rt)); */
+        WMEM(addr) = RREG(Rt);
+        break;
+    }
+    case I_PUSH: {
+        uint16_t reglist       = d->reglist;
+        const uint8_t regcount = BitCount(reglist); /* number of bits set to 1 */
+        uint32_t addr          = RREG(Rn) - 4 * regcount;
+        uint8_t reg            = 0;
+
+        while (reglist) {
+            reg            = TrailingZerosCount(reglist); /* count trailing zeros */
+            reglist       &= ~(1 << reg);                 /* unset this bit */
+            printf("addr: %x, r%d: %8x\n", addr, reg, RREGN(reg));
+            WMEM(addr)     = RREGN(reg);
+            /* EMU(WMEM(addr) = RREGN(reg)); */
+            addr          += 4;
+        }
+
+        /* EMU(WREG(Rn) = RREG(Rn) - 4 * regcount); /\* update SP *\/ */
+        WREG(Rn) = RREG(Rn) - 4 * regcount; /* update SP */
+        break;
+    }
+    case I_POP: {
+        uint16_t reglist       = d->reglist;
+        const uint8_t regcount = BitCount(reglist); /* number of bits set to 1 */
+        uint32_t addr          = RREG(Rn);
+        uint8_t reg            = 0;
+
+        while (reglist) {
+            reg            = TrailingZerosCount(reglist); /* count trailing zeros */
+            reglist       &= ~(1 << reg);                 /* unset this bit */
+            printf("addr: %x, r%d: %8x\n", addr, reg, RMEM(addr));
+            /* EMU(WREGN(reg) = RMEM(addr)); */
+            WREGN(reg) = RMEM(addr);
+            addr          += 4;
+        }
+
+        EMU(WREG(Rn) = RREG(Rn) + 4 * regcount); /* update SP */
+
         break;
     }
         SWITCH_COMMON;
