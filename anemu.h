@@ -97,11 +97,20 @@ formats for S instructions:
 <RdLo> <RdHi> <Rn> <Rm>
 */
 
-#define EMU_FLAGS_RdImm(instr)                                    \
+#define EMU_FLAGS_RdImm(instr)                                          \
     asm volatile (#instr "s %[Rd], %[imm]\n\t" /* updates flags */      \
                   "mrs %[cpsr], CPSR\n\t"           /* save new cpsr */ \
                   : [Rd] "=r" (WREG(Rd)), [cpsr] "=r" (CPU(cpsr)) /* output */ \
                   : [imm] "r" (d->imm) /* input */                      \
+                  : "cc" /* clobbers condition codes */                 \
+                  );                                                    \
+    CPSR_UPDATE_BITS;
+
+#define EMU_FLAGS_RdRm(instr)                                           \
+    asm volatile (#instr "s %[Rd], %[Rm]\n\t" /* updates flags */       \
+                  "mrs %[cpsr], CPSR\n\t"           /* save new cpsr */ \
+                  : [Rd] "=r" (WREG(Rd)), [cpsr] "=r" (CPU(cpsr)) /* output */ \
+                  : [Rm] "r" (RREG(Rm)) /* input */ \
                   : "cc" /* clobbers condition codes */                 \
                   );                                                    \
     CPSR_UPDATE_BITS;
