@@ -54,7 +54,7 @@ void emu_handler(int sig, siginfo_t *si, void *ucontext) {
 void emu_init() {
     if (emu.initialized == 1) return;
 
-    emu_printf("initializing rasm2 diassembler ...\n");
+    emu_printf("initializing rasm2 disassembler ...\n");
 
     /* rasm2 configuration defaults */
     static const char arch[]    = {"arm"};   /* ARM ISA */
@@ -67,7 +67,7 @@ void emu_init() {
     r_asm_setup(rasm, arch, bits, big_endian);
 
     /* init darm */
-    emu_printf("initializing darm diassembler ...\n");
+    emu_printf("initializing darm disassembler ...\n");
     darm = malloc(sizeof(darm_t));
 
     emu.initialized = 1;
@@ -493,7 +493,7 @@ const char* emu_disas(unsigned int pc) {
     /* printf("emu: %0lx: %0x\n", cpu(pc), *(unsigned int *)cpu(pc)); // if all else fails */
     static RAsmOp rop;
 
-    static const int len = 4;         /* diassemble 4 bytes (A32) */
+    static const int len = 4;         /* disassemble 4 bytes (A32) */
     r_asm_set_pc(rasm, pc);
     r_asm_disassemble(rasm, &rop, (const unsigned char *)pc, len);
     printf("disas: %x %08x %s\n", pc, *(const unsigned int *)pc, rop.buf_asm);
