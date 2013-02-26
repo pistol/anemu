@@ -1,4 +1,6 @@
 #include "anemu.h"
+#include <stdio.h>
+#include <stdlib.h>
 #include <assert.h>
 
 #if HAVE_SETRLIMIT
@@ -55,16 +57,6 @@ void emu_init() {
     if (emu.initialized == 1) return;
 
     emu_printf("initializing rasm2 disassembler ...\n");
-
-    /* rasm2 configuration defaults */
-    static const char arch[]    = {"arm"};   /* ARM ISA */
-    static const int bits       = 32;        /* A32 instructions only */
-    static const int big_endian = 0;         /* ARMv7 is little endian */
-
-    rasm = r_asm_new();
-    assert(rasm != NULL);
-    /* R_API int r_asm_setup(RAsm *a, const char *arch, int bits, int big_endian); */
-    r_asm_setup(rasm, arch, bits, big_endian);
 
     /* init darm */
     emu_printf("initializing darm disassembler ...\n");
@@ -359,7 +351,6 @@ void emu_start(ucontext_t *ucontext) {
     emu_dump();
     emu_printf("starting emulation ...\n\n");
     
-    static const char *assembly;
     static const darm_t *d;
     while(1) {
         if (!emu.branched) CPU(pc) += 4;
@@ -368,9 +359,9 @@ void emu_start(ucontext_t *ucontext) {
         // TODO: check if Thumb mode
 
         // 1. decode instr
-        assembly = emu_disas(CPU(pc)); /* rasm2 with libopcodes backend */
-        d = emu_darm(CPU(pc));         /* darm */
-        darm_dump(d);                  /* dump internal darm_t state */
+        emu_disas_ref(CPU(pc)); /* rasm2 with libopcodes backend */
+        d = emu_disas(CPU(pc)); /* darm */
+        darm_dump(d);           /* dump internal darm_t state */
 
         if (!emu_eval_cond(d->cond)) continue;
 
@@ -488,19 +479,7 @@ void emu_register_handler(void* sig_handler) {
     sigaction (SIGTRAP, &sa, NULL);
 }
 
-const char* emu_disas(unsigned int pc) {
-    /* printf("emu: %0lx: %0x\n", cpu(pc), *(unsigned int *)cpu(pc)); // if all else fails */
-    static RAsmOp rop;
-
-    static const int len = 4;         /* disassemble 4 bytes (A32) */
-    r_asm_set_pc(rasm, pc);
-    r_asm_disassemble(rasm, &rop, (const unsigned char *)pc, len);
-    printf("disas: %x %08x %s\n", pc, *(const unsigned int *)pc, rop.buf_asm);
-
-    return rop.buf_asm;
-}
-
-const darm_t* emu_darm(unsigned int pc) {
+const darm_t* emu_disas(unsigned int pc) {
     const unsigned int ins = *(const unsigned int *)pc;
 
     if (armv7_disassemble(darm, ins)) {

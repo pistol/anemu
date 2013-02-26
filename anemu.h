@@ -3,9 +3,6 @@
 
 #include <ucontext.h>
 
-/* rasm2 disassembler */
-#include <r_asm.h>
-
 /* darm disassembler */
 #include <darm.h>
 
@@ -155,7 +152,6 @@ static const char *sigcontext_names[] = {"trap_no", "error_code", "oldmask",
 /* Internal state */
 emu_t emu;                      /* emulator state */
 cpsr_t cpsr;                    /* cpsr NZCV flags */
-struct r_asm_t *rasm;           /* rasm2 disassembler */
 darm_t *darm;                   /* darm  disassembler */
 
 /*
@@ -201,8 +197,8 @@ void emu_register_handler(void* sig_handler);
 
 int emu_regs_clean();
 
-const char* emu_disas(unsigned int pc);
-const darm_t* emu_darm(unsigned int pc);
+extern const char* emu_disas_ref(unsigned int pc);
+const darm_t* emu_disas(unsigned int pc);
 
 void emu_type_arith_shift(const darm_t * d);
 void emu_type_arith_imm(const darm_t * d);
