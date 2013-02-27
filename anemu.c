@@ -417,7 +417,7 @@ void emu_start(ucontext_t *ucontext) {
             break;
         }
         default:
-            emu_printf("unhandled type %d\n", d->type);
+            emu_printf("unhandled type %s\n", darm_enctype_name(d->instr_type));
         }
     }
     emu_printf("finished\n");
