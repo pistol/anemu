@@ -321,7 +321,7 @@ inline uint32_t emu_dataop(const darm_t *d, const uint32_t a, const uint32_t b) 
     case I_AND : return  a & b;
     case I_ORR : return  a | b;
     case I_BIC : return  a & ~b;
-    default: emu_printf("unhandled dataop %s\n", armv7_mnemonic_by_index(d->instr));
+    default: emu_printf("unhandled dataop %s\n", darm_mnemonic_name(d->instr));
     }
     return 0xdeadc0de;
 }
@@ -436,7 +436,7 @@ uint8_t emu_stop_trigger() {
 
     if (darm->instr == trigger) {
         printf("\n");
-        emu_printf("special op %s being skipped\n", armv7_mnemonic_by_index(trigger));
+        emu_printf("special op %s being skipped\n", darm_mnemonic_name(trigger));
         CPU(pc) += 4;
         return 1;
     }
@@ -482,7 +482,7 @@ void emu_register_handler(void* sig_handler) {
 const darm_t* emu_disas(unsigned int pc) {
     const unsigned int ins = *(const unsigned int *)pc;
 
-    if (armv7_disassemble(darm, ins)) {
+    if (darm_armv7_disasm(darm, ins)) {
         printf("darm : %x %08x <invalid instruction>\n", pc, ins);
     } else {
         darm_str_t str;

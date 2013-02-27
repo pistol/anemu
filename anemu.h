@@ -25,7 +25,7 @@
         break;                                                         \
     }                                                                  \
     default:                                                           \
-    emu_printf("unhandled instr %s\n", armv7_mnemonic_by_index(d->instr));
+    emu_printf("unhandled instr %s\n", darm_mnemonic_name(d->instr));
 
 typedef struct _cpsr_t {
     uint8_t N;                  /* Negative result */
