@@ -49,12 +49,11 @@ typedef struct _emu_t {
     ucontext_t current;         /* present process emulated state */
     ucontext_t previous;        /* used for diff-ing two contexts */
     ucontext_t original;        /* process state when trap occured */
-    int        initialized;     /* boolean */
-    int        branched;        /* branch taken? */
+    uint8_t    initialized;     /* boolean */
+    uint8_t    branched;        /* branch taken? */
+    uint32_t  *regs;            /* easy access to ucontext regs */
     /* taint_t taint; */
 } emu_t;
-
-static uint32_t *emu_regs;
 
 /* read/write register by number */
 #define RREGN(reg) emu_read_reg(reg)
@@ -187,8 +186,8 @@ struct sigcontext {
 
 /* API */
 
-void emu_init();
-void emu_start(ucontext_t *ucontext);
+void emu_init(ucontext_t *ucontext);
+void emu_start();
 void emu_stop();
 uint8_t emu_stop_trigger();
 

@@ -48,13 +48,18 @@ void emu_handler(int sig, siginfo_t *si, void *ucontext) {
            (*(ucontext_t *)ucontext).uc_mcontext.arm_pc, 
            (int) si->si_addr);
 
-    emu_init();                 /* one time emu state initialization */
-    emu_start((ucontext_t *)ucontext);
+    emu_init((ucontext_t *)ucontext); /* one time emu state initialization */
+    emu_start();
     emu_stop();
 }
 
-void emu_init() {
+void emu_init(ucontext_t *ucontext) {
     if (emu.initialized == 1) return;
+    emu_printf("saving original ucontext ...\n");
+    emu.previous = emu.current = emu.original = *ucontext;
+    emu.regs = (uint32_t *)&emu.current.uc_mcontext.arm_r0;
+
+    emu_dump();
 
     emu_printf("initializing rasm2 disassembler ...\n");
 
@@ -343,12 +348,7 @@ inline uint32_t emu_regshift(const darm_t *d) {
     return val;
 }
 
-void emu_start(ucontext_t *ucontext) {
-    emu_printf("saving original ucontext ...\n");
-    emu.previous = emu.current = emu.original = *ucontext;
-    emu_regs = (uint32_t *)&emu.current.uc_mcontext.arm_r0;
-
-    emu_dump();
+void emu_start() {
     emu_printf("starting emulation ...\n\n");
     
     static const darm_t *d;
@@ -513,8 +513,8 @@ static inline uint32_t emu_read_reg(darm_reg_t reg) {
     case FP  :
     case IP  :
     case SP  :
-    case LR  : return emu_regs[reg];
-    case PC  : return emu_regs[reg] + 8; /* A32 +8, Thumb +4 */
+    case LR  : return emu.regs[reg];
+    case PC  : return emu.regs[reg] + 8; /* A32 +8, Thumb +4 */
     default  : return -1;
     }
     return -1;
@@ -526,7 +526,7 @@ static inline uint32_t *emu_write_reg(darm_reg_t reg) {
 
     /* if we are explicitly writing the PC, we are branching */
     emu.branched = (reg == PC);
-    return &emu_regs[reg];
+    return &emu.regs[reg];
 }
 
 /* Debugging */
