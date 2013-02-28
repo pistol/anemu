@@ -9,9 +9,9 @@ test_asm:
         @ emu start trigger
         bkpt 0x1
         @ save regs
-        @ r4-r8  callee-save
-        @ r9     callee-save/special
-        @ r0-r11 callee-save
+        @ r4-r8   callee-save
+        @ r9      callee-save/special
+        @ r10-r11 callee-save
         push {r4-r11}
         @ arg registers
         mov  a1, #0
@@ -78,7 +78,7 @@ test_asm:
         add  r4, r0, r1, ror r3
         @ restore all callee-save regs
         pop {r4-r11}
-        movw r0, #0x1337
+        movw r0, #0x1336
 
 exit:   bkpt 0x2                @ emu stop trigger
         mov  pc, lr
@@ -86,6 +86,8 @@ exit:   bkpt 0x2                @ emu stop trigger
         .size test_asm, .-test_asm
 
         .data
-foo:      .word 0xbadcab1e        @ data for loads/stores
-bar:      .word 0xdeadbeef
+foo:
+        .word 0xbadcab1e        @ data for loads/stores
+bar:
+        .word 0xdeadbeef
         .end
