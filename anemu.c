@@ -332,7 +332,7 @@ inline uint32_t emu_dataop(const darm_t *d, const uint32_t a, const uint32_t b) 
 }
 
 inline uint32_t emu_regshift(const darm_t *d) {
-    uint32_t amount = d->shift_type != S_INVLD ? RREG(Rs) : d->shift; /* shift register value or shift constant */
+    uint32_t amount = d->Rs != R_INVLD ? RREG(Rs) : d->shift; /* shift register value or shift constant */
     if (amount == 0) return 0;
     assert(amount > 0);
 
