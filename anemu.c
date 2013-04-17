@@ -3,13 +3,16 @@
 #include <stdlib.h>
 #include <assert.h>
 
+#include <signal.h>
+
 #if HAVE_SETRLIMIT
 # include <sys/types.h>
 # include <sys/time.h>
 # include <sys/resource.h>
 #endif
 
-int main(int argc, char ** argv) {
+
+int main() {
     emu_register_handler(&emu_handler);
     execute_instr();
 
@@ -421,6 +424,11 @@ void emu_start() {
         }
     }
     emu_printf("finished\n");
+}
+
+// FIXME
+int setcontext (const ucontext_t *ucp) {
+    return 0;
 }
 
 void emu_stop() {

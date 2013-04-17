@@ -1,7 +1,13 @@
 #ifndef _INCLUDE_ANEMU_H_
 #define _INCLUDE_ANEMU_H_
 
+#ifdef ANDROID
+/* #include <sys/cdefs.h> */
+#include <sys/ucontext.h>
+/* #include "ucontext.h" */
+#else
 #include <ucontext.h>
+#endif
 
 /* darm disassembler */
 #include <darm.h>
