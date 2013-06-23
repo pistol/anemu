@@ -117,6 +117,13 @@ void emu_type_branch_syscall(const darm_t * d) {
         EMU(WREGN(PC) = RREGN(PC) + d->imm);
         break;
     }
+    case I_BL: {
+        printf("RREGN(PC): %x\n", RREGN(PC));
+        printf("imm: %x\n", d->imm);
+        EMU(WREGN(LR) = RREGN(PC) - 4); /* ARM */
+        EMU(WREGN(PC) = RREGN(PC) + d->imm);
+        break;
+    }
         SWITCH_COMMON;
     }
 }
