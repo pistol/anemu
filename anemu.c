@@ -74,6 +74,7 @@ uint8_t emu_eval_cond(uint32_t cond) {
 }
 
 void emu_type_arith_shift(const darm_t * d) {
+    assert(d->Rs || d->shift);
     uint32_t sreg = emu_regshift(d);
     emu_printf("sreg = %x\n", sreg);
     EMU(WREG(Rd) = OP(RREG(Rn), sreg));
@@ -308,10 +309,9 @@ inline uint32_t emu_dataop(const darm_t *d, const uint32_t a, const uint32_t b) 
 
 inline uint32_t emu_regshift(const darm_t *d) {
     uint32_t amount = d->Rs != R_INVLD ? RREG(Rs) : d->shift; /* shift register value or shift constant */
-    if (amount == 0) return 0;
-    assert(amount > 0);
-
     uint32_t val = RREG(Rm);
+
+    if (amount == 0) return val;
 
     switch(d->shift_type) {
     case S_LSL: return LSL(val, amount);
