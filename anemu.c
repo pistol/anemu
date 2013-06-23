@@ -348,6 +348,31 @@ void emu_type_memory(const darm_t * d) {
     }
 }
 
+void emu_type_uncond(const darm_t * d) {
+    EMU_ENTRY;
+
+    switch((uint32_t) d->instr) {
+    case I_DMB: {
+        /* Options: SY, ST, ISH, ISHST, NSH, NSHST, OSH, OSHST */
+        switch(d->option) {
+        case O_SY: {
+            DMB(SY);
+            break;
+        }
+        case O_ST: {
+            DMB(ST);
+            break;
+        }
+        default: {
+            printf("unsupported barrier option %d\n", d->option);
+        }
+        }
+        break;
+    }
+        SWITCH_COMMON;
+    }
+}
+
 inline uint32_t emu_dataop(const darm_t *d, const uint32_t a, const uint32_t b) {
     switch((uint32_t) d->instr) {
     case I_CMN :
@@ -459,6 +484,10 @@ void emu_start() {
         case T_ARM_STACK2:
         case T_ARM_LDSTREGS: {
             emu_type_memory(d);
+            break;
+        }
+        case T_ARM_UNCOND: {
+            emu_type_uncond(d);
             break;
         }
         case T_INVLD: {
