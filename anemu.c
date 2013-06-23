@@ -2,7 +2,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <assert.h>
-
 #include <signal.h>
 
 #if HAVE_SETRLIMIT
@@ -19,10 +18,10 @@ int emu_regs_clean() {
 /* SIGTRAP handler used for single-stepping */
 void emu_handler(int sig, siginfo_t *si, void *ucontext) {
     emu_printf("SIG %d with TRAP code: %d pc: 0x%lx addr: 0x%x\n",
-           sig, 
-           si->si_code, 
-           (*(ucontext_t *)ucontext).uc_mcontext.arm_pc, 
-           (int) si->si_addr);
+               sig,
+               si->si_code,
+               (*(ucontext_t *)ucontext).uc_mcontext.arm_pc,
+               (int) si->si_addr);
 
     emu_init((ucontext_t *)ucontext); /* one time emu state initialization */
     emu_start();
@@ -161,12 +160,12 @@ void emu_type_cmp_op(const darm_t * d) {
     switch((uint32_t) d->instr) {
     case I_CMP: {
         asm volatile (
-             "cmp %[a], %[b]\n\t"                         /* updates flags */
-             "mrs %[ps], CPSR\n\t"                        /* save new cpsr */
-             : [ps] "=r" (CPU(cpsr))                      /* output */
-             : [a] "r" (RREG(Rn)), [b] "r" (RREG(Rm))     /* input */
-             : "cc"                                       /* clobbers condition codes */
-             );
+                      "cmp %[a], %[b]\n\t"                         /* updates flags */
+                      "mrs %[ps], CPSR\n\t"                        /* save new cpsr */
+                      : [ps] "=r" (CPU(cpsr))                      /* output */
+                      : [a] "r" (RREG(Rn)), [b] "r" (RREG(Rm))     /* input */
+                      : "cc"                                       /* clobbers condition codes */
+                      );
         CPSR_UPDATE_BITS;
         break;
     }
@@ -326,7 +325,7 @@ inline uint32_t emu_regshift(const darm_t *d) {
 
 void emu_start() {
     emu_printf("starting emulation ...\n\n");
-    
+
     static const darm_t *d;
     while(1) {
         if (!emu.branched) CPU(pc) += 4;
@@ -407,8 +406,8 @@ int setcontext (const ucontext_t *ucp) {
 
 void emu_stop() {
     emu_printf("resuming exec pc old: 0x%0lx new: 0x%0lx\n",
-           emu.original.uc_mcontext.arm_pc, 
-           emu.current.uc_mcontext.arm_pc);
+               emu.original.uc_mcontext.arm_pc,
+               emu.current.uc_mcontext.arm_pc);
 
     setcontext((const ucontext_t *)&emu.current); /* never returns */
 }
@@ -447,7 +446,7 @@ void emu_register_handler(void* sig_handler) {
     ss.ss_size = SIGSTKSZ;
     ss.ss_flags = 0;
     if (sigaltstack(&ss, NULL) == -1) {
-        perror("sigaltstack"); 
+        perror("sigaltstack");
         exit(1);
     }
 
@@ -471,7 +470,6 @@ const darm_t* emu_disas(unsigned int pc) {
         darm_str2(darm, &str, 1); /* lowercase str */
         printf("darm : %x %08x %s\n", pc, ins, str.instr);
     }
-
     return darm;
 }
 
