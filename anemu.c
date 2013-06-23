@@ -399,10 +399,9 @@ void emu_start() {
     emu_printf("finished\n");
 }
 
-// FIXME
-int setcontext (const ucontext_t *ucp) {
-    return 0;
-}
+/* note: ucontext/setcontext support normally missing in Bionic */
+/* unless ported to Bionic, hack it by returning 0 */
+/* int setcontext (const ucontext_t *ucp) { return 0; } */
 
 void emu_stop() {
     emu_printf("resuming exec pc old: 0x%0lx new: 0x%0lx\n",
