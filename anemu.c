@@ -363,6 +363,7 @@ void emu_start() {
 
         // 1. decode instr
         emu_disas_ref(CPU(pc)); /* rasm2 with libopcodes backend */
+        emu_disas_ref(CPU(pc), (emu_thumb_mode() ? 16 : 32)); /* rasm2 with libopcodes backend */
         d = emu_disas(CPU(pc)); /* darm */
         darm_dump(d);           /* dump internal darm_t state */
 
