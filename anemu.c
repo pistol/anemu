@@ -1,6 +1,6 @@
-#include "anemu.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
 #include <assert.h>
 #include <signal.h>
 
@@ -10,6 +10,7 @@
 # include <sys/resource.h>
 #endif
 
+#include "anemu-private.h"
 
 int emu_regs_clean() {
     return 0;                   /* TODO */
