@@ -34,6 +34,7 @@ void emu_init(ucontext_t *ucontext) {
     emu_printf("saving original ucontext ...\n");
     emu.previous = emu.current = emu.original = *ucontext;
     emu.regs = (uint32_t *)&emu.current.uc_mcontext.arm_r0;
+    emu.branched = 0;
 
     emu_dump();
 
@@ -548,7 +549,8 @@ static inline uint32_t *emu_write_reg(darm_reg_t reg) {
     if (reg == R_INVLD) return NULL;
 
     /* if we are explicitly writing the PC, we are branching */
-    emu.branched = (reg == PC);
+    /* we clear flag in main loop when ready to fetch next op */
+    if (reg == PC) emu.branched = 1;
     return &emu.regs[reg];
 }
 
