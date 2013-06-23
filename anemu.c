@@ -44,6 +44,9 @@ void emu_init(ucontext_t *ucontext) {
     emu_printf("initializing darm disassembler ...\n");
     darm = malloc(sizeof(darm_t));
 
+    /* process maps */
+    emu_map_parse();
+
     emu.initialized = 1;
     emu_printf("finished\n");
 }
@@ -301,7 +304,9 @@ void emu_type_memory(const darm_t * d) {
             EMU(WREG(Rn) = offset_addr);
         }
 
-        printf("addr: %x\n", addr);
+        map_t *m = emu_map_lookup(addr);
+        printf("addr: %x %s\n", addr, m->name);
+
         /* EMU(WMEM(addr) = RREG(Rt)); */
         WMEM(addr) = RREG(Rt);
         break;
@@ -427,7 +432,9 @@ void emu_start() {
         emu_advance_pc();
 
         // 1. decode instr
-        emu_disas_ref(CPU(pc)); /* rasm2 with libopcodes backend */
+        map_t *m = emu_map_lookup(CPU(pc));
+        emu_map_dump(m);
+
         emu_disas_ref(CPU(pc), (emu_thumb_mode() ? 16 : 32)); /* rasm2 with libopcodes backend */
         d = emu_disas(CPU(pc)); /* darm */
         /* check for invalid disassembly */
@@ -659,4 +666,77 @@ static void emu_dump_diff() {
         }
     }
     emu.previous = emu.current;
+}
+
+static void emu_map_dump(map_t *m) {
+    if (m != NULL) {
+        printf("%x-%x %c%c%c%c %x %x:%x %u %s [%u pages]\n",
+               m->vm_start,
+               m->vm_end,
+               m->r, m->w, m->x, m->s,
+               m->pgoff,
+               m->major, m->minor,
+               m->ino,
+               m->name,
+               m->pages);
+    } else {
+        printf("invalid (null) map\n");
+    }
+}
+
+// Sample format
+// 00400000-004d0000 r-xp 00000000 08:01 3973335 /usr/bin/irssi
+static void emu_map_parse() {
+    FILE *file;
+    char buf[1024];
+    emu.nr_maps = 0;
+
+    file = fopen("/proc/self/maps", "r");
+    if (!file) {
+        perror(buf);
+        exit(EXIT_FAILURE);
+    }
+
+    size_t page_size = sysconf(_SC_PAGE_SIZE);
+
+    while (fgets(buf, sizeof(buf), file) != NULL) {
+        map_t m;
+        unsigned int n;
+
+        n = sscanf(buf, "%x-%x %c%c%c%c %x %x:%x %u %255s",
+                   &m.vm_start,
+                   &m.vm_end,
+                   &m.r, &m.w, &m.x, &m.s,
+                   &m.pgoff,
+                   &m.major, &m.minor,
+                   &m.ino,
+                   m.name);
+        m.pages = (m.vm_end - m.vm_start) / page_size;
+        emu_map_dump(&m);
+        if (n < 10) {
+            printf("unexpected line: %s\n", buf);
+            continue;
+        }
+        emu.maps[emu.nr_maps] = m;
+        if (++emu.nr_maps >= MAX_MAPS) {
+            printf("too many maps\n");
+            break;
+        }
+    }
+    fclose(file);
+}
+
+static map_t* emu_map_lookup(uint32_t addr) {
+    unsigned int i;
+    map_t *m;
+
+    for (i = 0; i < emu.nr_maps; i++) {
+        m = &emu.maps[i];
+        if (addr >= m->vm_start && addr <= m->vm_end) {
+            printf("lib  pc  : %8x -> %8x\n", addr, addr - m->vm_start);
+            return m;
+        }
+    }
+    printf("unable to locate addr: %x\n", addr);
+    return NULL;
 }

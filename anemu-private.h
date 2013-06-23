@@ -253,8 +253,8 @@ static inline uint32_t emu_read_reg(darm_reg_t reg);
 static inline uint32_t *emu_write_reg(darm_reg_t reg);
 static inline uint8_t emu_thumb_mode();
 
-void emu_map_dump(map_t *m);
-void emu_map_parse();
-map_t* emu_map_lookup(uint32_t addr);
+static void emu_map_dump(map_t *m);
+static void emu_map_parse();
+static map_t* emu_map_lookup(uint32_t addr);
 
 #endif  /* _INCLUDE_ANEMU_PRIVATE_H_ */
