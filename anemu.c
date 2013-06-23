@@ -16,7 +16,7 @@ int emu_regs_clean() {
 }
 
 /* SIGTRAP handler used for single-stepping */
-void emu_handler(int sig, siginfo_t *si, void *ucontext) {
+static void emu_handler(int sig, siginfo_t *si, void *ucontext) {
     emu_printf("SIG %d with TRAP code: %d pc: 0x%lx addr: 0x%x\n",
                sig,
                si->si_code,
@@ -425,7 +425,7 @@ uint8_t emu_stop_trigger() {
 }
 
 /* Setup emulation handler. */
-void emu_register_handler(void* sig_handler) {
+void emu_register_handler() {
 #if HAVE_SETRLIMIT
     /* Be recursion friendly */
     struct rlimit rl;
@@ -454,7 +454,7 @@ void emu_register_handler(void* sig_handler) {
     struct sigaction sa;
     sa.sa_flags = SA_SIGINFO | SA_ONSTACK;
     sigemptyset(&sa.sa_mask);
-    sa.sa_sigaction = sig_handler;
+    sa.sa_sigaction = emu_handler;
     /* sigaction (SIGSEGV, &sa, NULL); */
     sigaction (SIGPROF, &sa, NULL);
     sigaction (SIGTRAP, &sa, NULL);
