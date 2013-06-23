@@ -299,9 +299,12 @@ inline uint32_t emu_dataop(const darm_t *d, const uint32_t a, const uint32_t b) 
     case I_RSB : return  b - a;
     case I_TEQ :
     case I_EOR : return  a ^ b;
+    case I_TST:
     case I_AND : return  a & b;
     case I_ORR : return  a | b;
     case I_BIC : return  a & ~b;
+    case I_MOV : return   b;
+    case I_MVN : return  ~b;
     default: emu_printf("unhandled dataop %s\n", darm_mnemonic_name(d->instr));
     }
     return 0xdeadc0de;
