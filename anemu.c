@@ -105,7 +105,33 @@ void emu_type_arith_imm(const darm_t * d) {
             SWITCH_COMMON;
         }
     } else {
-        EMU(WREG(Rd) = OP(RREG(Rn), d->imm));
+        switch((uint32_t) d->instr) {
+        case I_ADD:
+        case I_ADC:
+        case I_AND:
+        case I_ASR:
+        case I_BIC:
+        case I_EOR:
+        case I_LSL:
+        case I_LSR:
+        case I_ORR:
+        case I_ROR:
+        case I_RSB:
+        case I_RSC:
+        case I_SBC:
+        case I_SUB: {
+            EMU(WREG(Rd) = OP(RREG(Rn), d->imm));
+            break;
+        }
+        case I_ADR: {
+            uint32_t addr = d->U ?
+                (RREGN(PC) + d->imm) :
+                (RREGN(PC) - d->imm);
+            EMU(WREG(Rd) = addr);
+            break;
+        }
+            SWITCH_COMMON;
+        }
     }
 }
 
