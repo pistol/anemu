@@ -12,33 +12,6 @@
 #endif
 
 
-int main() {
-    emu_register_handler(&emu_handler);
-    execute_instr();
-
-    return 0;
-}
-
-/* int __attribute__((aligned(0x1000))) execute_instr() */
-/* Simulate a native binary executing */
-int execute_instr() {
-    int val = 0x1337;
-
-    int ret = test_asm(val);
-    emu_printf("ret: %x\n", ret);
-
-    emu_printf("finished\n");
-
-    return ret;
-}
-
-int test_c(int arg) {
-    int ret = test_asm(arg);
-    emu_printf("ret: %x\n", ret);
-        
-    return ret;
-}
-
 int emu_regs_clean() {
     return 0;                   /* TODO */
 }
