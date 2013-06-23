@@ -128,6 +128,17 @@ void emu_type_branch_misc(const darm_t * d) {
         /* ignore */
         break;
     }
+    case I_BX: {
+        if (RREG(Rm) & 1) {
+            printf("ARM -> Thumb switch!\n");
+            EMU(WREGN(PC) = (RREG(Rm) & ~1));
+            CPU(cpsr) |=  PSR_T_BIT;
+        } else {
+            EMU(WREGN(PC) = RREG(Rm));
+            CPU(cpsr) &= ~PSR_T_BIT;
+        }
+        break;
+    }
         SWITCH_COMMON;
     }
 }
