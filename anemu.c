@@ -274,10 +274,12 @@ void emu_type_memory(const darm_t * d) {
     /* EMU_ENTRY; */
 
     switch((uint32_t) d->instr) {
-    case I_LDR: {
+    case I_LDR:
+    case I_LDRB: {
+        uint32_t imm = (d->Rm == R_INVLD) ? d->imm : RREG(Rm);
         uint32_t offset_addr = d->U ?
-            (RREG(Rn) + d->imm) :
-            (RREG(Rn) - d->imm);
+            (RREG(Rn) + imm) :
+            (RREG(Rn) - imm);
 
         uint32_t addr = d->P ?
             offset_addr :
@@ -287,11 +289,25 @@ void emu_type_memory(const darm_t * d) {
             EMU(WREG(Rn) = offset_addr);
         }
 
-        printf("addr: %x\n", addr);
-        EMU(WREG(Rt) = RMEM(addr));
+        map_t *m = emu_map_lookup(addr);
+        printf("addr: %x %s\n", addr, m->name);
+        printf("RMEM: %x\n", RMEM(addr));
+
+        if (d->instr == I_LDR) {
+            EMU(WREG(Rt) = RMEM(addr));
+        } else {
+            EMU(WREG(Rt) = RMEM(addr) & 0xFFFF);
+        }
+        if ((d->Rt == PC) && (RREG(Rt) & 1)) {
+            printf("ARM -> Thumb switch!\n");
+            CPU(cpsr) |=  PSR_T_BIT;
+        } else {
+            CPU(cpsr) &= ~PSR_T_BIT;
+        }
         break;
     }
-    case I_STR: {
+    case I_STR:
+    case I_STRB: {
         uint32_t offset_addr = d->U ?
             (RREG(Rn) + d->imm) :
             (RREG(Rn) - d->imm);
@@ -308,7 +324,11 @@ void emu_type_memory(const darm_t * d) {
         printf("addr: %x %s\n", addr, m->name);
 
         /* EMU(WMEM(addr) = RREG(Rt)); */
-        WMEM(addr) = RREG(Rt);
+        if (d->instr == I_STR) {
+            WMEM(addr) = RREG(Rt);
+        } else {
+            WMEM(addr) = RREG(Rt) & 0xFFFF;
+        }
         break;
     }
     case I_PUSH: {
