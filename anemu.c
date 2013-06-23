@@ -64,11 +64,11 @@ uint8_t emu_eval_cond(uint32_t cond) {
     case C_VS: return (  cpsr.V == 1);
     case C_VC: return (  cpsr.V == 0);
     case C_HI: return (( cpsr.C == 1) && (cpsr.Z == 0));
-    case C_LS: return (( cpsr.C == 0) && (cpsr.Z == 1));
+    case C_LS: return (( cpsr.C == 0) || (cpsr.Z == 1));
     case C_GE: return (  cpsr.N == cpsr.V);
     case C_LT: return (  cpsr.N != cpsr.V);
     case C_GT: return (( cpsr.Z == 0) && (cpsr.N == cpsr.V));
-    case C_LE: return (( cpsr.Z == 1) && (cpsr.N != cpsr.V));
+    case C_LE: return (( cpsr.Z == 1) || (cpsr.N != cpsr.V));
     case C_AL: return 1;
     case C_UNCOND: return 1;
     default: {
