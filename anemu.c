@@ -327,15 +327,19 @@ inline uint32_t emu_regshift(const darm_t *d) {
     return val;
 }
 
+void emu_advance_pc() {
+    if (!emu.branched) CPU(pc) += (emu_thumb_mode() ? 2 : 4);
+    emu.branched = 0;
+    emu_dump_diff();
+    printf("\n");
+}
+
 void emu_start() {
     emu_printf("starting emulation ...\n\n");
 
     static const darm_t *d;
     while(1) {
-        if (!emu.branched) CPU(pc) += 4;
-        emu_dump_diff();
-        printf("\n");
-        // TODO: check if Thumb mode
+        emu_advance_pc();
 
         // 1. decode instr
         emu_disas_ref(CPU(pc)); /* rasm2 with libopcodes backend */
@@ -349,46 +353,46 @@ void emu_start() {
 
         // 2. emu instr by type
         switch(d->instr_type) {
-        case T_ARITH_SHIFT: {
+        case T_ARM_ARITH_SHIFT: {
             emu_type_arith_shift(d);
             break;
         }
-        case T_ARITH_IMM: {
+        case T_ARM_ARITH_IMM: {
             emu_type_arith_imm(d);
             break;
         }
-        case T_BRNCHSC: {
+        case T_ARM_BRNCHSC: {
             emu_type_branch_syscall(d);
             break;
         }
-        case T_BRNCHMISC: {
+        case T_ARM_BRNCHMISC: {
             emu_type_branch_misc(d);
             break;
         }
-        case T_MOV_IMM: {
+        case T_ARM_MOV_IMM: {
             emu_type_move_imm(d);
             break;
         }
-        case T_CMP_IMM: {
+        case T_ARM_CMP_IMM: {
             emu_type_cmp_imm(d);
             break;
         }
-        case T_CMP_OP: {
+        case T_ARM_CMP_OP: {
             emu_type_cmp_op(d);
             break;
         }
-        case T_OPLESS: {
+        case T_ARM_OPLESS: {
             emu_type_opless(d);
             break;
         }
-        case T_DST_SRC: {
+        case T_ARM_DST_SRC: {
             emu_type_dst_src(d);
             break;
         }
-        case T_STACK0:
-        case T_STACK1:
-        case T_STACK2:
-        case T_LDSTREGS: {
+        case T_ARM_STACK0:
+        case T_ARM_STACK1:
+        case T_ARM_STACK2:
+        case T_ARM_LDSTREGS: {
             emu_type_memory(d);
             break;
         }
@@ -416,7 +420,7 @@ void emu_stop() {
 }
 
 uint8_t emu_stop_trigger() {
-    static const armv7_instr_t trigger = I_BKPT;
+    static const darm_instr_t trigger = I_BKPT;
 
     if (darm->instr == trigger) {
         printf("\n");
@@ -463,17 +467,37 @@ void emu_register_handler() {
     sigaction (SIGTRAP, &sa, NULL);
 }
 
-const darm_t* emu_disas(unsigned int pc) {
-    const unsigned int ins = *(const unsigned int *)pc;
+const darm_t* emu_disas(uint32_t pc) {
+    uint32_t ins = *(const uint32_t *)pc;
 
-    if (darm_armv7_disasm(darm, ins)) {
-        printf("darm : %x %08x <invalid instruction>\n", pc, ins);
+    // Thumb16 only for now
+    /* if (emu_thumb_mode()) ins &= 0xffff; */
+
+    darm_str_t str;
+    if (emu_thumb_mode()) {
+        /* T16 mode */
+        if (darm_thumb_disasm(darm, ins)) {
+            printf("darm : %x %04x <invalid instruction>\n", pc, (uint16_t)ins);
+            return NULL;
+        } else {
+            darm_str2(darm, &str, 1); /* lowercase str */
+            printf("darm : %x %04x %s\n", pc, (uint16_t)ins, str.instr);
+        }
     } else {
-        darm_str_t str;
-        darm_str2(darm, &str, 1); /* lowercase str */
-        printf("darm : %x %08x %s\n", pc, ins, str.instr);
+        /* A32 mode */
+        if (darm_armv7_disasm(darm, ins)) {
+            printf("darm : %x %08x <invalid instruction>\n", pc, ins);
+            return NULL;
+        } else {
+            darm_str2(darm, &str, 1); /* lowercase str */
+            printf("darm : %x %08x %s\n", pc, ins, str.instr);
+        }
     }
     return darm;
+}
+
+static inline uint8_t emu_thumb_mode() {
+    return (CPU(cpsr) & PSR_T_BIT);
 }
 
 /* map register number (0-15) to ucontext reg entry (r0-r10, fp, ip, sp, lr pc) */
@@ -497,7 +521,7 @@ static inline uint32_t emu_read_reg(darm_reg_t reg) {
     case IP  :
     case SP  :
     case LR  : return emu.regs[reg];
-    case PC  : return emu.regs[reg] + 8; /* A32 +8, Thumb +4 */
+    case PC  : return emu.regs[reg] + (emu_thumb_mode() ? 4 : 8); /* A32 +8, Thumb +4 */
     default  : return -1;
     }
     return -1;
