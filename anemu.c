@@ -389,7 +389,7 @@ void emu_type_uncond(const darm_t * d) {
             break;
         }
         default: {
-            printf("unsupported barrier option %d\n", d->option);
+            emu_abort("unsupported barrier option %d\n", d->option);
         }
         }
         break;
@@ -416,7 +416,7 @@ inline uint32_t emu_dataop(const darm_t *d, const uint32_t a, const uint32_t b) 
     case I_BIC : return  a & ~b;
     case I_MOV : return   b;
     case I_MVN : return  ~b;
-    default: emu_printf("unhandled dataop %s\n", darm_mnemonic_name(d->instr));
+    default: emu_abort("unhandled dataop %s\n", darm_mnemonic_name(d->instr));
     }
     return 0xdeadc0de;
 }
@@ -432,7 +432,7 @@ inline uint32_t emu_regshift(const darm_t *d) {
     case S_LSR: return LSR(val, amount);
     case S_ASR: return ASR(val, amount);
     case S_ROR: return ROR(val, amount);
-    default: emu_printf("invalid shift type %s!\n", darm_shift_type_name(d->shift_type));
+    default: emu_abort("invalid shift type %s!\n", darm_shift_type_name(d->shift_type));
     }
     return val;
 }
@@ -460,7 +460,7 @@ void emu_start() {
         /* check for invalid disassembly */
         /* best we can do is stop emu and resume execution at the instruction before the issue */
         if (!d) {
-            return;             /* emu_stop() will get called after */
+            emu_abort("invalid disassembly"); /* emu_stop() will get called after */
         }
         darm_dump(d);           /* dump internal darm_t state */
 
@@ -518,11 +518,11 @@ void emu_start() {
             break;
         }
         case T_INVLD: {
-            emu_printf("darm invalid type (unsupported yet)\n");
+            emu_abort("darm invalid type (unsupported yet)\n");
             break;
         }
         default:
-            emu_printf("unhandled type %s\n", darm_enctype_name(d->instr_type));
+            emu_abort("unhandled type %s\n", darm_enctype_name(d->instr_type));
         }
     }
     emu_printf("finished\n");
@@ -598,7 +598,7 @@ const darm_t* emu_disas(uint32_t pc) {
     if (emu_thumb_mode()) {
         /* T16 mode */
         if (darm_thumb_disasm(darm, ins)) {
-            printf("darm : %x %04x <invalid instruction>\n", pc, (uint16_t)ins);
+            emu_printf("darm : %x %04x <invalid instruction>\n", pc, (uint16_t)ins);
             return NULL;
         } else {
             darm_str2(darm, &str, 1); /* lowercase str */
@@ -607,7 +607,7 @@ const darm_t* emu_disas(uint32_t pc) {
     } else {
         /* A32 mode */
         if (darm_armv7_disasm(darm, ins)) {
-            printf("darm : %x %08x <invalid instruction>\n", pc, ins);
+            emu_printf("darm : %x %08x <invalid instruction>\n", pc, ins);
             return NULL;
         } else {
             darm_str2(darm, &str, 1); /* lowercase str */
@@ -700,7 +700,7 @@ static void emu_map_dump(map_t *m) {
                m->name,
                m->pages);
     } else {
-        printf("invalid (null) map\n");
+        emu_abort("invalid (null) map\n");
     }
 }
 

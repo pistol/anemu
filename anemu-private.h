@@ -29,14 +29,20 @@
 
 #define emu_printf(...) printf("%s: ", __PRETTY_FUNCTION__); printf(__VA_ARGS__)
 #define EMU_ENTRY emu_printf("\n")
+#define emu_abort(...) emu_printf(__VA_ARGS__);             \
+    printf("\n");                                           \
+    printf("*********************************\n");          \
+    printf("FATAL ERROR! ABORTING EMU!\n");                 \
+    printf("*********************************\n\n");        \
+    emu_stop();
 
 #define SWITCH_COMMON                                                  \
     case I_INVLD: {                                                    \
-        emu_printf("darm unsupported op type\n");                      \
+        emu_abort("darm invalid op type\n");                           \
         break;                                                         \
     }                                                                  \
     default:                                                           \
-    emu_printf("unhandled instr %s\n", darm_mnemonic_name(d->instr));
+    emu_abort("unhandled instr %s\n", darm_mnemonic_name(d->instr));
 
 typedef struct _cpsr_t {
     uint8_t N;                  /* Negative result */
