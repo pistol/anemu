@@ -635,8 +635,6 @@ void emu_start() {
             goto next;
         }
 
-        if (emu_stop_trigger()) break;
-
         // 2. emu instr by type
         switch(d->instr_type) {
         case T_ARM_ARITH_SHIFT: {
