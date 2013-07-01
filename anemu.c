@@ -97,6 +97,7 @@ void emu_type_arith_shift(const darm_t * d) {
     uint32_t sreg = emu_regshift(d);
     emu_printf("sreg = %x\n", sreg);
     EMU(WREG(Rd) = OP(RREG(Rn), sreg));
+    TREG(Rd, Rn, Rm);
 }
 
 void emu_type_arith_imm(const darm_t * d) {

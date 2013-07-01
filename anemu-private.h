@@ -110,6 +110,9 @@ typedef struct _emu_t {
 #define WMEM(addr) *(uint32_t *)(addr)
 #define RMEM(addr) WMEM(addr)   /* identical pointer cast */
 
+/* taint register by darm specifier */
+#define TREG(dest, a, b) emu_set_taint_reg(d->dest, emu_get_taint_reg(d->a) + emu_get_taint_reg(d->b))
+
 /* process two operands according to instr type */
 #define OP(a, b) emu_dataop(d, a, b)
 
