@@ -6,6 +6,9 @@ extern "C" {  // only need to export C interface if
               // used by C++ source code
 #endif
 
+#define EMU_MARKER_START asm volatile("bkpt 0");
+#define EMU_MARKER_STOP  asm volatile("bkpt 1337")
+
 /* Public API */
 
 typedef struct _taintinfo_t {

@@ -241,11 +241,20 @@ void emu_type_branch_syscall(const darm_t * d) {
 }
 
 void emu_type_branch_misc(const darm_t * d) {
-    EMU_ENTRY;
-
     switch((uint32_t) d->instr) {
     case I_BKPT: {
-        /* ignore */
+        /* special flags */
+        /* entering- JNI: 1337 */
+        /* emu_single_step(); */
+        if (d->imm == MARKER_START_VAL) {
+            emu_printf("MARKER: starting emu\n");
+        } else if (d->imm == MARKER_STOP_VAL) {
+            emu_printf("MARKER: leaving emu due to JNI re-entry\n");
+            emu_advance_pc();
+            emu_stop();
+        } else {
+            emu_abort("MARKER: unexpected value! %x\n", d->imm);
+        }
         break;
     }
     case I_BX: {

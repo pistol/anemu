@@ -192,6 +192,9 @@ formats for S instructions:
 #define DSB(option) asm volatile ("dsb " #option : : : "memory")
 #define DMB(option) asm volatile ("dmb " #option : : : "memory")
 
+#define MARKER_START_VAL    0
+#define MARKER_STOP_VAL  1337
+
 #define SIGCONTEXT_REG_COUNT 21
 static const char *sigcontext_names[] = {"trap_no", "error_code", "oldmask",
                                          "r0", "r1", "r2", "r3", "r4", "r5",
