@@ -385,7 +385,7 @@ void emu_type_memory(const darm_t * d) {
         }
 
         map_t *m = emu_map_lookup(addr);
-        printf("addr: %x %s\n", addr, m->name);
+        if (m) printf("addr: %x %s\n", addr, m->name);
         printf("RMEM: %x\n", RMEM(addr));
 
         if (d->instr == I_LDR) {
@@ -416,7 +416,7 @@ void emu_type_memory(const darm_t * d) {
         }
 
         map_t *m = emu_map_lookup(addr);
-        printf("addr: %x %s\n", addr, m->name);
+        if (m) printf("addr: %x %s\n", addr, m->name);
 
         /* EMU(WMEM(addr) = RREG(Rt)); */
         if (d->instr == I_STR) {
