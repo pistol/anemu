@@ -437,11 +437,13 @@ inline uint32_t emu_regshift(const darm_t *d) {
     return val;
 }
 
-void emu_advance_pc() {
+static void emu_advance_pc() {
     if (!emu.branched) CPU(pc) += (emu_thumb_mode() ? 2 : 4);
     emu.branched = 0;
     emu_dump_diff();
     printf("\n");
+    printf("*** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***\n");
+}
 }
 
 void emu_start() {
@@ -449,8 +451,6 @@ void emu_start() {
 
     static const darm_t *d;
     while(1) {
-        emu_advance_pc();
-
         // 1. decode instr
         map_t *m = emu_map_lookup(CPU(pc));
         emu_map_dump(m);
@@ -464,7 +464,10 @@ void emu_start() {
         }
         darm_dump(d);           /* dump internal darm_t state */
 
-        if (!emu_eval_cond(d->cond)) continue;
+        if (!emu_eval_cond(d->cond)) {
+            emu_printf("skipping instruction: condition NOT passed\n");
+            goto next;
+        }
 
         if (emu_stop_trigger()) break;
 
@@ -524,6 +527,9 @@ void emu_start() {
         default:
             emu_abort("unhandled type %s\n", darm_enctype_name(d->instr_type));
         }
+
+    next:
+        emu_advance_pc();
     }
     emu_printf("finished\n");
 }

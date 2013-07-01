@@ -263,4 +263,5 @@ static void emu_map_dump(map_t *m);
 static void emu_map_parse();
 static map_t* emu_map_lookup(uint32_t addr);
 
+static void emu_advance_pc();
 #endif  /* _INCLUDE_ANEMU_PRIVATE_H_ */
