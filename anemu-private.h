@@ -170,6 +170,9 @@ formats for S instructions:
 #define TrailingZerosCount(x) __builtin_ctz(x)
 #define LeadingZerosCount(x) __builtin_clz(x)
 
+#define Align(x,a)              __ALIGN_MASK(x,(typeof(x))(a)-1)
+#define __ALIGN_MASK(x,mask)    (((x)+(mask))&~(mask))
+
 #define LSL(val, shift) (val << shift)
 #define LSR(val, shift) (val >> shift)
 #define ASR(val, shift) (val  / shift) /* expensive, need better alternative */
@@ -185,6 +188,10 @@ static const char *sigcontext_names[] = {"trap_no", "error_code", "oldmask",
                                          "r6", "r7", "r8", "r9", "r10",
                                          "fp", "ip", "sp", "lr", "pc", "cpsr",
                                          "fault_address"};
+
+typedef enum _cpumode_t {
+    M_ARM, M_THUMB
+} cpumode_t;
 
 /* Internal state */
 emu_t emu;                      /* emulator state */
@@ -264,4 +271,11 @@ static void emu_map_parse();
 static map_t* emu_map_lookup(uint32_t addr);
 
 static void emu_advance_pc();
+/* ARM manual util functions */
+void SelectInstrSet(cpumode_t mode);
+cpumode_t CurrentInstrSet();
+cpumode_t TargetInstrSet(uint32_t instr);
+void BranchWritePC(uint32_t addr);
+void BXWritePC(uint32_t addr);
+
 #endif  /* _INCLUDE_ANEMU_PRIVATE_H_ */

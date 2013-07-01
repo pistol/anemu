@@ -138,6 +138,66 @@ void emu_type_arith_imm(const darm_t * d) {
     }
 }
 
+void SelectInstrSet(cpumode_t mode) {
+    switch(mode) {
+    case M_ARM: {
+        if (CurrentInstrSet() == M_THUMB) {
+            printf("Thumb -> ARM switch!\n");
+        }
+        CPU(cpsr) &= ~PSR_T_BIT;
+        break;
+    }
+    case M_THUMB: {
+        if (CurrentInstrSet() == M_ARM) {
+            printf("ARM -> Thumb switch!\n");
+        }
+        CPU(cpsr) |=  PSR_T_BIT;
+        break;
+    }
+    default:
+        emu_abort("invalid instruction set %d\n", mode);
+    }
+}
+
+cpumode_t CurrentInstrSet() {
+    return (emu_thumb_mode() ? M_THUMB : M_ARM);
+}
+
+cpumode_t TargetInstrSet(uint32_t instr) {
+    if (instr == I_BX) {        /* swap mode */
+        return (CurrentInstrSet() == M_ARM ? M_THUMB : M_ARM);
+    } else {                    /* keep current mode */
+        return (CurrentInstrSet());
+    }
+}
+
+void BranchWritePC(uint32_t addr) {
+    EMU_ENTRY;
+
+    emu_printf("RREGN(PC): %x\n", RREGN(PC));
+    emu_printf("addr: %x\n", addr);
+    if (CurrentInstrSet() == M_ARM) {
+        EMU(WREGN(PC) = addr & ~0b11);
+    } else {
+        EMU(WREGN(PC) = addr & ~0b1);
+    }
+}
+
+void BXWritePC(uint32_t addr) {
+    EMU_ENTRY;
+
+    emu_printf("RREGN(PC): %x\n", RREGN(PC));
+    if (addr & 1) {
+        SelectInstrSet(M_THUMB);
+        EMU(WREGN(PC) = addr & ~1);
+    } else if (addr & ~0b10) {
+        SelectInstrSet(M_ARM);
+        EMU(WREGN(PC) = addr);
+    } else {
+        emu_abort("invalid branch addr: %x", addr);
+    }
+}
+
 void emu_type_branch_syscall(const darm_t * d) {
     switch((uint32_t) d->instr) {
     case I_B: {
