@@ -201,16 +201,25 @@ void BXWritePC(uint32_t addr) {
 void emu_type_branch_syscall(const darm_t * d) {
     switch((uint32_t) d->instr) {
     case I_B: {
-        printf("RREGN(PC): %x\n", RREGN(PC));
-        printf("imm: %x\n", d->imm);
-        EMU(WREGN(PC) = RREGN(PC) + d->imm);
+        BranchWritePC(RREGN(PC) + d->imm);
         break;
     }
-    case I_BL: {
-        printf("RREGN(PC): %x\n", RREGN(PC));
-        printf("imm: %x\n", d->imm);
-        EMU(WREGN(LR) = RREGN(PC) - 4); /* ARM */
-        EMU(WREGN(PC) = RREGN(PC) + d->imm);
+    case I_BL:
+    case I_BLX: {               /* immediate */
+        if (CurrentInstrSet() == M_ARM) {
+            EMU(WREGN(LR) =   RREGN(PC) - 4);
+        } else {
+            EMU(WREGN(LR) = ((RREGN(PC) - 2) | 1));
+        }
+        uint32_t targetAddress;
+        cpumode_t targetInstrSet = TargetInstrSet(d->instr);
+        if (targetInstrSet == M_ARM) {
+            targetAddress = Align(RREGN(PC), 4) + d->imm;
+        } else {
+            targetAddress = RREGN(PC) + d->imm;
+        }
+        SelectInstrSet(targetInstrSet);
+        BranchWritePC(targetAddress);
         break;
     }
         SWITCH_COMMON;
@@ -226,14 +235,16 @@ void emu_type_branch_misc(const darm_t * d) {
         break;
     }
     case I_BX: {
-        if (RREG(Rm) & 1) {
-            printf("ARM -> Thumb switch!\n");
-            EMU(WREGN(PC) = (RREG(Rm) & ~1));
-            CPU(cpsr) |=  PSR_T_BIT;
+        BXWritePC(RREG(Rm));
+        break;
+    }
+    case I_BLX: {
+        if (CurrentInstrSet() == M_ARM) {
+            EMU(WREGN(LR) =   RREGN(PC) - 4);
         } else {
-            EMU(WREGN(PC) = RREG(Rm));
-            CPU(cpsr) &= ~PSR_T_BIT;
+            EMU(WREGN(LR) = ((RREGN(PC) - 2) | 1));
         }
+        BXWritePC(RREG(Rm));
         break;
     }
         SWITCH_COMMON;
