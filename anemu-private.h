@@ -20,6 +20,8 @@
 /* hash table copied from Dalvik */
 #include "hash.h"
 
+#define UNUSED __attribute__((unused))
+
 #define SIGNAL SIGTRAP
 #define SEGV_FAULT_ADDR (void *)0xdeadbeef
 #define UCONTEXT_REG_OFFSET 3   /* skip first 3 fields (trap_no, error_code, oldmask) of uc_mcontext */
@@ -80,6 +82,8 @@ typedef struct _map_t {
     uint32_t pages;
 } map_t;
 
+#define N_REGS 16               /* r0-r15 */
+
 typedef struct _emu_t {
     ucontext_t current;         /* present process emulated state */
     ucontext_t previous;        /* used for diff-ing two contexts */
@@ -89,7 +93,10 @@ typedef struct _emu_t {
     uint32_t  *regs;            /* easy access to ucontext regs */
     uint16_t   nr_maps;
     map_t      maps[MAX_MAPS];
-    /* taint_t taint; */
+    taintinfo_t *tinfo;          /* trap tainted data (addr + tag) */
+    uint32_t   taintreg[N_REGS]; /* taint storage for regs */
+    HashTable *taintmap;         /* taint storage for memory */
+    bool      *enabled;          /* shared VM enabled flag */
 } emu_t;
 
 /* read/write register by number */
@@ -239,9 +246,7 @@ void emu_start();
 void emu_stop();
 uint8_t emu_stop_trigger();
 
-void emu_register_handler();
-
-int emu_regs_clean();
+uint8_t emu_regs_tainted();
 
 extern const char* emu_disas_ref(uint32_t pc, uint8_t bits);
 const darm_t* emu_disas(uint32_t pc);
@@ -274,6 +279,12 @@ static void emu_map_parse();
 static map_t* emu_map_lookup(uint32_t addr);
 
 static void emu_advance_pc();
+static int emu_dump_taintinfo(void* entry, UNUSED void* arg);
+static void emu_set_taint_mem(taintinfo_t* ti);
+static uint32_t emu_get_taint_mem(uint32_t addr);
+static inline void emu_set_taint_reg(uint32_t reg, uint32_t tag);
+static inline uint32_t emu_get_taint_reg(uint32_t reg);
+
 /* ARM manual util functions */
 void SelectInstrSet(cpumode_t mode);
 cpumode_t CurrentInstrSet();

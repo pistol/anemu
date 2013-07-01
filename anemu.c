@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdbool.h>
 #include <unistd.h>
 #include <assert.h>
 #include <signal.h>
@@ -12,8 +13,19 @@
 
 #include "anemu-private.h"
 
-int emu_regs_clean() {
-    return 0;                   /* TODO */
+#define TAINT_CLEAR 0x0
+
+uint8_t emu_regs_tainted() {
+    int i, tainted;
+    tainted = N_REGS;
+    for (i = 0; i < N_REGS; i++) {
+        if (emu.taintreg[i] != TAINT_CLEAR) {
+            emu_printf("r%d tainted tag: %x\n", i, emu.taintreg[i]);
+        } else {
+            tainted--;
+        }
+    }
+    return tainted;
 }
 
 /* SIGTRAP handler used for single-stepping */
@@ -30,6 +42,8 @@ static void emu_handler(int sig, siginfo_t *si, void *ucontext) {
 }
 
 void emu_init(ucontext_t *ucontext) {
+    assert(*emu.enabled == false);
+
     if (emu.initialized == 1) return;
     emu_printf("saving original ucontext ...\n");
     emu.previous = emu.current = emu.original = *ucontext;
@@ -512,14 +526,86 @@ static void emu_advance_pc() {
     if (!emu.branched) CPU(pc) += (emu_thumb_mode() ? 2 : 4);
     emu.branched = 0;
     emu_dump_diff();
+    emu_regs_tainted();
     printf("\n");
     printf("*** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***\n");
 }
+
+#define TAINT_MAP_SIZE 4096
+
+/* function of type HashCompareFunc */
+static int hashcmpTaintInfo(const void* ptr1, const void* ptr2)
+{
+    assert(ptr1 != NULL && ptr2 != NULL);
+
+    taintinfo_t* t1 = (taintinfo_t*) ptr1;
+    taintinfo_t* t2 = (taintinfo_t*) ptr2;
+
+    return (t1->addr == t2->addr);
+}
+
+static int emu_dump_taintinfo(void* entry, UNUSED void* arg) {
+    taintinfo_t* ti = (taintinfo_t *) entry;
+    printf("dbg: taint addr: %x tag: %x", ti->addr, ti->tag);
+    return 0;
+}
+
+static void emu_set_taint_mem(taintinfo_t* ti) {
+    if (emu.taintmap == NULL) {
+        printf("initializing taintmap ...\n");
+        emu.taintmap = dvmHashTableCreate(dvmHashSize(TAINT_MAP_SIZE), NULL);
+    }
+
+    printf("setting taint for addr: %x tag: %x", ti->addr, ti->tag);
+    int hash = ti->addr;
+    taintinfo_t* added = (taintinfo_t *)dvmHashTableLookup(emu.taintmap, hash, (void *) ti,
+                                                           hashcmpTaintInfo, true);
+    if (added == NULL) {
+        printf("taint not set!");
+    }
+
+    // dump hashtable
+    dvmHashForeach(emu.taintmap, emu_dump_taintinfo, NULL);
+}
+
+static uint32_t emu_get_taint_mem(uint32_t addr) {
+    taintinfo_t tinfo;
+    tinfo.addr = addr;
+    taintinfo_t* ti = &tinfo;
+
+    assert(emu.taintmap != NULL);
+
+    printf("getting taint for addr: %x", ti->addr);
+    int hash = ti->addr;
+    taintinfo_t* found = (taintinfo_t *)dvmHashTableLookup(emu.taintmap, hash, (void *) ti,
+                                                           hashcmpTaintInfo, false);
+    if (found == NULL) {
+        printf("address not tainted!");
+    } else {
+        printf("tag: %x", found->tag);
+    }
+    return found->tag;
+}
+
+static inline void emu_set_taint_reg(uint32_t reg, uint32_t tag) {
+    emu.taintreg[reg] = tag;
+}
+
+static inline uint32_t emu_get_taint_reg(uint32_t reg) {
+    return emu.taintreg[reg];
 }
 
 void emu_start() {
     emu_printf("starting emulation ...\n\n");
 
+    // determine entry mode: emu or trap-single-step-emu
+    // read arguments from JNI trap: addr + tag
+    if (!emu.tinfo->addr || !emu.tinfo->tag ) {
+        emu_abort("trap taint info invalid");
+    }
+
+    emu_set_taint_mem(emu.tinfo);
+    *emu.enabled = 1;
     static const darm_t *d;
     while(1) {
         // 1. decode instr
@@ -614,6 +700,10 @@ void emu_stop() {
                emu.original.uc_mcontext.arm_pc,
                emu.current.uc_mcontext.arm_pc);
 
+    *emu.enabled = 0;
+    if (emu_regs_tainted()) {
+        emu_printf("WARNING: stopping emu with tainted regs!\n");
+    }
     setcontext((const ucontext_t *)&emu.current); /* never returns */
 }
 
@@ -630,7 +720,14 @@ uint8_t emu_stop_trigger() {
 }
 
 /* Setup emulation handler. */
-void emu_register_handler() {
+void emu_register_handler(DvmEmuGlobals* state) {
+    if (state == NULL) {
+        printf("shared state == NULL");
+        exit(1);
+    }
+    emu.tinfo   = &state->tinfo;
+    emu.enabled = &state->enabled;
+
 #if HAVE_SETRLIMIT
     /* Be recursion friendly */
     struct rlimit rl;
