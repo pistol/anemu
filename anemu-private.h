@@ -17,6 +17,9 @@
 /* darm disassembler */
 #include <darm.h>
 
+/* hash table copied from Dalvik */
+#include "hash.h"
+
 #define SIGNAL SIGTRAP
 #define SEGV_FAULT_ADDR (void *)0xdeadbeef
 #define UCONTEXT_REG_OFFSET 3   /* skip first 3 fields (trap_no, error_code, oldmask) of uc_mcontext */
