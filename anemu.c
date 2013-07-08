@@ -551,7 +551,8 @@ static int hashcmpTaintInfo(const void* ptr1, const void* ptr2)
     taintinfo_t* t1 = (taintinfo_t*) ptr1;
     taintinfo_t* t2 = (taintinfo_t*) ptr2;
 
-    return (t1->addr == t2->addr);
+    /* 0 - equal, 1 - different, based on strcmp*/
+    return (t1->addr == t2->addr) ? 0 : 1;
 }
 
 static int emu_dump_taintinfo(void* entry, UNUSED void* arg) {
@@ -560,11 +561,14 @@ static int emu_dump_taintinfo(void* entry, UNUSED void* arg) {
     return 0;
 }
 
-static void emu_set_taint_mem(taintinfo_t* ti) {
+void emu_set_taint_mem(taintinfo_t* tip) {
     if (emu.taintmap == NULL) {
         printf("initializing taintmap ...\n");
         emu.taintmap = dvmHashTableCreate(dvmHashSize(TAINT_MAP_SIZE), NULL);
     }
+
+    taintinfo_t *ti = malloc(sizeof(taintinfo_t));
+    *ti = *tip;
 
     printf("setting taint for addr: %x tag: %x", ti->addr, ti->tag);
     int hash = ti->addr;
@@ -572,6 +576,8 @@ static void emu_set_taint_mem(taintinfo_t* ti) {
                                                            hashcmpTaintInfo, true);
     if (added == NULL) {
         printf("taint not set!");
+    } else {                    /* addr already exists in hash, update tag */
+        added->tag = ti->tag;
     }
 
     // dump hashtable
