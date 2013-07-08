@@ -44,7 +44,6 @@ static void emu_handler(int sig, siginfo_t *si, void *ucontext) {
 void emu_init(ucontext_t *ucontext) {
     assert(*emu.enabled == false);
 
-    if (emu.initialized == 1) return;
     emu_printf("saving original ucontext ...\n");
     emu.previous = emu.current = emu.original = *ucontext;
     emu.regs = (uint32_t *)&emu.current.uc_mcontext.arm_r0;
@@ -52,6 +51,7 @@ void emu_init(ucontext_t *ucontext) {
 
     emu_dump();
 
+    if (emu.initialized == 1) return;
     emu_printf("initializing rasm2 disassembler ...\n");
 
     /* init darm */
