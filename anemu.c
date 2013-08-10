@@ -788,7 +788,11 @@ void emu_register_handler(DvmEmuGlobals* state) {
     sigaction (SIGTRAP, &sa, NULL);
 }
 
-const darm_t* emu_disas(uint32_t pc) {
+const darm_t* emu_disasm(uint32_t pc) {
+    return emu_disasm_internal(darm, pc); /* darm is a global variable */
+}
+
+const darm_t* emu_disasm_internal(darm_t *d, uint32_t pc) {
     uint32_t ins = *(const uint32_t *)pc;
 
     // Thumb16 only for now
@@ -797,24 +801,24 @@ const darm_t* emu_disas(uint32_t pc) {
     darm_str_t str;
     if (emu_thumb_mode()) {
         /* T16 mode */
-        if (darm_thumb_disasm(darm, ins)) {
+        if (darm_thumb_disasm(d, ins)) {
             emu_printf("darm : %x %04x <invalid instruction>\n", pc, (uint16_t)ins);
             return NULL;
         } else {
-            darm_str2(darm, &str, 1); /* lowercase str */
             printf("darm : %x %04x %s\n", pc, (uint16_t)ins, str.instr);
+            darm_str2(d, &str, 1); /* lowercase str */
         }
     } else {
         /* A32 mode */
-        if (darm_armv7_disasm(darm, ins)) {
+        if (darm_armv7_disasm(d, ins)) {
             emu_printf("darm : %x %08x <invalid instruction>\n", pc, ins);
             return NULL;
         } else {
-            darm_str2(darm, &str, 1); /* lowercase str */
             printf("darm : %x %08x %s\n", pc, ins, str.instr);
+            darm_str2(d, &str, 1); /* lowercase str */
         }
     }
-    return darm;
+    return d;
 }
 
 static inline uint8_t emu_thumb_mode() {
