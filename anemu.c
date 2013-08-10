@@ -355,6 +355,14 @@ void emu_type_dst_src(const darm_t * d) {
     switch((uint32_t) d->instr) {
     case I_MOV: {
         EMU(WREG(Rd) = RREG(Rm));
+    case I_LSL: {
+        EMU(WREG(Rd) = LSL(RREG(Rm), d->shift));
+        WTREG1(Rd, Rm);
+        break;
+    }
+    case I_LSR: {
+        EMU(WREG(Rd) = LSR(RREG(Rm), d->shift));
+        WTREG1(Rd, Rm);
         break;
     }
     case I_NOP: {
