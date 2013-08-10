@@ -596,6 +596,49 @@ void emu_set_taint_mem(taintinfo_t* tip) {
     dvmHashForeach(emu.taintmap, emu_dump_taintinfo, NULL);
 }
 
+static int emu_protect_page(void* addr, void* flags) {
+    mprotectPage((uint32_t)addr, (uint32_t)flags);
+    return 0;
+}
+
+static int emu_unique_pages(void* entry, UNUSED void* arg) {
+    taintinfo_t* ti = (taintinfo_t *) entry;
+
+    /* one-time initialization of unique pages hash */
+    if (emu.uniquepages == NULL) {
+        printf("initializing unique taint pages hash ...\n");
+        emu.uniquepages = dvmHashTableCreate(dvmHashSize(TAINT_MAP_SIZE), NULL);
+    }
+
+    /* clear unique hash */
+    dvmHashTableClear(emu.uniquepages);
+
+    if (ti->tag != TAINT_CLEAR) {
+        uint32_t addr_aligned = getAlignedPage(ti->addr);
+        int hash = addr_aligned;
+        dvmHashTableLookup(emu.uniquepages, hash, (void *) addr_aligned,
+                           hashcmpTaintInfo, true);
+    }
+    return 0;
+}
+
+static void emu_protect_mem() {
+    /* build unique list of pages to protect to avoid infinite trap recursion */
+    dvmHashForeach(emu.taintmap, emu_unique_pages, NULL);
+
+    /* protect all pages in unique hash */
+    uint32_t flags = PROT_NONE;
+    dvmHashForeach(emu.uniquepages, emu_protect_page, (void *)flags);
+}
+
+static void emu_unprotect_mem() {
+    assert(emu.uniquepass != NULL);
+
+    /* un-protect all pages in unique hash */
+    uint32_t flags = PROT_READ | PROT_WRITE;
+    dvmHashForeach(emu.uniquepages, emu_protect_page, (void *)flags);
+}
+
 static uint32_t emu_get_taint_mem(uint32_t addr) {
     taintinfo_t tinfo;
     tinfo.addr = addr;
