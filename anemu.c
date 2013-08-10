@@ -497,6 +497,10 @@ void emu_type_uncond(const darm_t * d) {
         }
         break;
     }
+    case I_PLD: {
+        emu_printf("treating PLD as NOP\n");
+        break;
+    }
         SWITCH_COMMON;
     }
 }
