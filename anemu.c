@@ -805,8 +805,8 @@ const darm_t* emu_disasm_internal(darm_t *d, uint32_t pc) {
             emu_printf("darm : %x %04x <invalid instruction>\n", pc, (uint16_t)ins);
             return NULL;
         } else {
-            printf("darm : %x %04x %s\n", pc, (uint16_t)ins, str.instr);
             darm_str2(d, &str, 1); /* lowercase str */
+            printf("darm : %x %04x %s\n", pc, (uint16_t)ins, str.total);
         }
     } else {
         /* A32 mode */
@@ -814,8 +814,8 @@ const darm_t* emu_disasm_internal(darm_t *d, uint32_t pc) {
             emu_printf("darm : %x %08x <invalid instruction>\n", pc, ins);
             return NULL;
         } else {
-            printf("darm : %x %08x %s\n", pc, ins, str.instr);
             darm_str2(d, &str, 1); /* lowercase str */
+            printf("darm : %x %08x %s\n", pc, ins, str.total);
         }
     }
     return d;
