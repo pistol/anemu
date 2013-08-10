@@ -957,7 +957,8 @@ static map_t* emu_map_lookup(uint32_t addr) {
     for (i = 0; i < emu.nr_maps; i++) {
         m = &emu.maps[i];
         if (addr >= m->vm_start && addr <= m->vm_end) {
-            printf("lib  pc  : %8x -> %8x\n", addr, addr - m->vm_start);
+            printf("lib map %8x -> %8x\n", addr, addr - m->vm_start);
+            emu_map_dump(m);
             return m;
         }
     }
