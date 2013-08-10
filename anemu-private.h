@@ -254,8 +254,9 @@ uint8_t emu_stop_trigger();
 
 uint8_t emu_regs_tainted();
 
-extern const char* emu_disas_ref(uint32_t pc, uint8_t bits);
-const darm_t* emu_disas(uint32_t pc);
+extern const char* emu_disasm_ref(uint32_t pc, uint8_t bits);
+const darm_t* emu_disasm(uint32_t pc);
+const darm_t* emu_disasm_internal(darm_t * d, uint32_t pc);
 
 void emu_type_arith_shift(const darm_t * d);
 void emu_type_arith_imm(const darm_t * d);
@@ -286,10 +287,21 @@ static map_t* emu_map_lookup(uint32_t addr);
 
 static void emu_advance_pc();
 static int emu_dump_taintinfo(void* entry, UNUSED void* arg);
-static void emu_set_taint_mem(taintinfo_t* ti);
+static void emu_set_taint_mem(uint32_t addr, uint32_t tag);
 static uint32_t emu_get_taint_mem(uint32_t addr);
 static inline void emu_set_taint_reg(uint32_t reg, uint32_t tag);
 static inline uint32_t emu_get_taint_reg(uint32_t reg);
+
+/* Page Protections */
+
+static int32_t getPageSize();
+static uint32_t getAlignedPage(uint32_t addr);
+static void mprotectHandler(int sig, siginfo_t *si, void *ucontext);
+static void mprotectInit();
+static void mprotectPage(uint32_t addr, uint32_t flags);
+
+static int emu_protect_page(void* entry, UNUSED void* arg);
+static void emu_protect_mem();
 
 /* ARM manual util functions */
 void SelectInstrSet(cpumode_t mode);

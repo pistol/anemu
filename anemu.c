@@ -4,6 +4,8 @@
 #include <unistd.h>
 #include <assert.h>
 #include <signal.h>
+#include <sys/mman.h>           /* mprotect */
+#include <errno.h>
 
 #if HAVE_SETRLIMIT
 # include <sys/types.h>
@@ -573,7 +575,7 @@ static int emu_dump_taintinfo(void* entry, UNUSED void* arg) {
     return 0;
 }
 
-void emu_set_taint_mem(taintinfo_t* tip) {
+static void emu_set_taint_mem(uint32_t addr, uint32_t tag) {
     if (emu.taintmap == NULL) {
         printf("initializing taintmap ...\n");
         emu.taintmap = dvmHashTableCreate(dvmHashSize(TAINT_MAP_SIZE), NULL);

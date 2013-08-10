@@ -6,7 +6,7 @@ static struct r_asm_t *rasm;    /* rasm2 disassembler */
 
 
 /* reference (accurate but expensive) disassembly */
-const char* emu_disas_ref(unsigned int pc, uint8_t bits) {
+const char* emu_disasm_ref(unsigned int pc, uint8_t bits) {
     if (!rasm) {
         /* rasm2 configuration defaults */
         static const char arch[]    = {"arm"};   /* ARM ISA */
