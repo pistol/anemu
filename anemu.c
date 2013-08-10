@@ -965,3 +965,41 @@ static map_t* emu_map_lookup(uint32_t addr) {
     printf("unable to locate addr: %x\n", addr);
     return NULL;
 }
+
+/* Page Protection */
+
+static inline int32_t
+getPageSize() {
+    static int32_t pageSize = 0;
+
+    /* previous invocations will set pageSize */
+    if (pageSize) return pageSize;
+
+    /* this code executes once at initialization */
+    pageSize = sysconf(_SC_PAGE_SIZE);
+    if (pageSize == -1)
+        emu_printf("error: sysconf %d", pageSize);
+
+    printf("Page Size = %d bytes\n", pageSize);
+
+    return pageSize;
+}
+
+static inline uint32_t
+getAlignedPage(uint32_t addr) {
+    return addr & ~ (getPageSize() - 1);
+}
+
+/* TODO: add length and determine if page boundary crossed */
+static void
+mprotectPage(uint32_t addr, uint32_t flags) {
+    uint32_t addr_aligned = getAlignedPage(addr); /* align at pageSize */
+    printf("update protection on page: %x given addr: %x\n", addr_aligned, addr);
+    emu_map_lookup(addr);
+
+    if (mprotect((void *)addr_aligned, getPageSize(),
+                 flags) == -1) {
+        emu_printf("error: mprotect errno: %s\n", strerror(errno));
+    }
+    printf("page protection updated\n");
+}
