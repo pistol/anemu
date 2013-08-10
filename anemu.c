@@ -921,11 +921,13 @@ static void emu_map_parse() {
         exit(EXIT_FAILURE);
     }
 
-    size_t page_size = sysconf(_SC_PAGE_SIZE);
+    int32_t page_size = getPageSize();
 
     while (fgets(buf, sizeof(buf), file) != NULL) {
         map_t m;
         unsigned int n;
+
+        memset(&m, 0, sizeof(map_t));
 
         n = sscanf(buf, "%x-%x %c%c%c%c %x %x:%x %u %255s",
                    &m.vm_start,
