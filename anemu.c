@@ -571,7 +571,9 @@ static int hashcmpTaintInfo(const void* ptr1, const void* ptr2)
 
 static int emu_dump_taintinfo(void* entry, UNUSED void* arg) {
     taintinfo_t* ti = (taintinfo_t *) entry;
-    printf("dbg: taint addr: %x tag: %x", ti->addr, ti->tag);
+    if (ti->tag != TAINT_CLEAR) {
+        printf("taint: addr: %x tag: %x", ti->addr, ti->tag);
+    }
     return 0;
 }
 
@@ -579,22 +581,34 @@ static void emu_set_taint_mem(uint32_t addr, uint32_t tag) {
     if (emu.taintmap == NULL) {
         printf("initializing taintmap ...\n");
         emu.taintmap = dvmHashTableCreate(dvmHashSize(TAINT_MAP_SIZE), NULL);
+        printf("taintmap addr:\n");
+        emu_map_lookup((uint32_t)emu.taintmap);
     }
 
-    taintinfo_t *ti = malloc(sizeof(taintinfo_t));
-    *ti = *tip;
+    emu_printf("addr: %x\n", addr);
+    emu_map_lookup(addr);
 
-    printf("setting taint for addr: %x tag: %x", ti->addr, ti->tag);
+    /* FIXME: avoid malloc! */
+    taintinfo_t *ti = malloc(sizeof(taintinfo_t));
+    ti->addr = addr;
+    ti->tag  = tag;
+
     int hash = ti->addr;
     taintinfo_t* added = (taintinfo_t *)dvmHashTableLookup(emu.taintmap, hash, (void *) ti,
                                                            hashcmpTaintInfo, true);
     if (added == NULL) {
         printf("taint not set!");
     } else {                    /* addr already exists in hash, update tag */
+        if (added->tag != TAINT_CLEAR && ti->tag == TAINT_CLEAR) {
+            printf("taint: un-tainting mem: %x\n", addr);
+        } else if (added->tag == TAINT_CLEAR && ti->tag != TAINT_CLEAR) {
+            printf("taint: tainting mem: %x tag: %x\n", ti->addr, ti->tag);
+        }
         added->tag = ti->tag;
     }
 
     // dump hashtable
+    printf("dumping taint hashtable...\n");
     dvmHashForeach(emu.taintmap, emu_dump_taintinfo, NULL);
 }
 
@@ -648,19 +662,24 @@ static uint32_t emu_get_taint_mem(uint32_t addr) {
 
     assert(emu.taintmap != NULL);
 
-    printf("getting taint for addr: %x", ti->addr);
     int hash = ti->addr;
     taintinfo_t* found = (taintinfo_t *)dvmHashTableLookup(emu.taintmap, hash, (void *) ti,
                                                            hashcmpTaintInfo, false);
     if (found == NULL) {
-        printf("address not tainted!");
+        /* printf("address not tainted!"); */
+        return TAINT_CLEAR;
     } else {
-        printf("tag: %x", found->tag);
+        printf("taint: addr: %x tag: %x", ti->addr, found->tag);
+        return found->tag;
     }
-    return found->tag;
 }
 
 static inline void emu_set_taint_reg(uint32_t reg, uint32_t tag) {
+    if (emu.taintreg[reg] != TAINT_CLEAR && tag == TAINT_CLEAR) {
+        printf("taint: un-tainting r%d\n", reg);
+    } else if (emu.taintreg[reg] == TAINT_CLEAR && tag != TAINT_CLEAR) {
+        printf("taint: tainting r%d tag: %x", reg, tag);
+    }
     emu.taintreg[reg] = tag;
 }
 
