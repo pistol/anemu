@@ -39,7 +39,7 @@
     printf("*********************************\n");          \
     printf("FATAL ERROR! ABORTING EMU!\n");                 \
     printf("*********************************\n\n");        \
-    emu_stop();
+    exit(1);
 
 #define SWITCH_COMMON                                                  \
     case I_INVLD: {                                                    \
