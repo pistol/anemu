@@ -251,6 +251,7 @@ void emu_init(ucontext_t *ucontext);
 void emu_start();
 void emu_stop();
 uint8_t emu_stop_trigger();
+void emu_singlestep(uint32_t pc);
 
 uint8_t emu_regs_tainted();
 

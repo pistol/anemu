@@ -687,6 +687,104 @@ static inline uint32_t emu_get_taint_reg(uint32_t reg) {
     return emu.taintreg[reg];
 }
 
+void emu_singlestep(uint32_t pc) {
+    // 1. decode instr
+    emu_map_lookup(pc);
+
+    printf("emu_disasm_ref ...\n");
+    // emu_disasm_ref(pc, (emu_thumb_mode() ? 16 : 32)); /* rasm2 with libopcodes backend */
+    /* static const darm_t *d; */
+    const darm_t *d;
+    printf("emu_disasm ...\n");
+    d = emu_disasm(pc); /* darm */
+    /* check for invalid disassembly */
+    /* best we can do is stop emu and resume execution at the instruction before the issue */
+    if (!d) {
+        // FIXME: hacky detect mcr
+        // ee1d0f70 mrc 15, 0, r0, cr13, cr0, {3}
+        if (*(const uint32_t*)pc == 0xee1d0f70) {
+            asm volatile("mrc 15, 0, %[reg], cr13, cr0, 3" : [reg] "=r" CPU(r0));
+            goto next;
+        } else {
+            emu_abort("invalid disassembly"); /* emu_stop() will get called after */
+        }
+    }
+    darm_dump(d);           /* dump internal darm_t state */
+
+    if (!emu_eval_cond(d->cond)) {
+        emu_printf("skipping instruction: condition NOT passed\n");
+        goto next;
+    }
+
+    // 2. emu instr by type
+    switch(d->instr_type) {
+    case T_ARM_ARITH_SHIFT: {
+        emu_type_arith_shift(d);
+        break;
+    }
+    case T_ARM_ARITH_IMM: {
+        emu_type_arith_imm(d);
+        break;
+    }
+    case T_ARM_BRNCHSC: {
+        emu_type_branch_syscall(d);
+        break;
+    }
+    case T_ARM_BRNCHMISC: {
+        emu_type_branch_misc(d);
+        break;
+    }
+    case T_ARM_MOV_IMM: {
+        emu_type_move_imm(d);
+        break;
+    }
+    case T_ARM_CMP_IMM: {
+        emu_type_cmp_imm(d);
+        break;
+    }
+    case T_ARM_CMP_OP: {
+        emu_type_cmp_op(d);
+        break;
+    }
+    case T_ARM_OPLESS: {
+        emu_type_opless(d);
+        break;
+    }
+    case T_ARM_DST_SRC: {
+        emu_type_dst_src(d);
+        break;
+    }
+    case T_ARM_STACK0:
+    case T_ARM_STACK1:
+    case T_ARM_STACK2:
+    case T_ARM_LDSTREGS: {
+        emu_type_memory(d);
+        break;
+    }
+    case T_ARM_UNCOND: {
+        emu_type_uncond(d);
+        break;
+    }
+    case T_ARM_PUSR: {
+        emu_type_pusr(d);
+        break;
+    }
+    case T_ARM_SYNC: {
+        emu_type_sync(d);
+        break;
+    }
+    case T_INVLD: {
+        emu_abort("darm invalid type (unsupported yet)\n");
+        break;
+    }
+    default:
+        emu_abort("unhandled type %s\n", darm_enctype_name(d->instr_type));
+    }
+
+ next:
+    emu_advance_pc();
+}
+
 void emu_start() {
     emu_printf("starting emulation ...\n\n");
 
@@ -698,87 +796,10 @@ void emu_start() {
 
     emu_set_taint_mem(emu.tinfo);
     *emu.enabled = 1;
-    static const darm_t *d;
-    while(1) {
-        // 1. decode instr
-        map_t *m = emu_map_lookup(CPU(pc));
-        emu_map_dump(m);
 
-        emu_disas_ref(CPU(pc), (emu_thumb_mode() ? 16 : 32)); /* rasm2 with libopcodes backend */
-        d = emu_disas(CPU(pc)); /* darm */
-        /* check for invalid disassembly */
-        /* best we can do is stop emu and resume execution at the instruction before the issue */
-        if (!d) {
-            emu_abort("invalid disassembly"); /* emu_stop() will get called after */
-        }
-        darm_dump(d);           /* dump internal darm_t state */
-
-        if (!emu_eval_cond(d->cond)) {
-            emu_printf("skipping instruction: condition NOT passed\n");
-            goto next;
-        }
-
-        // 2. emu instr by type
-        switch(d->instr_type) {
-        case T_ARM_ARITH_SHIFT: {
-            emu_type_arith_shift(d);
-            break;
-        }
-        case T_ARM_ARITH_IMM: {
-            emu_type_arith_imm(d);
-            break;
-        }
-        case T_ARM_BRNCHSC: {
-            emu_type_branch_syscall(d);
-            break;
-        }
-        case T_ARM_BRNCHMISC: {
-            emu_type_branch_misc(d);
-            break;
-        }
-        case T_ARM_MOV_IMM: {
-            emu_type_move_imm(d);
-            break;
-        }
-        case T_ARM_CMP_IMM: {
-            emu_type_cmp_imm(d);
-            break;
-        }
-        case T_ARM_CMP_OP: {
-            emu_type_cmp_op(d);
-            break;
-        }
-        case T_ARM_OPLESS: {
-            emu_type_opless(d);
-            break;
-        }
-        case T_ARM_DST_SRC: {
-            emu_type_dst_src(d);
-            break;
-        }
-        case T_ARM_STACK0:
-        case T_ARM_STACK1:
-        case T_ARM_STACK2:
-        case T_ARM_LDSTREGS: {
-            emu_type_memory(d);
-            break;
-        }
-        case T_ARM_UNCOND: {
-            emu_type_uncond(d);
-            break;
-        }
-        case T_INVLD: {
-            emu_abort("darm invalid type (unsupported yet)\n");
-            break;
-        }
-        default:
-            emu_abort("unhandled type %s\n", darm_enctype_name(d->instr_type));
-        }
-
-    next:
-        emu_advance_pc();
+    while(1) {                  /* infinite loop */
+        emu_singlestep(CPU(pc));
     }
-    emu_printf("finished\n");
 }
 
 /* note: ucontext/setcontext support normally missing in Bionic */
