@@ -872,6 +872,9 @@ void emu_register_handler(DvmEmuGlobals* state) {
     /* sigaction (SIGSEGV, &sa, NULL); */
     sigaction (SIGPROF, &sa, NULL);
     sigaction (SIGTRAP, &sa, NULL);
+
+    /* 3. setup mprotect handler */
+    mprotectInit();
 }
 
 const darm_t* emu_disasm(uint32_t pc) {
@@ -1076,6 +1079,73 @@ getPageSize() {
 static inline uint32_t
 getAlignedPage(uint32_t addr) {
     return addr & ~ (getPageSize() - 1);
+}
+
+static void
+mprotectHandler(int sig, siginfo_t *si, void *ucontext) {
+    uint32_t pc = (*(ucontext_t *)ucontext).uc_mcontext.arm_pc;
+    uint32_t addr_fault = (*(ucontext_t *)ucontext).uc_mcontext.fault_address;
+
+    printf("\n### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###\n");
+
+    emu_printf("SIG %d with TRAP code: %d pc: %x addr: %x\n",
+               sig,
+               si->si_code,
+               pc,
+               addr_fault);
+
+    assert(si_addr == addr_fault);
+
+    emu_map_lookup(pc);
+    emu_map_lookup(addr_fault);
+
+    if (*emu.enabled == 1) {
+        dbg_dump_ucontext((ucontext_t *)ucontext);
+        emu_abort("massive fuckup, trapping while in emu!\n");
+    }
+
+    emu_init((ucontext_t *) ucontext);
+
+    uint32_t addr_aligned = getAlignedPage(addr_fault);
+    printf("fault addr: %x fixing permissions for page: %x\n", addr_fault, addr_aligned);
+
+    mprotectPage(addr_fault, PROT_READ | PROT_WRITE); /* will align internally */
+
+    if (emu_get_taint_mem(addr_fault) != TAINT_CLEAR) {
+        /* disable mprotect on all tainted pages to avoid re-traping while in emu */
+        emu_unprotect_mem();
+        emu_start();            /* never returns */
+    } else {
+        /* false positive, single-step instruction and re-enable protection */
+        /* NOTE: we don't expect single-step to access a tainted mem location */
+        /* Hence we skip unprotect+protect tainted memory */
+        /* emu_unprotect_mem(); */
+
+        printf("un-protecting mem before singlestep...\n");
+        emu_unprotect_mem();
+
+        *emu.enabled = 1;
+
+        printf("singlestep instruction at pc: %x\n", pc);
+        emu_singlestep(pc);
+
+        printf("protecting mem after singlestep...\n");
+        emu_protect_mem();
+
+        emu_stop();             /* this should not be reached */
+    }
+}
+
+static void
+mprotectInit() {
+    struct sigaction sa;
+
+    /* sa.sa_flags = SA_SIGINFO; */
+    sa.sa_flags = SA_SIGINFO | SA_ONSTACK; /* doesn't clobber original stack */
+    sigemptyset(&sa.sa_mask);
+    sa.sa_sigaction = mprotectHandler;
+    if (sigaction(SIGSEGV, &sa, NULL) == -1)
+        emu_printf("error: sigaction");
 }
 
 /* TODO: add length and determine if page boundary crossed */
