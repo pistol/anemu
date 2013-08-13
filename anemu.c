@@ -21,8 +21,8 @@ uint8_t emu_regs_tainted() {
     int i, tainted;
     tainted = N_REGS;
     for (i = 0; i < N_REGS; i++) {
-        if (emu.taintreg[i] != TAINT_CLEAR) {
-            emu_printf("r%d tainted tag: %x\n", i, emu.taintreg[i]);
+        if (RTREGN(i) != TAINT_CLEAR) {
+            printf("taint: r%d val: %x tag: %x\n", i, RREGN(i), RTREGN(i));
         } else {
             tainted--;
         }
@@ -101,7 +101,7 @@ void emu_type_arith_shift(const darm_t * d) {
     uint32_t sreg = emu_regshift(d);
     emu_printf("sreg = %x\n", sreg);
     EMU(WREG(Rd) = OP(RREG(Rn), sreg));
-    TREG(Rd, Rn, Rm);
+    WTREG2(Rd, Rn, Rm);
 }
 
 void emu_type_arith_imm(const darm_t * d) {
@@ -143,6 +143,7 @@ void emu_type_arith_imm(const darm_t * d) {
         case I_SBC:
         case I_SUB: {
             EMU(WREG(Rd) = OP(RREG(Rn), d->imm));
+            WTREG1(Rd, Rn);
             break;
         }
         case I_ADR: {
@@ -150,6 +151,7 @@ void emu_type_arith_imm(const darm_t * d) {
                 (RREGN(PC) + d->imm) :
                 (RREGN(PC) - d->imm);
             EMU(WREG(Rd) = addr);
+            WTREG(Rd, RTMEM(addr));
             break;
         }
             SWITCH_COMMON;
@@ -289,18 +291,22 @@ void emu_type_move_imm(const darm_t * d) {
         } else {
             EMU(WREG(Rd) = d->imm);
         }
+        WTREG(Rd, TAINT_CLEAR);
         break;
     }
     case I_MOVT: {
         EMU(WREG(Rd) = (RREG(Rd) & 0x0000ffff) | (d->imm << 16));
+        WTREG(Rd, TAINT_CLEAR);
         break;
     }
     case I_MOVW: {
         EMU(WREG(Rd) = (RREG(Rd) & 0xffff0000) | (d->imm));
+        WTREG(Rd, TAINT_CLEAR);
         break;
     }
         SWITCH_COMMON;
     }
+    WTREG(Rd, TAINT_CLEAR);
 }
 
 void emu_type_cmp_op(const darm_t * d) {
@@ -359,6 +365,9 @@ void emu_type_dst_src(const darm_t * d) {
     switch((uint32_t) d->instr) {
     case I_MOV: {
         EMU(WREG(Rd) = RREG(Rm));
+        WTREG1(Rd, Rm);
+        break;
+    }
     case I_LSL: {
         EMU(WREG(Rd) = LSL(RREG(Rm), d->shift));
         WTREG1(Rd, Rm);
@@ -411,6 +420,8 @@ void emu_type_memory(const darm_t * d) {
         } else {
             CPU(cpsr) &= ~PSR_T_BIT;
         }
+
+        WTREG(Rt, RTMEM(addr));
         break;
     }
     case I_STR:
@@ -436,6 +447,8 @@ void emu_type_memory(const darm_t * d) {
         } else {
             WMEM(addr) = RREG(Rt) & 0xFFFF;
         }
+
+        WTMEM(addr, RTREG(Rt));
         break;
     }
     case I_PUSH: {
@@ -450,6 +463,7 @@ void emu_type_memory(const darm_t * d) {
             printf("addr: %x, r%d: %8x\n", addr, reg, RREGN(reg));
             WMEM(addr)     = RREGN(reg);
             /* EMU(WMEM(addr) = RREGN(reg)); */
+            if (RTMEM(addr) || RTREGN(reg)) WTMEM(addr, RTREGN(reg));
             addr          += 4;
         }
 
@@ -469,6 +483,7 @@ void emu_type_memory(const darm_t * d) {
             printf("addr: %x, r%d: %8x\n", addr, reg, RMEM(addr));
             /* EMU(WREGN(reg) = RMEM(addr)); */
             WREGN(reg) = RMEM(addr);
+            if (RTREGN(reg) || RTMEM(addr)) WTREGN(reg, RTMEM(addr));
             addr          += 4;
         }
 

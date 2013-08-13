@@ -188,7 +188,7 @@ formats for S instructions:
     CPSR_UPDATE_BITS;
 
 /* switch case helper for EMU_FLAGS_* */
-#define CASE(instr, handler) case I_##instr: { EMU_FLAGS_##handler(instr); break; }
+#define CASE(instr, handler) case I_##instr: { EMU_FLAGS_##handler(instr); WTREG1(Rd, Rn); break; }
 
 #define BitCount(x) __builtin_popcount(x)
 #define TrailingZerosCount(x) __builtin_ctz(x)
