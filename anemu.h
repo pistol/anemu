@@ -13,6 +13,7 @@ extern "C" {  // only need to export C interface if
 
 typedef struct _taintinfo_t {
     uint32_t addr;
+    uint32_t length;
     uint32_t tag;
 } taintinfo_t;
 
@@ -22,6 +23,8 @@ typedef struct _DvmEmuGlobals {
 } DvmEmuGlobals;
 
 void emu_register_handler(DvmEmuGlobals* state);
+
+void emu_set_taint_mem(uint32_t addr, uint32_t tag);
 
 #ifdef __cplusplus
 }

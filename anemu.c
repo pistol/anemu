@@ -577,7 +577,7 @@ static int emu_dump_taintinfo(void* entry, UNUSED void* arg) {
     return 0;
 }
 
-static void emu_set_taint_mem(uint32_t addr, uint32_t tag) {
+void emu_set_taint_mem(uint32_t addr, uint32_t tag) {
     if (emu.taintmap == NULL) {
         printf("initializing taintmap ...\n");
         emu.taintmap = dvmHashTableCreate(dvmHashSize(TAINT_MAP_SIZE), NULL);
@@ -794,7 +794,7 @@ void emu_start() {
         emu_abort("trap taint info invalid");
     }
 
-    emu_set_taint_mem(emu.tinfo);
+    emu_set_taint_mem(emu.tinfo->addr, emu.tinfo->tag);
     *emu.enabled = 1;
 
     while(1) {                  /* infinite loop */

@@ -288,7 +288,7 @@ static map_t* emu_map_lookup(uint32_t addr);
 
 static void emu_advance_pc();
 static int emu_dump_taintinfo(void* entry, UNUSED void* arg);
-static void emu_set_taint_mem(uint32_t addr, uint32_t tag);
+void emu_set_taint_mem(uint32_t addr, uint32_t tag);
 static uint32_t emu_get_taint_mem(uint32_t addr);
 static inline void emu_set_taint_reg(uint32_t reg, uint32_t tag);
 static inline uint32_t emu_get_taint_reg(uint32_t reg);
