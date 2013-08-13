@@ -419,14 +419,11 @@ void emu_type_cmp_op(const darm_t * d) {
 
     switch((uint32_t) d->instr) {
     case I_CMP: {
-        asm volatile (
-                      "cmp %[a], %[b]\n\t"                         /* updates flags */
-                      "mrs %[ps], CPSR\n\t"                        /* save new cpsr */
-                      : [ps] "=r" (CPU(cpsr))                      /* output */
-                      : [a] "r" (RREG(Rn)), [b] "r" (RREG(Rm))     /* input */
-                      : "cc"                                       /* clobbers condition codes */
-                      );
-        CPSR_UPDATE_BITS;
+        EMU_FLAGS_RnRm(CMP);
+        break;
+    }
+    case I_TEQ: {
+        EMU_FLAGS_RnRm(TEQ);
         break;
     }
         SWITCH_COMMON;
@@ -438,14 +435,11 @@ void emu_type_cmp_imm(const darm_t * d) {
 
     switch((uint32_t) d->instr) {
     case I_CMP: {
-        asm volatile (
-                      "cmp %[a], %[b]\n\t"                         /* updates flags */
-                      "mrs %[ps], CPSR\n\t"                        /* save new cpsr */
-                      : [ps] "=r" (CPU(cpsr))                      /* output */
-                      : [a] "r" (RREG(Rn)), [b] "r" (d->imm)       /* input */
-                      : "cc"                                       /* clobbers condition codes */
-                      );
-        CPSR_UPDATE_BITS;
+        EMU_FLAGS_RnImm(CMP);
+        break;
+    }
+    case I_TST: {
+        EMU_FLAGS_RnImm(TST);
         break;
     }
         SWITCH_COMMON;

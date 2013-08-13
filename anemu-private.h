@@ -187,6 +187,24 @@ formats for S instructions:
                   );                                                    \
     CPSR_UPDATE_BITS;
 
+#define EMU_FLAGS_RnRm(instr)                                           \
+    asm volatile (#instr " %[Rn], %[Rm]\n\t"                 /* updates flags */ \
+                  "mrs %[cpsr], CPSR\n\t"                    /* save new cpsr */ \
+                  : [cpsr] "=r" (CPU(cpsr))                  /* output */ \
+                  : [Rn] "r" (RREG(Rn)), [Rm] "r" (RREG(Rm)) /* input */ \
+                  : "cc"                                     /* clobbers condition codes */ \
+                  );                                                    \
+    CPSR_UPDATE_BITS;
+
+#define EMU_FLAGS_RnImm(instr)                                          \
+    asm volatile (#instr " %[a], %[b]\n\t"               /* updates flags */ \
+                  "mrs %[ps], CPSR\n\t"                  /* save new cpsr */ \
+                  : [ps] "=r" (CPU(cpsr))                /* output */   \
+                  : [a] "r" (RREG(Rn)), [b] "r" (d->imm) /* input */    \
+                  : "cc"                                 /* clobbers condition codes */ \
+                  );                                                    \
+    CPSR_UPDATE_BITS;
+
 /* switch case helper for EMU_FLAGS_* */
 #define CASE(instr, handler) case I_##instr: { EMU_FLAGS_##handler(instr); WTREG1(Rd, Rn); break; }
 
