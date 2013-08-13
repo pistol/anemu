@@ -41,6 +41,7 @@ static void emu_handler(int sig, siginfo_t *si, void *ucontext) {
                (int) si->si_addr);
 
     emu_init((ucontext_t *)ucontext); /* one time emu state initialization */
+    emu_map_lookup(pc);
     emu_start();
     emu_stop();
 }
@@ -171,6 +172,90 @@ void emu_type_pusr(const darm_t * d) {
     }
 }
 
+void emu_type_sync(const darm_t * d) {
+    switch((uint32_t) d->instr) {
+    case I_LDREX: {
+        printf("LDREX before:\n");
+        printf("Rt: %x Rn: %x MEM Rn: %x\n", RREG(Rt), RREG(Rn), RMEM(RREG(Rn)));
+
+        printf("Checking for special lock aquire case...\n");
+        darm_t d2, d3, d4;
+        emu_disasm_internal(&d2, CPU(pc) +  4);
+        emu_disasm_internal(&d3, CPU(pc) +  8);
+        emu_disasm_internal(&d4, CPU(pc) + 12);
+
+        if (d2.instr == I_MOV &&
+            d3.instr == I_TEQ &&
+            d4.instr == I_STREX) {
+            printf("Detecting lock aquire (LDREX/STDEX)! Executing atomically.\n");
+
+            asm volatile ("ldrex %[Rt], [%[Rn]]\n"
+                          "mov %[Rd2], #0\n"
+                          "teq %[Rt], %[Rm3]\n"
+                          "strexeq %[Rd2], %[Rt4], [%[Rn]]"
+                          : [Rt] "=&r" (*emu_write_reg(d->Rt)), [Rd2] "=&r" (*emu_write_reg(d2.Rd))
+                          : [Rn] "r" (emu_read_reg(d->Rn)), [Rm3] "Ir" (emu_read_reg(d3.Rm)), [Rt4] "r" (emu_read_reg(d4.Rt))
+                          : "cc"
+                          );
+
+            printf("LDREX after:\n");
+            printf("Rt: %x Rn: %x MEM Rn: %x\n", RREG(Rt), RREG(Rn), RMEM(RREG(Rn)));
+
+            WTREG(Rt, RTMEM(RREG(Rn)));
+            WTREGN(d2.Rd, TAINT_CLEAR);
+
+            /* updating PC via WREGN is treated as a branch */
+            /* which means PC is not advanced a further +2/4 */
+            /* thus we have to use CPU(pc) instead of WREGN(pc) */
+            CPU(pc) += 3 * 4;
+
+            if (emu_read_reg(d2.Rd) == 0) {    /* 0 if memory was updated  */
+                printf("Lock aquire (LDREX/STREX) succesfull!\n");
+                /* FIXME: deadlock on malloc! */
+                // WTMEM(RREG(Rn), RTREGN(d4.Rt));
+            } else {
+                printf("STREX failed to update memory\n");
+            }
+        } else {
+            asm volatile ("ldrex %[Rt], [%[Rn]]"
+                          : [Rt] "=&r" (WREG(Rt))
+                          : [Rn] "r" (RREG(Rn))
+                          :
+                          );
+
+            WTREG1(Rt, Rn);
+        }
+
+        break;
+    }
+    case I_STREX: {
+        printf("STREX before:\n");
+        printf("Rt: %x\n", RREG(Rt));
+        printf("Rn: %x\n", RREG(Rn));
+        printf("Rd: %x\n", RREG(Rd));
+        printf("MEM Rn: %x\n", RMEM(RREG(Rn)));
+
+        asm volatile ("strex %[Rd], %[Rt], [%[Rn]]"
+                      : [Rd] "=&r" (WREG(Rd))
+                      : [Rt] "r" (RREG(Rt)), [Rn] "r" (RREG(Rn))
+                      : "memory"
+                      );
+
+        printf("STREX after:\n");
+        printf("Rd: %x\n", RREG(Rd));
+        printf("MEM Rn: %x\n", RMEM(RREG(Rn)));
+
+        if (RREG(Rd) == 0) {    /* 0 if memory was updated  */
+            WTMEM(RREG(Rn), RTREG(Rt));
+        } else {
+            emu_printf("STREX failed to update memory\n");
+        }
+        break;
+    }
+    SWITCH_COMMON;
+    }
+}
+
 void SelectInstrSet(cpumode_t mode) {
     switch(mode) {
     case M_ARM: {
@@ -209,6 +294,7 @@ void BranchWritePC(uint32_t addr) {
 
     emu_printf("RREGN(PC): %x\n", RREGN(PC));
     emu_printf("addr: %x\n", addr);
+    emu_map_lookup(addr);
     if (CurrentInstrSet() == M_ARM) {
         EMU(WREGN(PC) = addr & ~0b11);
     } else {
@@ -220,6 +306,8 @@ void BXWritePC(uint32_t addr) {
     EMU_ENTRY;
 
     emu_printf("RREGN(PC): %x\n", RREGN(PC));
+    emu_printf("addr: %x\n", addr);
+    emu_map_lookup(addr);
     if (addr & 1) {
         SelectInstrSet(M_THUMB);
         EMU(WREGN(PC) = addr & ~1);
@@ -418,6 +506,8 @@ void emu_type_memory(const darm_t * d) {
         }
 
         map_t *m = emu_map_lookup(addr);
+        printf("Rt: %x\n", RREG(Rt));
+        printf("Rn: %x\n", RREG(Rn));
         if (m) printf("addr: %x %s\n", addr, m->name);
         printf("RMEM: %x\n", RMEM(addr));
 
