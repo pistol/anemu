@@ -96,6 +96,7 @@ typedef struct _emu_t {
     taintinfo_t *tinfo;          /* trap tainted data (addr + tag) */
     uint32_t   taintreg[N_REGS]; /* taint storage for regs */
     HashTable *taintmap;         /* taint storage for memory */
+    HashTable *uniquepages;      /* unique taint pages */
     bool      *enabled;          /* shared VM enabled flag */
 } emu_t;
 
@@ -204,6 +205,8 @@ formats for S instructions:
 #define ISB(option) asm volatile ("isb " #option : : : "memory")
 #define DSB(option) asm volatile ("dsb " #option : : : "memory")
 #define DMB(option) asm volatile ("dmb " #option : : : "memory")
+
+#define PLD(regname) asm volatile("pld [%[reg]]" :: [reg] "r" (d->regname));
 
 #define MARKER_START_VAL    0
 #define MARKER_STOP_VAL  1337

@@ -32,10 +32,12 @@ uint8_t emu_regs_tainted() {
 
 /* SIGTRAP handler used for single-stepping */
 static void emu_handler(int sig, siginfo_t *si, void *ucontext) {
-    emu_printf("SIG %d with TRAP code: %d pc: 0x%lx addr: 0x%x\n",
+    uint32_t pc = (*(ucontext_t *)ucontext).uc_mcontext.arm_pc;
+
+    emu_printf("SIG %d with TRAP code: %d pc: %x addr: %x\n",
                sig,
                si->si_code,
-               (*(ucontext_t *)ucontext).uc_mcontext.arm_pc,
+               pc,
                (int) si->si_addr);
 
     emu_init((ucontext_t *)ucontext); /* one time emu state initialization */
@@ -471,7 +473,6 @@ void emu_type_memory(const darm_t * d) {
         }
 
         EMU(WREG(Rn) = RREG(Rn) + 4 * regcount); /* update SP */
-
         break;
     }
         SWITCH_COMMON;
@@ -791,7 +792,7 @@ void emu_start() {
     // determine entry mode: emu or trap-single-step-emu
     // read arguments from JNI trap: addr + tag
     if (!emu.tinfo->addr || !emu.tinfo->tag ) {
-        emu_abort("trap taint info invalid");
+        emu_abort("taint: trap taint info invalid");
     }
 
     emu_set_taint_mem(emu.tinfo->addr, emu.tinfo->tag);
@@ -952,7 +953,7 @@ static inline uint32_t *emu_write_reg(darm_reg_t reg) {
 static void dbg_dump_ucontext(ucontext_t *uc) {
     static int i;
     for (i = 0; i < SIGCONTEXT_REG_COUNT; i++) {
-        printf("dbg: %14s: 0x%0x\n",
+        printf("dbg: %14s: %0x\n",
                sigcontext_names[i],
                ((uint32_t *)&uc->uc_mcontext)[i]);
     }
