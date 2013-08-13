@@ -159,6 +159,18 @@ void emu_type_arith_imm(const darm_t * d) {
     }
 }
 
+void emu_type_pusr(const darm_t * d) {
+    switch((uint32_t) d->instr) {
+    case I_UXTB: {
+        uint32_t rotated = ROR(RREG(Rm), d->rotate);
+        WREG(Rd) = rotated & 0xffff;
+        WTREG1(Rd, Rm);
+        break;
+    }
+    SWITCH_COMMON;
+    }
+}
+
 void SelectInstrSet(cpumode_t mode) {
     switch(mode) {
     case M_ARM: {
