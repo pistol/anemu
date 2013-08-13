@@ -404,6 +404,11 @@ void emu_type_move_imm(const darm_t * d) {
         WTREG(Rd, TAINT_CLEAR);
         break;
     }
+    case I_MVN: {
+        EMU(WREG(Rd) = d->imm);
+        WTREG(Rd, TAINT_CLEAR);
+        break;
+    }
         SWITCH_COMMON;
     }
     WTREG(Rd, TAINT_CLEAR);
