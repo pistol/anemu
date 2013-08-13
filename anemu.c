@@ -492,7 +492,7 @@ void emu_type_memory(const darm_t * d) {
     switch((uint32_t) d->instr) {
     case I_LDR:
     case I_LDRB: {
-        uint32_t imm = (d->Rm == R_INVLD) ? d->imm : RREG(Rm);
+        uint32_t imm = (d->Rm == R_INVLD) ? d->imm : emu_regshift(d); /* RREG(Rm) or shift */
         uint32_t offset_addr = d->U ?
             (RREG(Rn) + imm) :
             (RREG(Rn) - imm);
