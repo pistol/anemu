@@ -256,6 +256,22 @@ void emu_type_sync(const darm_t * d) {
     }
 }
 
+void emu_type_mvcr(const darm_t * d) {
+    switch((uint32_t) d->instr) {
+    case I_MRC: {
+        // FIXME: hacky detect mcr
+        // ee1d0f70 mrc 15, 0, r0, cr13, cr0, {3}
+        if (d->w == 0xee1d0f70) {
+            asm volatile("mrc 15, 0, %[reg], cr13, cr0, 3" : [reg] "=r" CPU(r0));
+        } else {
+            emu_abort("unhandled encoding\n");
+        }
+        break;
+    }
+    SWITCH_COMMON;
+    }
+}
+
 void SelectInstrSet(cpumode_t mode) {
     switch(mode) {
     case M_ARM: {
@@ -526,7 +542,8 @@ void emu_type_memory(const darm_t * d) {
         break;
     }
     case I_STR:
-    case I_STRB: {
+    case I_STRB:
+    case I_STRH: {
         uint32_t offset_addr = d->U ?
             (RREG(Rn) + d->imm) :
             (RREG(Rn) - d->imm);
@@ -545,8 +562,12 @@ void emu_type_memory(const darm_t * d) {
         /* EMU(WMEM(addr) = RREG(Rt)); */
         if (d->instr == I_STR) {
             WMEM(addr) = RREG(Rt);
-        } else {
+        } else if (d->instr == I_STRB) {
             WMEM(addr) = RREG(Rt) & 0xFFFF;
+        } else if (d->instr == I_STRH) {
+            WMEM(addr) = RREG(Rt) & 0xFFFFFFFF;
+        } else {
+            emu_abort("unhandled encoding\n");
         }
 
         WTMEM(addr, RTREG(Rt));
@@ -616,8 +637,9 @@ void emu_type_uncond(const darm_t * d) {
         }
         break;
     }
-    case I_PLD: {
-        emu_printf("treating PLD as NOP\n");
+    case I_PLD:
+    case I_PLI: {
+        emu_printf("treating as NOP\n");
         break;
     }
         SWITCH_COMMON;
@@ -817,14 +839,7 @@ void emu_singlestep(uint32_t pc) {
     /* check for invalid disassembly */
     /* best we can do is stop emu and resume execution at the instruction before the issue */
     if (!d) {
-        // FIXME: hacky detect mcr
-        // ee1d0f70 mrc 15, 0, r0, cr13, cr0, {3}
-        if (*(const uint32_t*)pc == 0xee1d0f70) {
-            asm volatile("mrc 15, 0, %[reg], cr13, cr0, 3" : [reg] "=r" CPU(r0));
-            goto next;
-        } else {
-            emu_abort("invalid disassembly"); /* emu_stop() will get called after */
-        }
+        emu_abort("invalid disassembly"); /* emu_stop() will get called after */
     }
     darm_dump(d);           /* dump internal darm_t state */
 
@@ -888,6 +903,10 @@ void emu_singlestep(uint32_t pc) {
     }
     case T_ARM_SYNC: {
         emu_type_sync(d);
+        break;
+    }
+    case T_ARM_MVCR: {
+        emu_type_mvcr(d);
         break;
     }
     case T_INVLD: {
