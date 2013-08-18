@@ -184,6 +184,7 @@ void emu_type_sync(const darm_t * d) {
         emu_disasm_internal(&d3, CPU(pc) +  8);
         emu_disasm_internal(&d4, CPU(pc) + 12);
 
+        /* __bionic_cmpxchg() */
         if (d2.instr == I_MOV &&
             d3.instr == I_TEQ &&
             d4.instr == I_STREX) {
@@ -210,6 +211,36 @@ void emu_type_sync(const darm_t * d) {
             CPU(pc) += 3 * 4;
 
             if (emu_read_reg(d2.Rd) == 0) {    /* 0 if memory was updated  */
+                printf("Lock aquire (LDREX/STREX) succesfull!\n");
+                /* FIXME: deadlock on malloc! */
+                // WTMEM(RREG(Rn), RTREGN(d4.Rt));
+            } else {
+                printf("STREX failed to update memory\n");
+            }
+        }
+        /* __bionic_atomic_dec() */
+        else if (d2.instr == I_SUB &&
+                 d3.instr == I_STREX) {
+            printf("Detecting lock aquire (LDREX/STDEX)! Executing atomically.\n");
+
+            asm volatile ("ldrex %[Rt], [%[Rn]]\n"
+                          "sub %[Rd2], %[Rt], #1\n"
+                          "strex %[Rd3], %[Rd2], [%[Rn]]"
+                          : [Rt] "+r" (*emu_write_reg(d->Rt)), [Rd2] "+r" (*emu_write_reg(d2.Rd)), [Rd3] "=&r" (*emu_write_reg(d3.Rd))
+                          : [Rn] "r" (emu_read_reg(d->Rn))
+                          : "cc"
+                          );
+
+            printf("LDREX after:\n");
+            printf("Rt: %x Rn: %x MEM Rn: %x\n", RREG(Rt), RREG(Rn), RMEM(RREG(Rn)));
+
+            WTREG(Rt, RTMEM(RREG(Rn)));
+            WTREGN(d2.Rd, RTREG(Rt));
+            WTREGN(d3.Rd, TAINT_CLEAR);
+
+            CPU(pc) += 3 * 4;
+
+            if (emu_read_reg(d3.Rd) == 0) {    /* 0 if memory was updated  */
                 printf("Lock aquire (LDREX/STREX) succesfull!\n");
                 /* FIXME: deadlock on malloc! */
                 // WTMEM(RREG(Rn), RTREGN(d4.Rt));
