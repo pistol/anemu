@@ -169,6 +169,15 @@ formats for S instructions:
                   );                                                    \
     CPSR_UPDATE_BITS;
 
+#define EMU_FLAGS_RdRmShift(instr)                                        \
+    asm volatile (#instr "s %[Rd], %[Rm], %[shift]\n\t" /* updates flags */ \
+                  "mrs %[cpsr], CPSR\n\t"           /* save new cpsr */ \
+                  : [Rd] "=r" (WREG(Rd)), [cpsr] "=r" (CPU(cpsr)) /* output */ \
+                  : [Rm] "r" (RREG(Rm)), [shift] "r" (d->shift) /* input */ \
+                  : "cc" /* clobbers condition codes */                 \
+                  );                                                    \
+    CPSR_UPDATE_BITS;
+
 #define EMU_FLAGS_RdRnImm(instr)                                        \
     asm volatile (#instr "s %[Rd], %[Rn], %[imm]\n\t" /* updates flags */ \
                   "mrs %[cpsr], CPSR\n\t"           /* save new cpsr */ \

@@ -508,27 +508,39 @@ void emu_type_opless(const darm_t * d) {
 void emu_type_dst_src(const darm_t * d) {
     EMU_ENTRY;
 
-    switch((uint32_t) d->instr) {
-    case I_MOV: {
-        EMU(WREG(Rd) = RREG(Rm));
-        WTREG1(Rd, Rm);
-        break;
-    }
-    case I_LSL: {
-        EMU(WREG(Rd) = LSL(RREG(Rm), d->shift));
-        WTREG1(Rd, Rm);
-        break;
-    }
-    case I_LSR: {
-        EMU(WREG(Rd) = LSR(RREG(Rm), d->shift));
-        WTREG1(Rd, Rm);
-        break;
-    }
-    case I_NOP: {
-        /* nothing to do */
-        break;
-    }
-        SWITCH_COMMON;
+    if (d->S) {
+        printf("S flag, we're Screwed!\n");
+
+        switch((uint32_t) d->instr) {
+            CASE(MOV, RdRm);
+            CASE(LSL, RdRmShift);
+            CASE(LSR, RdRmShift);
+
+            SWITCH_COMMON;
+        }
+    } else {
+        switch((uint32_t) d->instr) {
+        case I_MOV: {
+            EMU(WREG(Rd) = RREG(Rm));
+            WTREG1(Rd, Rm);
+            break;
+        }
+        case I_LSL: {
+            EMU(WREG(Rd) = LSL(RREG(Rm), d->shift));
+            WTREG1(Rd, Rm);
+            break;
+        }
+        case I_LSR: {
+            EMU(WREG(Rd) = LSR(RREG(Rm), d->shift));
+            WTREG1(Rd, Rm);
+            break;
+        }
+        case I_NOP: {
+            /* nothing to do */
+            break;
+        }
+            SWITCH_COMMON;
+        }
     }
 }
 
