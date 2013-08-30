@@ -57,6 +57,9 @@ void emu_init(ucontext_t *ucontext) {
     emu_dump();
 
     if (emu.initialized == 1) return;
+
+    emu.handled_instr = 0;
+
     emu_printf("initializing rasm2 disassembler ...\n");
 
     /* init darm */
@@ -733,6 +736,7 @@ static void emu_advance_pc() {
     emu.branched = 0;
     emu_dump_diff();
     emu_regs_tainted();
+    printf("handled instructions: %d\n", ++emu.handled_instr);
     printf("\n");
     printf("*** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***\n");
 }

@@ -98,6 +98,7 @@ typedef struct _emu_t {
     HashTable *taintmap;         /* taint storage for memory */
     HashTable *uniquepages;      /* unique taint pages */
     bool      *enabled;          /* shared VM enabled flag */
+    uint32_t   handled_instr;     /* number of ops seen so far */
 } emu_t;
 
 /* read/write register by number */
