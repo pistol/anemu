@@ -861,11 +861,15 @@ void emu_start() {
 
     // determine entry mode: emu or trap-single-step-emu
     // read arguments from JNI trap: addr + tag
-    if (!emu.tinfo->addr || !emu.tinfo->tag ) {
+    printf("taint info: addr: %x tag: %x length: %x\n",
+           emu.tinfo->addr,
+           emu.tinfo->tag,
+           emu.tinfo->length);
+    if (!emu.tinfo->addr || !emu.tinfo->tag || !emu.tinfo->length) {
         emu_abort("taint: trap taint info invalid");
     }
 
-    emu_set_taint_mem(emu.tinfo->addr, emu.tinfo->tag);
+    WTMEM(emu.tinfo->addr, emu.tinfo->tag);
     *emu.enabled = 1;
 
     while(1) {                  /* infinite loop */
@@ -940,8 +944,12 @@ void emu_register_handler(DvmEmuGlobals* state) {
     sigemptyset(&sa.sa_mask);
     sa.sa_sigaction = emu_handler;
     /* sigaction (SIGSEGV, &sa, NULL); */
-    sigaction (SIGPROF, &sa, NULL);
-    sigaction (SIGTRAP, &sa, NULL);
+    if (sigaction (SIGPROF, &sa, NULL) == -1) {
+        emu_abort("error: sigaction SIGPROF");
+    }
+    if (sigaction (SIGTRAP, &sa, NULL) == -1) {
+        emu_abort("error: sigaction SIGTRAP");
+    }
 
     /* 3. setup mprotect handler */
     mprotectInit();
@@ -1221,13 +1229,12 @@ mprotectHandler(int sig, siginfo_t *si, void *ucontext) {
 static void
 mprotectInit() {
     struct sigaction sa;
-
-    /* sa.sa_flags = SA_SIGINFO; */
     sa.sa_flags = SA_SIGINFO | SA_ONSTACK; /* doesn't clobber original stack */
     sigemptyset(&sa.sa_mask);
     sa.sa_sigaction = mprotectHandler;
-    if (sigaction(SIGSEGV, &sa, NULL) == -1)
-        emu_printf("error: sigaction");
+    if (sigaction(SIGSEGV, &sa, NULL) == -1) {
+        emu_abort("error: sigaction SIGSEGV");
+    }
 }
 
 /* TODO: add length and determine if page boundary crossed */
@@ -1239,7 +1246,7 @@ mprotectPage(uint32_t addr, uint32_t flags) {
 
     if (mprotect((void *)addr_aligned, getPageSize(),
                  flags) == -1) {
-        emu_printf("error: mprotect errno: %s\n", strerror(errno));
+        emu_abort("error: mprotect errno %d: %s\n", errno, strerror(errno));
     }
     printf("page protection updated\n");
 }
