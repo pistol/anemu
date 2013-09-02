@@ -22,6 +22,11 @@ uint8_t emu_regs_tainted() {
     tainted = N_REGS;
     for (i = 0; i < N_REGS; i++) {
         if (RTREGN(i) != TAINT_CLEAR) {
+            if (i == SP ||
+                i == LR ||
+                i == PC) {
+                printf("taint: WARNING special r%d tainted!\n", i);
+            }
             printf("taint: r%d val: %x tag: %x\n", i, RREGN(i), RTREGN(i));
         } else {
             tainted--;
