@@ -69,6 +69,9 @@ void emu_init(ucontext_t *ucontext) {
     /* process maps */
     emu_map_parse();
 
+    /* taint tag storage */
+    mmap_init();
+
     emu.initialized = 1;
     emu_printf("finished\n");
 }
@@ -735,7 +738,11 @@ static void emu_advance_pc() {
     if (!emu.branched) CPU(pc) += (emu_thumb_mode() ? 2 : 4);
     emu.branched = 0;
     emu_dump_diff();
-    emu_regs_tainted();
+    if (emu_regs_tainted() == 0) {
+        printf("taint: no tainted regs remaining, enable protection and leave emu\n");
+        emu_protect_mem();
+        emu_stop();             /* will not return */
+    }
     printf("handled instructions: %d\n", ++emu.handled_instr);
     printf("\n");
     printf("*** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***\n");
@@ -1159,6 +1166,18 @@ mprotectHandler(int sig, siginfo_t *si, void *ucontext) {
 
     assert(si_addr == addr_fault);
 
+    switch(si->si_code) {
+    case SEGV_MAPERR:
+        printf("Address not mapped to object\n");
+        break;
+    case SEGV_ACCERR:
+        printf("Invalid permissions for mapped object\n");
+        break;
+    default:
+        printf("Unknown SI Code\n");
+        break;
+    }
+
     emu_map_lookup(pc);
     emu_map_lookup(addr_fault);
 
@@ -1223,4 +1242,212 @@ mprotectPage(uint32_t addr, uint32_t flags) {
         emu_printf("error: mprotect errno: %s\n", strerror(errno));
     }
     printf("page protection updated\n");
+}
+
+static void
+mmap_init() {
+    uint32_t start, end, bytes;
+
+    /* lib taintmap */
+
+    start = emu.maps[0].vm_start;
+    end   = emu.maps[emu.nr_maps - 3].vm_end;
+    bytes = end - start;
+
+    printf("mmap lib   range: %x - %x length: %x\n", start, end, bytes);
+
+    emu.taintmaps[TAINTMAP_LIB].data     = mmap(NULL, bytes, PROT_READ|PROT_WRITE, MAP_ANONYMOUS|MAP_PRIVATE, -1, 0);
+    emu.taintmaps[TAINTMAP_LIB].start    = start;
+    emu.taintmaps[TAINTMAP_LIB].end      = end;
+    emu.taintmaps[TAINTMAP_LIB].bytes    = bytes;
+
+    printf("mmap lib   returned: %p\n", emu.taintmaps[TAINTMAP_LIB].data);
+    if(emu.taintmaps[TAINTMAP_STACK].data == MAP_FAILED) {
+        emu_abort("mmap stack failed");
+    }
+
+    /* stack taintmap */
+
+    start = emu.maps[emu.nr_maps - 2].vm_start;
+    end   = emu.maps[emu.nr_maps - 2].vm_end;
+    bytes = end - start;
+
+    printf("mmap stack range: %x - %x length: %x\n", start, end, bytes);
+
+    emu.taintmaps[TAINTMAP_STACK].data   = mmap(NULL, bytes, PROT_READ|PROT_WRITE, MAP_ANONYMOUS|MAP_PRIVATE, -1, 0);
+    emu.taintmaps[TAINTMAP_STACK].start  = start;
+    emu.taintmaps[TAINTMAP_STACK].end    = end;
+    emu.taintmaps[TAINTMAP_STACK].bytes  = bytes;
+
+    printf("mmap stack returned: %p\n", emu.taintmaps[TAINTMAP_STACK].data);
+    if (emu.taintmaps[TAINTMAP_LIB].data  == MAP_FAILED) {
+        emu_abort("mmap lib failed");
+    }
+
+    printf("taintmaps initialized\n");
+}
+
+static taintmap_t *
+emu_get_taintmap(uint32_t addr) {
+    addr = Align(addr, 4);      /* word align */
+
+    uint32_t stack_start = emu.maps[emu.nr_maps - 2].vm_start;
+    uint8_t  idx         = (addr > stack_start) ? TAINTMAP_STACK : TAINTMAP_LIB;
+    return &emu.taintmaps[idx];
+}
+
+static uint32_t
+emu_dump_taintmaps() {
+    uint32_t idx, offset;
+    taintmap_t *tm;
+    for (idx = TAINTMAP_LIB; idx < MAX_TAINTMAPS; idx++) {
+        tm = &emu.taintmaps[idx];
+        if (tm->data == NULL) {
+            /* FIXME: this should only occur for the 3rd (heap, idx 2) unused map */
+            printf("unallocated data for taintmap %d", idx);
+            continue;
+        }
+        for (offset = 0; offset < tm->bytes >> 2; offset++) {
+            if (tm->data[offset] != TAINT_CLEAR) {
+                printf("taint: %s offset: %x addr: %x tag: %x\n",
+                       (idx == TAINTMAP_LIB) ? "lib" : "stack",
+                       offset,
+                       tm->start + offset * sizeof(uint32_t), tm->data[offset]
+                       );
+            }
+        }
+    }
+    return 0;
+}
+
+static uint32_t
+emu_get_taint_mem(uint32_t addr) {
+    addr = Align(addr, 4);      /* word align */
+    taintmap_t *taintmap = emu_get_taintmap(addr);
+
+    if (taintmap->data == NULL || taintmap->start == 0) {
+        emu_abort("uninitialized taintmap");
+    }
+
+    uint32_t    offset   = (addr - taintmap->start) >> 2;
+    if (offset < taintmap->start && offset > taintmap->end) {
+        emu_abort("out of bounds offset");
+    }
+    uint32_t    tag      = taintmap->data[offset]; /* word (32-bit) based tag storage */
+    // emu_printf("addr: %x offset: %x tag: %x", addr, offset, tag);
+    return tag;
+}
+
+void emu_set_taint_mem(uint32_t addr, uint32_t tag) {
+    addr = Align(addr, 4);      /* word align */
+    taintmap_t *taintmap   = emu_get_taintmap(addr);
+    uint32_t    offset     = (addr - taintmap->start) >> 2;
+
+    // emu_printf("addr: %x offset: %x tag: %x", addr, offset, tag);
+
+    if (taintmap->data == NULL || taintmap->start == 0) {
+        emu_abort("uninitialized taintmap");
+    }
+    if (offset < taintmap->start && offset > taintmap->end) {
+        emu_abort("out of bounds offset");
+    }
+
+    if (taintmap->data[offset] != TAINT_CLEAR && tag == TAINT_CLEAR) {
+        printf("taint: un-tainting mem: %x\n", addr);
+    } else if (taintmap->data[offset] == TAINT_CLEAR && tag != TAINT_CLEAR) {
+        printf("taint: tainting mem: %x tag: %x\n", addr, tag);
+    }
+    taintmap->data[offset] = tag;  /* word (32-bit) based tag storage */
+}
+
+static int emu_mark_page(uint32_t page) {
+    uint32_t idx;
+    uint8_t found = 0;
+    uint8_t added = 0;
+
+    /* 1. look if page has been marked previously marked */
+    for (idx = 0; idx < MAX_TAINTPAGES; idx++) {
+        /* 0        - un-marked slot */
+        /* non-zero - marked plage */
+        if (emu.taintpages[idx] == page) {
+            found = 1;
+            return found;
+        }
+    }
+
+    /* 2. if page not found, add it */
+    if (!found) {
+        for (idx = 0; idx < MAX_TAINTPAGES; idx++) {
+            if (emu.taintpages[idx] == 0) {
+                emu.taintpages[idx] = page;
+                added = 1;
+                break;
+            }
+        }
+        if (!added) {
+            emu_abort("maximum number of protected pages (%d) reached!", MAX_TAINTPAGES);
+        }
+    }
+    return added;
+}
+
+static void
+emu_clear_taintpages() {
+    uint32_t idx;
+    for (idx = 0; idx < MAX_TAINTPAGES; idx++) {
+        emu.taintpages[idx] = 0;
+    }
+}
+
+static void
+emu_protect_mem() {
+    emu_clear_taintpages();
+
+    uint32_t idx, offset;
+    taintmap_t *tm;
+    for (idx = TAINTMAP_LIB; idx < MAX_TAINTMAPS; idx++) {
+        tm = &emu.taintmaps[idx];
+        if (tm->data == NULL) {
+            /* FIXME: this should only occur for the 3rd (heap, idx 2) unused map */
+            printf("unallocated data for taintmap %d", idx);
+            continue;
+        }
+        for (offset = 0; offset < tm->bytes >> 2; offset++) {
+            if (tm->data[offset] != TAINT_CLEAR) {
+                uint32_t addr = tm->start + offset * sizeof(uint32_t);
+                printf("taint: %s offset: %x addr: %x tag: %x\n",
+                       (idx == TAINTMAP_LIB) ? "lib" : "stack",
+                       offset,
+                       addr, tm->data[offset]
+                       );
+
+                /* add to unique list */
+                emu_mark_page(addr);
+            }
+        }
+        /* protect all pages in unique list */
+        uint32_t flags = PROT_NONE;
+        for (idx = 0; idx < MAX_TAINTPAGES; idx++) {
+            uint32_t page = emu.taintpages[idx];
+            if (page != 0) {
+                mprotectPage(page, flags);
+            }
+        }
+
+    }
+}
+
+static void
+emu_unprotect_mem() {
+    uint32_t idx;
+    uint32_t flags = PROT_READ | PROT_WRITE;
+    /* un-protect all pages in unique hash */
+    for (idx = 0; idx < MAX_TAINTPAGES; idx++) {
+        /* 0        - un-marked slot */
+        /* non-zero - marked plage */
+        uint32_t page = emu.taintpages[idx];
+        if (page != 0) {
+            mprotectPage(page, flags);
+        }
+    }
 }

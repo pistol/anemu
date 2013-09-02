@@ -36,6 +36,9 @@
 #define EMU_ENTRY emu_printf("\n")
 #define emu_abort(...) emu_printf(__VA_ARGS__);             \
     printf("\n");                                           \
+    printf("dumping taintmaps:\n");                         \
+    emu_dump_taintmaps();                                   \
+    printf("\n");                                           \
     printf("*********************************\n");          \
     printf("FATAL ERROR! ABORTING EMU!\n");                 \
     printf("*********************************\n\n");        \
@@ -69,7 +72,11 @@ typedef struct _cpsr_t {
     cpsr.C = (CPU(cpsr) >> CPSR_C_BIT) & 1;             \
     cpsr.V = (CPU(cpsr) >> CPSR_V_BIT) & 1;
 
-#define MAX_MAPS 4096
+#define MAX_MAPS 4096           /* number of memory map entries */
+#define MAX_TAINTMAPS 2         /* libs + stack (heap part of libs) */
+#define MAX_TAINTPAGES 32       /* number of distinct tainted pages */
+#define TAINTMAP_LIB   0        /* taintmap index for libs */
+#define TAINTMAP_STACK 1        /* taintmap index for stack */
 
 typedef struct _map_t {
     uint32_t vm_start;
@@ -84,6 +91,13 @@ typedef struct _map_t {
 
 #define N_REGS 16               /* r0-r15 */
 
+typedef struct _taintmap_t {
+    uint32_t *data;             /* mmap-ed data */
+    uint32_t  start;            /* address range start */
+    uint32_t  end;              /* address range end */
+    uint32_t  bytes;            /* (end - start) bytes */
+} taintmap_t;
+
 typedef struct _emu_t {
     ucontext_t current;         /* present process emulated state */
     ucontext_t previous;        /* used for diff-ing two contexts */
@@ -95,8 +109,8 @@ typedef struct _emu_t {
     map_t      maps[MAX_MAPS];
     taintinfo_t *tinfo;          /* trap tainted data (addr + tag) */
     uint32_t   taintreg[N_REGS]; /* taint storage for regs */
-    HashTable *taintmap;         /* taint storage for memory */
-    HashTable *uniquepages;      /* unique taint pages */
+    taintmap_t taintmaps[MAX_TAINTMAPS]; /* taint storage for memory */
+    uint32_t   taintpages[MAX_TAINTPAGES]; /* unique taint pages */
     bool      *enabled;          /* shared VM enabled flag */
     uint32_t   handled_instr;     /* number of ops seen so far */
 } emu_t;
@@ -328,11 +342,12 @@ static void emu_map_parse();
 static map_t* emu_map_lookup(uint32_t addr);
 
 static void emu_advance_pc();
-static int emu_dump_taintinfo(void* entry, UNUSED void* arg);
+static uint32_t emu_dump_taintmaps();
 void emu_set_taint_mem(uint32_t addr, uint32_t tag);
 static uint32_t emu_get_taint_mem(uint32_t addr);
 static inline void emu_set_taint_reg(uint32_t reg, uint32_t tag);
 static inline uint32_t emu_get_taint_reg(uint32_t reg);
+static void mmap_init();
 
 /* Page Protections */
 
@@ -342,8 +357,8 @@ static void mprotectHandler(int sig, siginfo_t *si, void *ucontext);
 static void mprotectInit();
 static void mprotectPage(uint32_t addr, uint32_t flags);
 
-static int emu_protect_page(void* entry, UNUSED void* arg);
 static void emu_protect_mem();
+static void emu_unprotect_mem();
 
 /* ARM manual util functions */
 void SelectInstrSet(cpumode_t mode);
