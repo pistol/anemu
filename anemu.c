@@ -78,6 +78,8 @@ void emu_init(ucontext_t *ucontext) {
     /* taint tag storage */
     mmap_init();
 
+    emu_clear_taintpages();
+
     emu.initialized = 1;
     emu_printf("finished\n");
 }
@@ -1376,15 +1378,19 @@ void emu_set_taint_mem(uint32_t addr, uint32_t tag) {
         emu_abort("out of bounds offset");
     }
 
+    /* incrementally iupdate tainted page list */
     if (taintmap->data[offset] != TAINT_CLEAR && tag == TAINT_CLEAR) {
         printf("taint: un-tainting mem: %x\n", addr);
+        emu_unmark_page(addr);
     } else if (taintmap->data[offset] == TAINT_CLEAR && tag != TAINT_CLEAR) {
         printf("taint: tainting mem: %x tag: %x\n", addr, tag);
+        emu_mark_page(addr);
     }
     taintmap->data[offset] = tag;  /* word (32-bit) based tag storage */
 }
 
-static int emu_mark_page(uint32_t page) {
+static int emu_mark_page(uint32_t addr) {
+    uint32_t page = getAlignedPage(addr);
     uint32_t idx;
     uint8_t found = 0;
     uint8_t added = 0;
@@ -1415,6 +1421,24 @@ static int emu_mark_page(uint32_t page) {
     return added;
 }
 
+static int emu_unmark_page(uint32_t addr) {
+    uint32_t page = getAlignedPage(addr);
+    uint32_t idx;
+    uint8_t found = 0;
+
+    /* 1. look if page has been marked previously marked */
+    for (idx = 0; idx < MAX_TAINTPAGES; idx++) {
+        /* 0        - un-marked slot */
+        /* non-zero - marked plage */
+        if (emu.taintpages[idx] == page) {
+            found = 1;
+            emu.taintpages[idx] = 0;
+            break;
+        }
+    }
+    return found;
+}
+
 static void
 emu_clear_taintpages() {
     uint32_t idx;
@@ -1425,39 +1449,14 @@ emu_clear_taintpages() {
 
 static void
 emu_protect_mem() {
-    emu_clear_taintpages();
-
-    uint32_t idx, offset;
-    taintmap_t *tm;
-    for (idx = TAINTMAP_LIB; idx < MAX_TAINTMAPS; idx++) {
-        tm = &emu.taintmaps[idx];
-        if (tm->data == NULL) {
-            /* FIXME: this should only occur for the 3rd (heap, idx 2) unused map */
-            printf("unallocated data for taintmap %d", idx);
-            continue;
+    uint32_t idx;
+    /* protect all pages in unique list */
+    uint32_t flags = PROT_NONE;
+    for (idx = 0; idx < MAX_TAINTPAGES; idx++) {
+        uint32_t page = emu.taintpages[idx];
+        if (page != 0) {
+            mprotectPage(page, flags);
         }
-        for (offset = 0; offset < tm->bytes >> 2; offset++) {
-            if (tm->data[offset] != TAINT_CLEAR) {
-                uint32_t addr = tm->start + offset * sizeof(uint32_t);
-                printf("taint: %s offset: %x addr: %x tag: %x\n",
-                       (idx == TAINTMAP_LIB) ? "lib" : "stack",
-                       offset,
-                       addr, tm->data[offset]
-                       );
-
-                /* add to unique list */
-                emu_mark_page(addr);
-            }
-        }
-        /* protect all pages in unique list */
-        uint32_t flags = PROT_NONE;
-        for (idx = 0; idx < MAX_TAINTPAGES; idx++) {
-            uint32_t page = emu.taintpages[idx];
-            if (page != 0) {
-                mprotectPage(page, flags);
-            }
-        }
-
     }
 }
 

@@ -357,6 +357,9 @@ static void mprotectPage(uint32_t addr, uint32_t flags);
 
 static void emu_protect_mem();
 static void emu_unprotect_mem();
+static int emu_mark_page(uint32_t addr);
+static int emu_unmark_page(uint32_t addr);
+static void emu_clear_taintpages();
 
 /* ARM manual util functions */
 void SelectInstrSet(cpumode_t mode);
