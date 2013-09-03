@@ -164,73 +164,35 @@ formats for S instructions:
 <RdLo> <RdHi> <Rn> <Rm>
 */
 
-#define EMU_FLAGS_RdImm(instr)                                          \
-    asm volatile (#instr "s %[Rd], %[imm]\n\t" /* updates flags */      \
-                  "mrs %[cpsr], CPSR\n\t"           /* save new cpsr */ \
-                  : [Rd] "=r" (WREG(Rd)), [cpsr] "=r" (CPU(cpsr)) /* output */ \
-                  : [imm] "r" (d->imm) /* input */                      \
-                  : "cc" /* clobbers condition codes */                 \
-                  );                                                    \
-    CPSR_UPDATE_BITS;
-
-#define EMU_FLAGS_RdRm(instr)                                           \
-    asm volatile (#instr "s %[Rd], %[Rm]\n\t" /* updates flags */       \
-                  "mrs %[cpsr], CPSR\n\t"           /* save new cpsr */ \
-                  : [Rd] "=r" (WREG(Rd)), [cpsr] "=r" (CPU(cpsr)) /* output */ \
-                  : [Rm] "r" (RREG(Rm)) /* input */ \
-                  : "cc" /* clobbers condition codes */                 \
-                  );                                                    \
-    CPSR_UPDATE_BITS;
-
-#define EMU_FLAGS_RdRmShift(instr)                                        \
-    asm volatile (#instr "s %[Rd], %[Rm], %[shift]\n\t" /* updates flags */ \
-                  "mrs %[cpsr], CPSR\n\t"           /* save new cpsr */ \
-                  : [Rd] "=r" (WREG(Rd)), [cpsr] "=r" (CPU(cpsr)) /* output */ \
-                  : [Rm] "r" (RREG(Rm)), [shift] "r" (d->shift) /* input */ \
-                  : "cc" /* clobbers condition codes */                 \
-                  );                                                    \
-    CPSR_UPDATE_BITS;
-
-#define EMU_FLAGS_RdRnImm(instr)                                        \
-    asm volatile (#instr "s %[Rd], %[Rn], %[imm]\n\t" /* updates flags */ \
-                  "mrs %[cpsr], CPSR\n\t"           /* save new cpsr */ \
-                  : [Rd] "=r" (WREG(Rd)), [cpsr] "=r" (CPU(cpsr)) /* output */ \
-                  : [Rn] "r" (RREG(Rn)), [imm] "r" (d->imm) /* input */ \
-                  : "cc" /* clobbers condition codes */                 \
-                  );                                                    \
-    CPSR_UPDATE_BITS;
-
-#define EMU_FLAGS_RdRnRm(instr)                                         \
-    asm volatile (#instr "s %[Rd], %[Rn], %[Rm]\n\t" /* updates flags */ \
-                  "mrs %[cpsr], CPSR\n\t"           /* save new cpsr */ \
-                  : [Rd] "=r" (WREG(Rd)), [cpsr] "=r" (CPU(cpsr)) /* output */ \
-                  : [Rn] "r" (RREG(Rn)), [Rm] "r" (RREG(Rm)) /* input */ \
-                  : "cc" /* clobbers condition codes */                 \
-                  );                                                    \
-    CPSR_UPDATE_BITS;
-
-#define EMU_FLAGS_RnRm(instr)                                           \
-    asm volatile (#instr " %[Rn], %[Rm]\n\t"                 /* updates flags */ \
-                  "mrs %[cpsr], CPSR\n\t"                    /* save new cpsr */ \
-                  : [cpsr] "=r" (CPU(cpsr))                  /* output */ \
-                  : [Rn] "r" (RREG(Rn)), [Rm] "r" (RREG(Rm)) /* input */ \
-                  : "cc"                                     /* clobbers condition codes */ \
-                  );                                                    \
-    CPSR_UPDATE_BITS;
-
-#define EMU_FLAGS_RnImm(instr)                                          \
-    asm volatile (#instr " %[a], %[b]\n\t"               /* updates flags */ \
-                  "mrs %[ps], CPSR\n\t"                  /* save new cpsr */ \
-                  : [ps] "=r" (CPU(cpsr))                /* output */   \
-                  : [a] "r" (RREG(Rn)), [b] "r" (d->imm) /* input */    \
-                  : "cc"                                 /* clobbers condition codes */ \
-                  );                                                    \
-    CPSR_UPDATE_BITS;
-
-/* switch case helper for EMU_FLAGS_* */
-#define CASE(instr, handler) case I_##instr: { EMU_FLAGS_##handler(instr); WTREG1(Rd, Rn); break; }
+/* IS: imm / shift */
+#define ASM_RI(instr, R1, IS)                                          \
+    asm volatile (#instr "s %[reg1], %[imm]\n\t"           /* updates flags */ \
+                  "mrs %[cpsr], cpsr\n\t"                  /* save new cpsr */ \
+                  : [reg1] "=r" (WREG(R1)), [cpsr] "=r" (CPU(cpsr)) /* output */ \
+                  : [imm] "r"   (d->IS)         /* input */             \
+                  : "cc"                        /* clobbers condition codes */ \
+                  );
 
 #define BitCount(x) __builtin_popcount(x)
+#define ASM_RR(instr, R1, R2)                                           \
+    asm volatile (#instr "s %[reg1], %[reg2]\n\t"          /* updates flags */ \
+                  "mrs %[cpsr], cpsr\n\t"                  /* save new cpsr */ \
+                  : [reg1] "=r" (WREG(R1)), [cpsr] "=r" (CPU(cpsr)) /* output */ \
+                  : [reg2] "r"  (RREG(R2))      /* input */             \
+                  : "cc"                        /* clobbers condition codes */ \
+                  );
+
+#define ASM_RRI(instr, R1, R2, IS)                                      \
+    asm volatile (#instr "s %[reg1], %[reg2], %[imm]\n\t"  /* updates flags */ \
+                  "mrs %[cpsr], cpsr\n\t"                  /* save new cpsr */ \
+                  : [reg1] "=r" (WREG(R1)), [cpsr] "=r" (CPU(cpsr)) /* output */ \
+                  : [reg2] "r"  (RREG(R2)), [imm]  "r"  (d->IS)    /* input */ \
+                  : "cc"               /* clobbers condition codes */   \
+                  );
+
+/* switch case helper for ASM */
+#define CASE_RR( instr, R1, R2)      case I_##instr: { ASM_RR (instr, R1, R2);      break; }
+#define CASE_RRI(instr, R1, R2, imm) case I_##instr: { ASM_RRI(instr, R1, R2, imm); break; }
 #define TrailingZerosCount(x) __builtin_ctz(x)
 #define LeadingZerosCount(x) __builtin_clz(x)
 

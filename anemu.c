@@ -124,20 +124,20 @@ void emu_type_arith_imm(const darm_t * d) {
         printf("S flag, we're Screwed!\n");
 
         switch((uint32_t) d->instr) {
-            CASE(ADD, RdRnImm);
-            CASE(ADC, RdRnImm);
-            CASE(AND, RdRnImm);
-            CASE(ASR, RdRnImm);
-            CASE(BIC, RdRnImm);
-            CASE(EOR, RdRnImm);
-            CASE(LSL, RdRnImm);
-            CASE(LSR, RdRnImm);
-            CASE(ORR, RdRnImm);
-            CASE(ROR, RdRnImm);
-            CASE(RSB, RdRnImm);
-            CASE(RSC, RdRnImm);
-            CASE(SBC, RdRnImm);
-            CASE(SUB, RdRnImm);
+            CASE_RRI(ADD, Rd, Rn, imm);
+            CASE_RRI(ADC, Rd, Rn, imm);
+            CASE_RRI(AND, Rd, Rn, imm);
+            CASE_RRI(ASR, Rd, Rn, imm);
+            CASE_RRI(BIC, Rd, Rn, imm);
+            CASE_RRI(EOR, Rd, Rn, imm);
+            CASE_RRI(LSL, Rd, Rn, imm);
+            CASE_RRI(LSR, Rd, Rn, imm);
+            CASE_RRI(ORR, Rd, Rn, imm);
+            CASE_RRI(ROR, Rd, Rn, imm);
+            CASE_RRI(RSB, Rd, Rn, imm);
+            CASE_RRI(RSC, Rd, Rn, imm);
+            CASE_RRI(SBC, Rd, Rn, imm);
+            CASE_RRI(SUB, Rd, Rn, imm);
 
             SWITCH_COMMON;
         }
@@ -448,26 +448,22 @@ void emu_type_move_imm(const darm_t * d) {
     switch((uint32_t) d->instr) {
     case I_MOV: {
         if (d->S) {
-            EMU_FLAGS_RdImm(MOV);
+            ASM_RI(MOV, Rd, imm);
         } else {
             EMU(WREG(Rd) = d->imm);
         }
-        WTREG(Rd, TAINT_CLEAR);
         break;
     }
     case I_MOVT: {
         EMU(WREG(Rd) = (RREG(Rd) & 0x0000ffff) | (d->imm << 16));
-        WTREG(Rd, TAINT_CLEAR);
         break;
     }
     case I_MOVW: {
         EMU(WREG(Rd) = (RREG(Rd) & 0xffff0000) | (d->imm));
-        WTREG(Rd, TAINT_CLEAR);
         break;
     }
     case I_MVN: {
         EMU(WREG(Rd) = d->imm);
-        WTREG(Rd, TAINT_CLEAR);
         break;
     }
         SWITCH_COMMON;
@@ -480,11 +476,11 @@ void emu_type_cmp_op(const darm_t * d) {
 
     switch((uint32_t) d->instr) {
     case I_CMP: {
-        EMU_FLAGS_RnRm(CMP);
+        ASM_RR(CMP, Rn, Rm);
         break;
     }
     case I_TEQ: {
-        EMU_FLAGS_RnRm(TEQ);
+        ASM_RR(TEQ, Rn, Rm);
         break;
     }
         SWITCH_COMMON;
@@ -496,11 +492,11 @@ void emu_type_cmp_imm(const darm_t * d) {
 
     switch((uint32_t) d->instr) {
     case I_CMP: {
-        EMU_FLAGS_RnImm(CMP);
+        ASM_RI(CMP, Rn, imm);
         break;
     }
     case I_TST: {
-        EMU_FLAGS_RnImm(TST);
+        ASM_RI(TST, Rn, imm);
         break;
     }
         SWITCH_COMMON;
@@ -526,9 +522,9 @@ void emu_type_dst_src(const darm_t * d) {
         printf("S flag, we're Screwed!\n");
 
         switch((uint32_t) d->instr) {
-            CASE(MOV, RdRm);
-            CASE(LSL, RdRmShift);
-            CASE(LSR, RdRmShift);
+            CASE_RR (MOV, Rd, Rm);
+            CASE_RRI(LSL, Rd, Rm, shift);
+            CASE_RRI(LSR, Rd, Rm, shift);
 
             SWITCH_COMMON;
         }
@@ -536,17 +532,14 @@ void emu_type_dst_src(const darm_t * d) {
         switch((uint32_t) d->instr) {
         case I_MOV: {
             EMU(WREG(Rd) = RREG(Rm));
-            WTREG1(Rd, Rm);
             break;
         }
         case I_LSL: {
             EMU(WREG(Rd) = LSL(RREG(Rm), d->shift));
-            WTREG1(Rd, Rm);
             break;
         }
         case I_LSR: {
             EMU(WREG(Rd) = LSR(RREG(Rm), d->shift));
-            WTREG1(Rd, Rm);
             break;
         }
         case I_NOP: {
@@ -556,6 +549,8 @@ void emu_type_dst_src(const darm_t * d) {
             SWITCH_COMMON;
         }
     }
+    /* FIXME: what about NOP? */
+    WTREG1(Rd, Rm);
 }
 
 void emu_type_memory(const darm_t * d) {
