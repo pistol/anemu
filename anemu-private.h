@@ -166,25 +166,24 @@ formats for S instructions:
 
 /* IS: imm / shift */
 #define ASM_RI(instr, R1, IS)                                          \
-    asm volatile (#instr "s %[reg1], %[imm]\n\t"           /* updates flags */ \
-                  "mrs %[cpsr], cpsr\n\t"                  /* save new cpsr */ \
+    asm volatile (#instr "s %[reg1], %[imm]\n"             /* updates flags */ \
+                  "mrs %[cpsr], cpsr\n"                    /* save new cpsr */ \
                   : [reg1] "=r" (WREG(R1)), [cpsr] "=r" (CPU(cpsr)) /* output */ \
                   : [imm] "r"   (d->IS)         /* input */             \
                   : "cc"                        /* clobbers condition codes */ \
                   );
 
-#define BitCount(x) __builtin_popcount(x)
 #define ASM_RR(instr, R1, R2)                                           \
-    asm volatile (#instr "s %[reg1], %[reg2]\n\t"          /* updates flags */ \
-                  "mrs %[cpsr], cpsr\n\t"                  /* save new cpsr */ \
+    asm volatile (#instr "s %[reg1], %[reg2]\n"            /* updates flags */ \
+                  "mrs %[cpsr], cpsr\n"                    /* save new cpsr */ \
                   : [reg1] "=r" (WREG(R1)), [cpsr] "=r" (CPU(cpsr)) /* output */ \
                   : [reg2] "r"  (RREG(R2))      /* input */             \
                   : "cc"                        /* clobbers condition codes */ \
                   );
 
 #define ASM_RRI(instr, R1, R2, IS)                                      \
-    asm volatile (#instr "s %[reg1], %[reg2], %[imm]\n\t"  /* updates flags */ \
-                  "mrs %[cpsr], cpsr\n\t"                  /* save new cpsr */ \
+    asm volatile (#instr "s %[reg1], %[reg2], %[imm]\n"    /* updates flags */ \
+                  "mrs %[cpsr], cpsr\n"                    /* save new cpsr */ \
                   : [reg1] "=r" (WREG(R1)), [cpsr] "=r" (CPU(cpsr)) /* output */ \
                   : [reg2] "r"  (RREG(R2)), [imm]  "r"  (d->IS)    /* input */ \
                   : "cc"               /* clobbers condition codes */   \
@@ -193,11 +192,13 @@ formats for S instructions:
 /* switch case helper for ASM */
 #define CASE_RR( instr, R1, R2)      case I_##instr: { ASM_RR (instr, R1, R2);      break; }
 #define CASE_RRI(instr, R1, R2, imm) case I_##instr: { ASM_RRI(instr, R1, R2, imm); break; }
-#define TrailingZerosCount(x) __builtin_ctz(x)
-#define LeadingZerosCount(x) __builtin_clz(x)
 
-#define Align(x,a)              __ALIGN_MASK(x,(typeof(x))(a)-1)
-#define __ALIGN_MASK(x,mask)    (((x)+(mask))&~(mask))
+#define BitCount(x)           __builtin_popcount(x)
+#define TrailingZerosCount(x) __builtin_ctz(x)
+#define LeadingZerosCount(x)  __builtin_clz(x)
+
+#define Align(x,a)            __ALIGN_MASK(x,(typeof(x))(a)-1)
+#define __ALIGN_MASK(x,mask)  (((x)+(mask))&~(mask))
 
 #define LSL(val, shift) (val << shift)
 #define LSR(val, shift) (val >> shift)

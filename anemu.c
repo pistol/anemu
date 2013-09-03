@@ -768,11 +768,9 @@ void emu_singlestep(uint32_t pc) {
     // 1. decode instr
     emu_map_lookup(pc);
 
-    printf("emu_disasm_ref ...\n");
     // emu_disasm_ref(pc, (emu_thumb_mode() ? 16 : 32)); /* rasm2 with libopcodes backend */
     /* static const darm_t *d; */
     const darm_t *d;
-    printf("emu_disasm ...\n");
     d = emu_disasm(pc); /* darm */
     /* check for invalid disassembly */
     /* best we can do is stop emu and resume execution at the instruction before the issue */
