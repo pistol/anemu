@@ -52,25 +52,23 @@
     default:                                                           \
     emu_abort("unhandled instr %s\n", darm_mnemonic_name(d->instr));
 
-typedef struct _cpsr_t {
-    uint8_t N;                  /* Negative result */
-    uint8_t Z;                  /* Zero result */
-    uint8_t C;                  /* Carry from operation */
-    uint8_t V;                  /* oVerflowed operation */
-} cpsr_t;
+/*
+CPSR bits
+N: Negative result
+Z: Zero result
+C: Carry from operation
+V: oVerflowed operation
 
-#define PSR_T_BIT  0x00000020
+I: IRQ
+T: Thumb mode
+*/
 
-#define CPSR_N_BIT 31
-#define CPSR_Z_BIT 30
-#define CPSR_C_BIT 29
-#define CPSR_V_BIT 28
-
-#define CPSR_UPDATE_BITS                                \
-    cpsr.N = (CPU(cpsr) >> CPSR_N_BIT) & 1;             \
-    cpsr.Z = (CPU(cpsr) >> CPSR_Z_BIT) & 1;             \
-    cpsr.C = (CPU(cpsr) >> CPSR_C_BIT) & 1;             \
-    cpsr.V = (CPU(cpsr) >> CPSR_V_BIT) & 1;
+#define CPSR_N ((CPU(cpsr) & PSR_N_BIT) != 0)
+#define CPSR_Z ((CPU(cpsr) & PSR_Z_BIT) != 0)
+#define CPSR_C ((CPU(cpsr) & PSR_C_BIT) != 0)
+#define CPSR_V ((CPU(cpsr) & PSR_V_BIT) != 0)
+#define CPSR_I ((CPU(cpsr) & PSR_I_BIT) != 0)
+#define CPSR_T ((CPU(cpsr) & PSR_T_BIT) != 0)
 
 #define MAX_MAPS 4096           /* number of memory map entries */
 #define MAX_TAINTMAPS 2         /* libs + stack (heap part of libs) */
@@ -266,7 +264,6 @@ typedef enum _cpumode_t {
 
 /* Internal state */
 emu_t emu;                      /* emulator state */
-cpsr_t cpsr;                    /* cpsr NZCV flags */
 darm_t *darm;                   /* darm  disassembler */
 
 /*
@@ -332,6 +329,7 @@ inline uint32_t emu_regshift(const darm_t *d);
 static void dbg_dump_ucontext(ucontext_t *uc);
 static void emu_dump();
 static void emu_dump_diff();
+static void emu_dump_cpsr();
 void armv7_dump(const darm_t *d);
 static inline uint32_t emu_read_reg(darm_reg_t reg);
 static inline uint32_t *emu_write_reg(darm_reg_t reg);

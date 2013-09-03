@@ -6,6 +6,7 @@
 #include <signal.h>
 #include <sys/mman.h>           /* mprotect */
 #include <errno.h>
+#include <asm/ptrace.h>         /* PSR bit macros */
 
 #if HAVE_SETRLIMIT
 # include <sys/types.h>
@@ -82,23 +83,23 @@ void emu_init(ucontext_t *ucontext) {
 }
 
 uint8_t emu_eval_cond(uint32_t cond) {
-    emu_printf("cpsr N: %d, Z: %d, C: %d, V: %d\n", cpsr.N, cpsr.Z, cpsr.C, cpsr.V);
+    emu_dump_cpsr();
 
     switch(cond) {
-    case C_EQ: return (  cpsr.Z == 1);
-    case C_NE: return (  cpsr.Z == 0);
-    case C_CS: return (  cpsr.C == 1);
-    case C_CC: return (  cpsr.C == 0);
-    case C_MI: return (  cpsr.N == 1);
-    case C_PL: return (  cpsr.N == 0);
-    case C_VS: return (  cpsr.V == 1);
-    case C_VC: return (  cpsr.V == 0);
-    case C_HI: return (( cpsr.C == 1) && (cpsr.Z == 0));
-    case C_LS: return (( cpsr.C == 0) || (cpsr.Z == 1));
-    case C_GE: return (  cpsr.N == cpsr.V);
-    case C_LT: return (  cpsr.N != cpsr.V);
-    case C_GT: return (( cpsr.Z == 0) && (cpsr.N == cpsr.V));
-    case C_LE: return (( cpsr.Z == 1) || (cpsr.N != cpsr.V));
+    case C_EQ:
+    case C_NE: return  CPSR_Z;
+    case C_CS:
+    case C_CC: return  CPSR_C;
+    case C_MI:
+    case C_PL: return  CPSR_N;
+    case C_VS:
+    case C_VC: return  CPSR_V;
+    case C_HI:
+    case C_LS: return  CPSR_C && !CPSR_Z;
+    case C_GE:
+    case C_LT: return  CPSR_N == CPSR_V;
+    case C_GT:
+    case C_LE: return !CPSR_Z && (CPSR_N == CPSR_V);
     case C_AL: return 1;
     case C_UNCOND: return 1;
     default: {
@@ -704,11 +705,11 @@ inline uint32_t emu_dataop(const darm_t *d, const uint32_t a, const uint32_t b) 
     switch((uint32_t) d->instr) {
     case I_CMN :
     case I_ADD : return  a + b;
-    case I_ADC : return  a + b  +  cpsr.C;
+    case I_ADC : return  a + b  +  CPSR_C;
     case I_CMP :
     case I_SUB : return  a - b;
-    case I_SBC : return (a - b) - !cpsr.C;
-    case I_RSC : return (b - a) - !cpsr.C;
+    case I_SBC : return (a - b) - !CPSR_C;
+    case I_RSC : return (b - a) - !CPSR_C;
     case I_RSB : return  b - a;
     case I_TEQ :
     case I_EOR : return  a ^ b;
@@ -994,7 +995,7 @@ const darm_t* emu_disasm_internal(darm_t *d, uint32_t pc) {
 }
 
 static inline uint8_t emu_thumb_mode() {
-    return (CPU(cpsr) & PSR_T_BIT);
+    return CPSR_T;              /* 0: ARM, 1: Thumb */
 }
 
 /* map register number (0-15) to ucontext reg entry (r0-r10, fp, ip, sp, lr pc) */
@@ -1062,6 +1063,17 @@ static void emu_dump_diff() {
         }
     }
     emu.previous = emu.current;
+}
+
+static void emu_dump_cpsr() {
+    printf("cpsr [%c%c%c%c %c %c]\n",
+           CPSR_N ? 'N' : 'n',
+           CPSR_Z ? 'Z' : 'z',
+           CPSR_C ? 'C' : 'c',
+           CPSR_V ? 'V' : 'v',
+           CPSR_I ? 'I' : 'i',
+           CPSR_T ? 'T' : 't'
+           );
 }
 
 static void emu_map_dump(map_t *m) {
