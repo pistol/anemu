@@ -965,28 +965,19 @@ const darm_t* emu_disasm(uint32_t pc) {
 const darm_t* emu_disasm_internal(darm_t *d, uint32_t pc) {
     uint32_t ins = *(const uint32_t *)pc;
 
-    // Thumb16 only for now
-    /* if (emu_thumb_mode()) ins &= 0xffff; */
-
-    darm_str_t str;
-    if (emu_thumb_mode()) {
-        /* T16 mode */
-        if (darm_thumb_disasm(d, ins)) {
-            emu_printf("darm : %x %04x <invalid instruction>\n", pc, (uint16_t)ins);
-            return NULL;
-        } else {
-            darm_str2(d, &str, 1); /* lowercase str */
-            printf("darm : %x %04x %s\n", pc, (uint16_t)ins, str.total);
-        }
+    uint16_t w     = ins & 0xffff;
+    uint16_t w2    = ins >> 16;
+    uint32_t addr  = pc | emu_thumb_mode(); /* LSB set for Thumb / Thumb2 */
+    uint8_t  bytes = darm_disasm(d, w, w2, addr);
+    /* Returns 0 on failure, 1 for Thumb, 2 for Thumb2, and 2 for ARMv7. */
+    printf("emu_disasm : w: %x w2: %x addr: %x T: %d\n", w, w2, addr, emu_thumb_mode());
+    if (bytes) {
+        darm_str_t str;
+        darm_str2(d, &str, 1); /* lowercase str */
+        printf("darm : %x %x %s\n", pc, ins, str.total);
     } else {
-        /* A32 mode */
-        if (darm_armv7_disasm(d, ins)) {
-            emu_printf("darm : %x %08x <invalid instruction>\n", pc, ins);
-            return NULL;
-        } else {
-            darm_str2(d, &str, 1); /* lowercase str */
-            printf("darm : %x %08x %s\n", pc, ins, str.total);
-        }
+        emu_printf("darm : %x %x %x <invalid instruction>\n", pc, w, w2);
+        return NULL;
     }
     return d;
 }
