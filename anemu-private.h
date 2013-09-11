@@ -126,6 +126,8 @@ typedef struct _emu_t {
 /* read/write memory */
 #define WMEM(addr) *(uint32_t *)(addr)
 #define RMEM(addr) WMEM(addr)   /* identical pointer cast */
+#define WMEMB(addr, data) WMEM(addr) = (RMEM(addr) & ~instr_mask(d->instr)) | (data & instr_mask(d->instr))
+#define RMEMB(addr) (RMEM(addr) & instr_mask(d->instr))
 
 /* taint register by darm specifier */
 #define RTREG(reg) emu_get_taint_reg(d->reg)
@@ -338,6 +340,8 @@ static uint32_t emu_get_taint_mem(uint32_t addr);
 static inline void emu_set_taint_reg(uint32_t reg, uint32_t tag);
 static inline uint32_t emu_get_taint_reg(uint32_t reg);
 static void mmap_init();
+
+static inline uint32_t instr_mask(darm_instr_t instr);
 
 /* Page Protections */
 

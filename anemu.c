@@ -1464,3 +1464,14 @@ emu_unprotect_mem() {
         }
     }
 }
+
+static inline uint32_t
+instr_mask(darm_instr_t instr) {
+    switch(instr) {
+    case I_LDRB:
+    case I_STRB: { return 0xff; }
+    case I_LDRH:
+    case I_STRH: { return 0xffff; }
+    default:     { return 0xffffffff; }
+    }
+}
