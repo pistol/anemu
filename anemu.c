@@ -841,15 +841,15 @@ static void emu_advance_pc() {
     if (!emu.branched) CPU(pc) += (emu_thumb_mode() ? 2 : 4);
     emu.branched = 0;
     emu_dump_diff();
+    printf("handled instructions: %d\n", ++emu.handled_instr);
+    dbg_dump_ucontext(&emu.current);
+    printf("\n");
+    printf("*** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***\n");
     if (emu_regs_tainted() == 0) {
         printf("taint: no tainted regs remaining, enable protection and leave emu\n");
         emu_protect_mem();
         emu_stop();             /* will not return */
     }
-    printf("handled instructions: %d\n", ++emu.handled_instr);
-    dbg_dump_ucontext(&emu.current);
-    printf("\n");
-    printf("*** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***\n");
 }
 
 static inline void emu_set_taint_reg(uint32_t reg, uint32_t tag) {
