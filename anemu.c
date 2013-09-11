@@ -473,11 +473,11 @@ void emu_type_cmp_op(const darm_t * d) {
 
     switch(d->instr) {
     case I_CMP: {
-        ASM_RR(CMP, Rn, Rm);
+        ASM_RR_CMP(CMP, Rn, Rm);
         break;
     }
     case I_TEQ: {
-        ASM_RR(TEQ, Rn, Rm);
+        ASM_RR_CMP(TEQ, Rn, Rm);
         break;
     }
         SWITCH_COMMON;
@@ -489,11 +489,11 @@ void emu_type_cmp_imm(const darm_t * d) {
 
     switch(d->instr) {
     case I_CMP: {
-        ASM_RI(CMP, Rn, imm);
+        ASM_RI_CMP(CMP, Rn, imm);
         break;
     }
     case I_TST: {
-        ASM_RI(TST, Rn, imm);
+        ASM_RI_CMP(TST, Rn, imm);
         break;
     }
         SWITCH_COMMON;
