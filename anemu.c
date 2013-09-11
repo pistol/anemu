@@ -887,7 +887,8 @@ void emu_singlestep(uint32_t pc) {
 
     // 2. emu instr by type
     switch(d->instr_type) {
-    case T_ARM_ARITH_SHIFT: {
+    case T_ARM_ARITH_SHIFT:
+    case T_THUMB_MOD_SP_REG: {
         emu_type_arith_shift(d);
         break;
     }
@@ -919,14 +920,19 @@ void emu_singlestep(uint32_t pc) {
         emu_type_opless(d);
         break;
     }
-    case T_ARM_DST_SRC: {
+    case T_ARM_DST_SRC:
+    case T_THUMB_MOV4: {
         emu_type_dst_src(d);
         break;
     }
     case T_ARM_STACK0:
     case T_ARM_STACK1:
     case T_ARM_STACK2:
-    case T_ARM_LDSTREGS: {
+    case T_ARM_LDSTREGS:
+    case T_THUMB_RW_MEMO:
+    case T_THUMB_RW_MEMI:
+    case T_THUMB_STACK:
+    case T_THUMB_LDR_PC: {
         emu_type_memory(d);
         break;
     }
