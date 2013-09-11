@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <unistd.h>
-#include <assert.h>
+// #include <assert.h>
 #include <signal.h>
 #include <sys/mman.h>           /* mprotect */
 #include <errno.h>
@@ -1181,7 +1181,7 @@ mprotectHandler(int sig, siginfo_t *si, void *ucontext) {
                pc,
                addr_fault);
 
-    assert(si_addr == addr_fault);
+    assert((uint32_t)si->si_addr == addr_fault);
 
     switch(si->si_code) {
     case SEGV_MAPERR:

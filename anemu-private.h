@@ -17,6 +17,8 @@
 /* darm disassembler */
 #include <darm.h>
 
+/* TODO: guard based on NDEBUG or DEBUG */
+#define assert(x) if (!(x)) { emu_abort("ASSERTION (%s) FAILED in %s line %d", #x, __FILE__, __LINE__); }
 
 #define UNUSED __attribute__((unused))
 
