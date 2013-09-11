@@ -878,6 +878,8 @@ void emu_start() {
 /* int setcontext (const ucontext_t *ucp) { return 0; } */
 
 void emu_stop() {
+    CPU(pc) |= emu_thumb_mode() ? 1 : 0; /* LSB set for Thumb */
+
     printf("resuming exec pc old: %0lx new: %0lx\n",
            emu.original.uc_mcontext.arm_pc,
            emu.current.uc_mcontext.arm_pc);
