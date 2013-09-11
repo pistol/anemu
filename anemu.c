@@ -165,8 +165,12 @@ void emu_type_arith_imm(const darm_t * d) {
             uint32_t addr = d->U == B_SET ?
                 (RREGN(PC) + d->imm) :
                 (RREGN(PC) - d->imm);
-            EMU(WREG(Rd) = addr);
-            WTREG(Rd, RTMEM(addr));
+            if (d->Rd == PC) {
+                BXWritePC(addr);
+            } else {
+                EMU(WREG(Rd) = addr);
+                WTREG(Rd, RTMEM(addr));
+            }
             break;
         }
             SWITCH_COMMON;
