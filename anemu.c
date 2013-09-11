@@ -741,6 +741,7 @@ static void emu_advance_pc() {
         emu_stop();             /* will not return */
     }
     printf("handled instructions: %d\n", ++emu.handled_instr);
+    dbg_dump_ucontext(&emu.current);
     printf("\n");
     printf("*** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***\n");
 }
@@ -885,6 +886,8 @@ void emu_stop() {
     if (emu_regs_tainted()) {
         emu_printf("WARNING: stopping emu with tainted regs!\n");
     }
+    dbg_dump_ucontext(&emu.current);
+    printf("### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###\n");
     setcontext((const ucontext_t *)&emu.current); /* never returns */
 }
 
@@ -1019,12 +1022,18 @@ static inline uint32_t *emu_write_reg(darm_reg_t reg) {
 /* Debugging */
 
 static void dbg_dump_ucontext(ucontext_t *uc) {
-    static int i;
-    for (i = 0; i < SIGCONTEXT_REG_COUNT; i++) {
-        printf("dbg: %14s: %0x\n",
-               sigcontext_names[i],
-               ((uint32_t *)&uc->uc_mcontext)[i]);
-    }
+    mcontext_t *r = &uc->uc_mcontext;
+    printf("ucontext dump:\n");
+    printf("fault addr %8x\n",
+           (uint32_t)r->fault_address);
+    printf("r0: %8x  r1: %8x  r2: %8x  r3: %8x\n",
+           (uint32_t)r->arm_r0, (uint32_t)r->arm_r1, (uint32_t)r->arm_r2,  (uint32_t)r->arm_r3);
+    printf("r4: %8x  r5: %8x  r6: %8x  r7: %8x\n",
+           (uint32_t)r->arm_r4, (uint32_t)r->arm_r5, (uint32_t)r->arm_r6,  (uint32_t)r->arm_r7);
+    printf("r8: %8x  r9: %8x  sl: %8x  fp: %8x\n",
+           (uint32_t)r->arm_r8, (uint32_t)r->arm_r9, (uint32_t)r->arm_r10, (uint32_t)r->arm_fp);
+    printf("ip: %8x  sp: %8x  lr: %8x  pc: %8x  cpsr: %8x\n",
+           (uint32_t)r->arm_ip, (uint32_t)r->arm_sp, (uint32_t)r->arm_lr,  (uint32_t)r->arm_pc, (uint32_t)r->arm_cpsr);
 }
 
 static void emu_dump() {
