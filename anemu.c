@@ -645,6 +645,53 @@ void emu_type_memory(const darm_t * d) {
 
         break;
     }
+    case I_STM: {
+        uint16_t reglist       = d->reglist;
+        const uint8_t regcount = BitCount(reglist); /* number of bits set to 1 */
+        uint32_t addr          = RREG(Rn);
+        uint8_t reg            = 0;
+
+        while (reglist) {
+            reg            = TrailingZerosCount(reglist); /* count trailing zeros */
+            reglist       &= ~(1 << reg);                 /* unset this bit */
+            printf("addr: %x, r%d: %8x\n", addr, reg, RREGN(reg));
+            WMEM(addr)     = RREGN(reg);
+            if (RTMEM(addr) || RTREGN(reg)) WTMEM(addr, RTREGN(reg));
+            WTMEM(addr, RTREGN(reg));
+            addr          += 4;
+        }
+        if (d->W == B_SET) {    /* writeback */
+            EMU(WREG(Rn) = RREG(Rn) + 4 * regcount);
+        }
+        break;
+    }
+    case I_LDM: {
+        uint16_t reglist       = d->reglist;
+        const uint8_t regcount = BitCount(reglist); /* number of bits set to 1 */
+        uint32_t addr          = RREG(Rn);
+        uint8_t reg            = 0;
+
+        while (reglist) {
+            reg            = TrailingZerosCount(reglist); /* count trailing zeros */
+            reglist       &= ~(1 << reg);                 /* unset this bit */
+            printf("addr: %x, r%d: %8x\n", addr, reg, RMEM(addr));
+            if (reg == PC) break;
+            /* EMU(WREGN(reg) = RMEM(addr)); */
+            WREGN(reg) = RMEM(addr);
+            if (RTREGN(reg) || RTMEM(addr)) WTREGN(reg, RTMEM(addr));
+            addr          += 4;
+        }
+        if (BitCheck(d->reglist, PC)) {
+            BXWritePC(RMEM(addr));
+        }
+        if (d->W == B_SET) {    /* writeback */
+            if (BitCheck(d->reglist, d->Rn)) {
+                EMU(WREG(Rn) = RREG(Rn) + 4 * regcount);
+            } else {
+                emu_abort("unknown Rn %d %x", d->Rn, RREG(Rn));
+            }
+        }
+
         break;
     }
     case I_PUSH: {
