@@ -68,6 +68,9 @@ T: Thumb mode
 #define CPSR_I ((CPU(cpsr) & PSR_I_BIT) >>  7)
 #define CPSR_T ((CPU(cpsr) & PSR_T_BIT) >>  5)
 
+/* update NZCV bits given a temp CPSR value (from MRS) */
+#define CPSR_UPDATE(temp) (CPU(cpsr) = (CPU(cpsr) & ~(b1111 << 28)) | (temp & (b1111 << 28)))
+
 #define MAX_MAPS 4096           /* number of memory map entries */
 #define MAX_TAINTMAPS 2         /* libs + stack (heap part of libs) */
 #define MAX_TAINTPAGES 32       /* number of distinct tainted pages */
@@ -163,29 +166,35 @@ formats for S instructions:
 */
 
 /* IS: imm / shift */
-#define ASM_RI(instr, R1, IS)                                          \
+#define ASM_RI(instr, R1, IS)                                           \
+    uint32_t temp;                                                      \
     asm volatile (#instr "s %[reg1], %[imm]\n"             /* updates flags */ \
                   "mrs %[cpsr], cpsr\n"                    /* save new cpsr */ \
-                  : [reg1] "=r" (WREG(R1)), [cpsr] "=r" (CPU(cpsr)) /* output */ \
+                  : [reg1] "=r" (WREG(R1)), [cpsr] "=r" (temp)    /* output */ \
                   : [imm] "r"   (d->IS)         /* input */             \
                   : "cc"                        /* clobbers condition codes */ \
-                  );
+                  );                                                    \
+    CPSR_UPDATE(temp);
 
 #define ASM_RR(instr, R1, R2)                                           \
+    uint32_t temp;                                                      \
     asm volatile (#instr "s %[reg1], %[reg2]\n"            /* updates flags */ \
                   "mrs %[cpsr], cpsr\n"                    /* save new cpsr */ \
-                  : [reg1] "=r" (WREG(R1)), [cpsr] "=r" (CPU(cpsr)) /* output */ \
+                  : [reg1] "=r" (WREG(R1)), [cpsr] "=r" (temp)    /* output */ \
                   : [reg2] "r"  (RREG(R2))      /* input */             \
                   : "cc"                        /* clobbers condition codes */ \
-                  );
+                  );                                                    \
+    CPSR_UPDATE(temp);
 
 #define ASM_RRI(instr, R1, R2, IS)                                      \
+    uint32_t temp;                                                      \
     asm volatile (#instr "s %[reg1], %[reg2], %[imm]\n"    /* updates flags */ \
                   "mrs %[cpsr], cpsr\n"                    /* save new cpsr */ \
-                  : [reg1] "=r" (WREG(R1)), [cpsr] "=r" (CPU(cpsr)) /* output */ \
+                  : [reg1] "=r" (WREG(R1)), [cpsr] "=r" (temp)    /* output */ \
                   : [reg2] "r"  (RREG(R2)), [imm]  "r"  (d->IS)    /* input */ \
-                  : "cc"               /* clobbers condition codes */   \
-                  );
+                  : "cc"                        /* clobbers condition codes */ \
+                  );                                                    \
+    CPSR_UPDATE(temp);
 
 /* switch case helper for ASM */
 #define CASE_RR( instr, R1, R2)      case I_##instr: { ASM_RR (instr, R1, R2);      break; }
