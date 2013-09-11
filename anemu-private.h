@@ -227,6 +227,7 @@ formats for S instructions:
 #define BitCount(x)           __builtin_popcount(x)
 #define TrailingZerosCount(x) __builtin_ctz(x)
 #define LeadingZerosCount(x)  __builtin_clz(x)
+#define BitCheck(x, pos)      ((x) & (1 << (pos)))
 
 #define Align(x,a)            __ALIGN_MASK(x,(typeof(x))(a)-1)
 #define __ALIGN_MASK(x,mask)  (((x)+(mask))&~(mask))

@@ -597,21 +597,26 @@ void emu_type_memory(const darm_t * d) {
         printf("Rt: %x\n", RREG(Rt));
         printf("Rn: %x\n", RREG(Rn));
         if (m) printf("addr: %x %s\n", addr, m->name);
-        printf("RMEM: %x\n", RMEM(addr));
-
-        if (d->instr == I_LDR) {
-            EMU(WREG(Rt) = RMEM(addr));
-        } else {
-            EMU(WREG(Rt) = RMEM(addr) & 0xFFFF);
-        }
-        if ((d->Rt == PC) && (RREG(Rt) & 1)) {
-            printf("ARM -> Thumb switch!\n");
-            CPU(cpsr) |=  PSR_T_BIT;
-        } else {
-            CPU(cpsr) &= ~PSR_T_BIT;
+        if (d->instr == I_LDR &&
+            addr != Align(addr, 4)) { /* unaligned addr */
+            emu_abort("unaligned address");
         }
 
-        WTREG(Rt, RTMEM(addr));
+        uint32_t data;
+        /* read 1, 2 or 4 bytes depending on instr type */
+        data = RMEMB(addr);
+        printf("RMEMB: %x\n", data);
+        if (d->Rt == PC) {
+            if ((addr & b11) == 0) {
+                BXWritePC(data);
+            } else {
+                emu_abort("unpredictable");
+            }
+        } else {                /* UnalignedSupport() || address<1:0> == '00' */
+            EMU(WREG(Rt) = data);
+            WTREG(Rt, RTMEM(addr));
+        }
+
         break;
     }
     case I_STR:
@@ -631,19 +636,15 @@ void emu_type_memory(const darm_t * d) {
 
         map_t *m = emu_map_lookup(addr);
         if (m) printf("addr: %x %s\n", addr, m->name);
-
-        /* EMU(WMEM(addr) = RREG(Rt)); */
-        if (d->instr == I_STR) {
-            WMEM(addr) = RREG(Rt);
-        } else if (d->instr == I_STRB) {
-            WMEM(addr) = RREG(Rt) & 0xFFFF;
-        } else if (d->instr == I_STRH) {
-            WMEM(addr) = RREG(Rt) & 0xFFFFFFFF;
-        } else {
-            emu_abort("unhandled encoding\n");
+        if (addr != Align(addr, 4)) { /* word aligned */
+            emu_abort("unaligned address");
         }
-
+        /* depending on instr, 1, 2 or 4 bytes of RREG(Rt) will be used and stored to mem */
+        WMEMB(addr, RREG(Rt));
         WTMEM(addr, RTREG(Rt));
+
+        break;
+    }
         break;
     }
     case I_PUSH: {
@@ -675,13 +676,26 @@ void emu_type_memory(const darm_t * d) {
             reg            = TrailingZerosCount(reglist); /* count trailing zeros */
             reglist       &= ~(1 << reg);                 /* unset this bit */
             printf("addr: %x, r%d: %8x\n", addr, reg, RMEM(addr));
+            if (reg == PC) break;
             /* EMU(WREGN(reg) = RMEM(addr)); */
             WREGN(reg) = RMEM(addr);
             if (RTREGN(reg) || RTMEM(addr)) WTREGN(reg, RTMEM(addr));
             addr          += 4;
         }
+        if (BitCheck(d->reglist, PC)) {
+            BXWritePC(RMEM(addr));
+        }
+        if (!BitCheck(d->reglist, SP)) {
+            EMU(WREG(Rn) = RREG(Rn) + 4 * regcount); /* update SP */
+        } else {
+            emu_abort("unknown Rn %d %x", d->Rn, RREG(Rn));
+        }
 
-        EMU(WREG(Rn) = RREG(Rn) + 4 * regcount); /* update SP */
+        break;
+    }
+        SWITCH_COMMON;
+    }
+}
         break;
     }
         SWITCH_COMMON;
