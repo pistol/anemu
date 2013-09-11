@@ -536,7 +536,10 @@ void emu_type_dst_src(const darm_t * d) {
             CASE_RR (MOV, Rd, Rm);
             CASE_RRI(LSL, Rd, Rm, shift);
             CASE_RRI(LSR, Rd, Rm, shift);
-
+        case I_NOP: {
+            /* nothing to do */
+            break;
+        }
             SWITCH_COMMON;
         }
     } else {
