@@ -239,6 +239,7 @@ formats for S instructions:
 #define ISB(option) asm volatile ("isb " #option : : : "memory")
 #define DSB(option) asm volatile ("dsb " #option : : : "memory")
 #define DMB(option) asm volatile ("dmb " #option : : : "memory")
+#define SVC(option) asm volatile ("svc " #option)
 
 #define PLD(regname) asm volatile("pld [%[reg]]" :: [reg] "r" (d->regname));
 

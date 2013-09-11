@@ -405,6 +405,16 @@ void emu_type_branch_syscall(const darm_t * d) {
         BranchWritePC(targetAddress);
         break;
     }
+    case I_SVC: {
+        /* "svc #0" is the only "svc" instruction in libc.so */
+        if (d->imm == 0) {
+            /* TODO: r7 expected (previous instruction writes it) */
+            SVC(0);
+        } else {
+            emu_abort("unexpected SVC imm %x\n", d->imm);
+        }
+        break;
+    }
         SWITCH_COMMON;
     }
 }
