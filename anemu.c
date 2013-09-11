@@ -55,7 +55,7 @@ static void emu_handler(int sig, siginfo_t *si, void *ucontext) {
 void emu_init(ucontext_t *ucontext) {
     assert(*emu.enabled == false);
 
-    emu_printf("saving original ucontext ...\n");
+    // emu_printf("saving original ucontext ...\n");
     emu.previous = emu.current = emu.original = *ucontext;
     emu.regs = (uint32_t *)&emu.current.uc_mcontext.arm_r0;
     emu.branched = 0;
@@ -120,10 +120,10 @@ void emu_type_arith_shift(const darm_t * d) {
 }
 
 void emu_type_arith_imm(const darm_t * d) {
-    if (d->S) {
+    if (d->S == B_SET) {
         printf("S flag, we're Screwed!\n");
 
-        switch((uint32_t) d->instr) {
+        switch(d->instr) {
             CASE_RRI(ADD, Rd, Rn, imm);
             CASE_RRI(ADC, Rd, Rn, imm);
             CASE_RRI(AND, Rd, Rn, imm);
@@ -142,7 +142,7 @@ void emu_type_arith_imm(const darm_t * d) {
             SWITCH_COMMON;
         }
     } else {
-        switch((uint32_t) d->instr) {
+        switch(d->instr) {
         case I_ADD:
         case I_ADC:
         case I_AND:
@@ -162,7 +162,7 @@ void emu_type_arith_imm(const darm_t * d) {
             break;
         }
         case I_ADR: {
-            uint32_t addr = d->U ?
+            uint32_t addr = d->U == B_SET ?
                 (RREGN(PC) + d->imm) :
                 (RREGN(PC) - d->imm);
             EMU(WREG(Rd) = addr);
@@ -175,7 +175,7 @@ void emu_type_arith_imm(const darm_t * d) {
 }
 
 void emu_type_pusr(const darm_t * d) {
-    switch((uint32_t) d->instr) {
+    switch(d->instr) {
     case I_UXTB: {
         uint32_t rotated = ROR(RREG(Rm), d->rotate);
         WREG(Rd) = rotated & 0xffff;
@@ -187,7 +187,7 @@ void emu_type_pusr(const darm_t * d) {
 }
 
 void emu_type_sync(const darm_t * d) {
-    switch((uint32_t) d->instr) {
+    switch(d->instr) {
     case I_LDREX: {
         printf("LDREX before:\n");
         printf("Rt: %x Rn: %x MEM Rn: %x\n", RREG(Rt), RREG(Rn), RMEM(RREG(Rn)));
@@ -302,7 +302,7 @@ void emu_type_sync(const darm_t * d) {
 }
 
 void emu_type_mvcr(const darm_t * d) {
-    switch((uint32_t) d->instr) {
+    switch(d->instr) {
     case I_MRC: {
         // FIXME: hacky detect mcr
         // ee1d0f70 mrc 15, 0, r0, cr13, cr0, {3}
@@ -364,10 +364,7 @@ void BranchWritePC(uint32_t addr) {
 }
 
 void BXWritePC(uint32_t addr) {
-    EMU_ENTRY;
-
-    emu_printf("RREGN(PC): %x\n", RREGN(PC));
-    emu_printf("addr: %x\n", addr);
+    emu_printf("RREGN(PC): %x addr: %x\n", RREGN(PC), addr);
     emu_map_lookup(addr);
     if (addr & 1) {
         SelectInstrSet(M_THUMB);
@@ -381,7 +378,7 @@ void BXWritePC(uint32_t addr) {
 }
 
 void emu_type_branch_syscall(const darm_t * d) {
-    switch((uint32_t) d->instr) {
+    switch(d->instr) {
     case I_B: {
         BranchWritePC(RREGN(PC) + d->imm);
         break;
@@ -409,7 +406,7 @@ void emu_type_branch_syscall(const darm_t * d) {
 }
 
 void emu_type_branch_misc(const darm_t * d) {
-    switch((uint32_t) d->instr) {
+    switch(d->instr) {
     case I_BKPT: {
         /* special flags */
         /* entering- JNI: 1337 */
@@ -445,9 +442,9 @@ void emu_type_branch_misc(const darm_t * d) {
 void emu_type_move_imm(const darm_t * d) {
     EMU_ENTRY;
 
-    switch((uint32_t) d->instr) {
+    switch(d->instr) {
     case I_MOV: {
-        if (d->S) {
+        if (d->S == B_SET) {
             ASM_RI(MOV, Rd, imm);
         } else {
             EMU(WREG(Rd) = d->imm);
@@ -474,7 +471,7 @@ void emu_type_move_imm(const darm_t * d) {
 void emu_type_cmp_op(const darm_t * d) {
     EMU_ENTRY;
 
-    switch((uint32_t) d->instr) {
+    switch(d->instr) {
     case I_CMP: {
         ASM_RR(CMP, Rn, Rm);
         break;
@@ -490,7 +487,7 @@ void emu_type_cmp_op(const darm_t * d) {
 void emu_type_cmp_imm(const darm_t * d) {
     EMU_ENTRY;
 
-    switch((uint32_t) d->instr) {
+    switch(d->instr) {
     case I_CMP: {
         ASM_RI(CMP, Rn, imm);
         break;
@@ -506,7 +503,7 @@ void emu_type_cmp_imm(const darm_t * d) {
 void emu_type_opless(const darm_t * d) {
     EMU_ENTRY;
 
-    switch((uint32_t) d->instr) {
+    switch(d->instr) {
     case I_NOP: {
         /* nothing to do */
         break;
@@ -518,10 +515,10 @@ void emu_type_opless(const darm_t * d) {
 void emu_type_dst_src(const darm_t * d) {
     EMU_ENTRY;
 
-    if (d->S) {
+    if (d->S == B_SET) {
         printf("S flag, we're Screwed!\n");
 
-        switch((uint32_t) d->instr) {
+        switch(d->instr) {
             CASE_RR (MOV, Rd, Rm);
             CASE_RRI(LSL, Rd, Rm, shift);
             CASE_RRI(LSR, Rd, Rm, shift);
@@ -529,7 +526,7 @@ void emu_type_dst_src(const darm_t * d) {
             SWITCH_COMMON;
         }
     } else {
-        switch((uint32_t) d->instr) {
+        switch(d->instr) {
         case I_MOV: {
             EMU(WREG(Rd) = RREG(Rm));
             break;
@@ -556,19 +553,19 @@ void emu_type_dst_src(const darm_t * d) {
 void emu_type_memory(const darm_t * d) {
     /* EMU_ENTRY; */
 
-    switch((uint32_t) d->instr) {
+    switch(d->instr) {
     case I_LDR:
     case I_LDRB: {
         uint32_t imm = (d->Rm == R_INVLD) ? d->imm : emu_regshift(d); /* RREG(Rm) or shift */
-        uint32_t offset_addr = d->U ?
+        uint32_t offset_addr = d->U == B_SET ?
             (RREG(Rn) + imm) :
             (RREG(Rn) - imm);
 
-        uint32_t addr = d->P ?
+        uint32_t addr = d->P == B_SET ?
             offset_addr :
             RREG(Rn);
 
-        if ((d->W == 1) || (d->P == 0)) { /* write-back */
+        if ((d->W == B_SET) || (d->P == B_UNSET)) { /* write-back */
             EMU(WREG(Rn) = offset_addr);
         }
 
@@ -596,15 +593,15 @@ void emu_type_memory(const darm_t * d) {
     case I_STR:
     case I_STRB:
     case I_STRH: {
-        uint32_t offset_addr = d->U ?
+        uint32_t offset_addr = d->U == B_SET ?
             (RREG(Rn) + d->imm) :
             (RREG(Rn) - d->imm);
 
-        uint32_t addr = d->P ?
+        uint32_t addr = d->P == B_SET ?
             offset_addr :
             RREG(Rn);
 
-        if ((d->W == 1) || (d->P == 0)) { /* write-back */
+        if ((d->W == B_SET) || (d->P == B_UNSET)) { /* write-back */
             EMU(WREG(Rn) = offset_addr);
         }
 
@@ -641,7 +638,6 @@ void emu_type_memory(const darm_t * d) {
             addr          += 4;
         }
 
-        /* EMU(WREG(Rn) = RREG(Rn) - 4 * regcount); /\* update SP *\/ */
         WREG(Rn) = RREG(Rn) - 4 * regcount; /* update SP */
         break;
     }
@@ -669,9 +665,7 @@ void emu_type_memory(const darm_t * d) {
 }
 
 void emu_type_uncond(const darm_t * d) {
-    EMU_ENTRY;
-
-    switch((uint32_t) d->instr) {
+    switch(d->instr) {
     case I_DMB: {
         /* Options: SY, ST, ISH, ISHST, NSH, NSHST, OSH, OSHST */
         switch(d->option) {
@@ -699,7 +693,7 @@ void emu_type_uncond(const darm_t * d) {
 }
 
 inline uint32_t emu_dataop(const darm_t *d, const uint32_t a, const uint32_t b) {
-    switch((uint32_t) d->instr) {
+    switch(d->instr) {
     case I_CMN :
     case I_ADD : return  a + b;
     case I_ADC : return  a + b  +  CPSR_C;
@@ -883,9 +877,9 @@ void emu_start() {
 /* int setcontext (const ucontext_t *ucp) { return 0; } */
 
 void emu_stop() {
-    emu_printf("resuming exec pc old: 0x%0lx new: 0x%0lx\n",
-               emu.original.uc_mcontext.arm_pc,
-               emu.current.uc_mcontext.arm_pc);
+    printf("resuming exec pc old: %0lx new: %0lx\n",
+           emu.original.uc_mcontext.arm_pc,
+           emu.current.uc_mcontext.arm_pc);
 
     *emu.enabled = 0;
     if (emu_regs_tainted()) {
@@ -972,7 +966,8 @@ const darm_t* emu_disasm_internal(darm_t *d, uint32_t pc) {
     if (bytes) {
         darm_str_t str;
         darm_str2(d, &str, 1); /* lowercase str */
-        printf("darm : %x %x %s\n", pc, ins, str.total);
+        printf("darm : %x %x %s\n", pc, d->w, str.total);
+        printf("bytes: %d\n", bytes);
     } else {
         emu_printf("darm : %x %x %x <invalid instruction>\n", pc, w, w2);
         return NULL;
