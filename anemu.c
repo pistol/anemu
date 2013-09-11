@@ -112,10 +112,17 @@ uint8_t emu_eval_cond(uint32_t cond) {
 }
 
 void emu_type_arith_shift(const darm_t * d) {
-    assert(d->Rs || d->shift);
-    uint32_t sreg = emu_regshift(d);
-    emu_printf("sreg = %x\n", sreg);
-    EMU(WREG(Rd) = OP(RREG(Rn), sreg));
+    printf("Rs: %d shift_type: %d shift: %d\n", d->Rs, d->shift_type, d->shift);
+    assert((d->Rs != R_INVLD) || (d->shift_type != S_INVLD) || (d->shift == 0));
+    if (d->instr == I_BIC && d->shift == 0) {
+        /* shift type 0 is LSL */
+        EMU(WREG(Rd) = LSL(RREG(Rn), RREG(Rm)));
+    } else {
+        uint32_t sreg = emu_regshift(d);
+        emu_printf("sreg = %x\n", sreg);
+        /* FIXME: BIC has no Rs or shift */
+        EMU(WREG(Rd) = OP(RREG(Rn), sreg));
+    }
     WTREG2(Rd, Rn, Rm);
 }
 
