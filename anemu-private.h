@@ -61,12 +61,12 @@ I: IRQ
 T: Thumb mode
 */
 
-#define CPSR_N ((CPU(cpsr) & PSR_N_BIT) != 0)
-#define CPSR_Z ((CPU(cpsr) & PSR_Z_BIT) != 0)
-#define CPSR_C ((CPU(cpsr) & PSR_C_BIT) != 0)
-#define CPSR_V ((CPU(cpsr) & PSR_V_BIT) != 0)
-#define CPSR_I ((CPU(cpsr) & PSR_I_BIT) != 0)
-#define CPSR_T ((CPU(cpsr) & PSR_T_BIT) != 0)
+#define CPSR_N ((CPU(cpsr) & PSR_N_BIT) >> 31)
+#define CPSR_Z ((CPU(cpsr) & PSR_Z_BIT) >> 30)
+#define CPSR_C ((CPU(cpsr) & PSR_C_BIT) >> 29)
+#define CPSR_V ((CPU(cpsr) & PSR_V_BIT) >> 28)
+#define CPSR_I ((CPU(cpsr) & PSR_I_BIT) >>  7)
+#define CPSR_T ((CPU(cpsr) & PSR_T_BIT) >>  5)
 
 #define MAX_MAPS 4096           /* number of memory map entries */
 #define MAX_TAINTMAPS 2         /* libs + stack (heap part of libs) */

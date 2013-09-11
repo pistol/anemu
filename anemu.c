@@ -88,20 +88,20 @@ uint8_t emu_eval_cond(uint32_t cond) {
     emu_dump_cpsr();
 
     switch(cond) {
-    case C_EQ:
-    case C_NE: return  CPSR_Z;
-    case C_CS:
-    case C_CC: return  CPSR_C;
-    case C_MI:
-    case C_PL: return  CPSR_N;
-    case C_VS:
-    case C_VC: return  CPSR_V;
-    case C_HI:
-    case C_LS: return  CPSR_C && !CPSR_Z;
-    case C_GE:
-    case C_LT: return  CPSR_N == CPSR_V;
-    case C_GT:
-    case C_LE: return !CPSR_Z && (CPSR_N == CPSR_V);
+    case C_EQ: return  CPSR_Z;
+    case C_NE: return !CPSR_Z;
+    case C_CS: return  CPSR_C;
+    case C_CC: return !CPSR_C;
+    case C_MI: return  CPSR_N;
+    case C_PL: return !CPSR_N;
+    case C_VS: return  CPSR_V;
+    case C_VC: return !CPSR_V;
+    case C_HI: return  CPSR_C && !CPSR_Z;
+    case C_LS: return !CPSR_C ||  CPSR_Z;
+    case C_GE: return  CPSR_N &&  CPSR_V;
+    case C_LT: return  CPSR_N !=  CPSR_V;
+    case C_GT: return !CPSR_Z && (CPSR_N == CPSR_V);
+    case C_LE: return  CPSR_Z || (CPSR_N != CPSR_V);
     case C_AL: return 1;
     case C_UNCOND: return 1;
     default: {
