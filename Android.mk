@@ -23,21 +23,11 @@ LOCAL_MODULE_TAGS       := optional
 include $(BUILD_MULTI_PREBUILT)
 
 include $(CLEAR_VARS)
-LOCAL_MODULE            := libhash
-LOCAL_MODULE_TAGS       := optional
-LOCAL_SHARED_LIBRARIES  := liblog
-LOCAL_SRC_FILES         := hash.c
-LOCAL_CFLAGS            += -gdwarf-2 -g3 -O0 -Wall -march=armv7-a -mcpu=cortex-a9
-LOCAL_CFLAGS            += -DANDROID
-include $(BUILD_STATIC_LIBRARY)
-# include $(BUILD_SHARED_LIBRARY)
-
-include $(CLEAR_VARS)
 LOCAL_MODULE            := libanemu
 LOCAL_MODULE_TAGS       := optional
 LOCAL_REQUIRED_MODULES  := libdarm
 LOCAL_SHARED_LIBRARIES  := liblog
-LOCAL_STATIC_LIBRARIES  := libdarm libr_asm libr_util libr_db libsdb libr libhash
+LOCAL_STATIC_LIBRARIES  := libdarm libr_asm libr_util libr_db libsdb libr
 LOCAL_SRC_FILES         := anemu.c.arm rasm.c
 LOCAL_C_INCLUDES        += dalvik/vm/darm-v7 \
                            dalvik/vm/anemu/$(RASM)/include/libr

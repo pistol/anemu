@@ -17,8 +17,6 @@
 /* darm disassembler */
 #include <darm.h>
 
-/* hash table copied from Dalvik */
-#include "hash.h"
 
 #define UNUSED __attribute__((unused))
 

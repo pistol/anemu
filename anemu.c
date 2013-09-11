@@ -1448,7 +1448,7 @@ static void
 emu_unprotect_mem() {
     uint32_t idx;
     uint32_t flags = PROT_READ | PROT_WRITE;
-    /* un-protect all pages in unique hash */
+    /* un-protect all pages in unique page list */
     for (idx = 0; idx < MAX_TAINTPAGES; idx++) {
         /* 0        - un-marked slot */
         /* non-zero - marked plage */
