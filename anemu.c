@@ -481,7 +481,7 @@ void emu_type_move_imm(const darm_t * d) {
         break;
     }
     case I_MVN: {
-        EMU(WREG(Rd) = d->imm);
+        EMU(WREG(Rd) = ~d->imm);
         break;
     }
         SWITCH_COMMON;
