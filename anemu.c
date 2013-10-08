@@ -1026,9 +1026,11 @@ void emu_start() {
            emu.tinfo->length);
     if (!emu.tinfo->addr || !emu.tinfo->tag || !emu.tinfo->length) {
         emu_abort("taint: trap taint info invalid");
+    } else {
+        /* FIXME: consider length when tainting mem, not just the first word at addr */
+        WTMEM(emu.tinfo->addr, emu.tinfo->tag);
     }
 
-    WTMEM(emu.tinfo->addr, emu.tinfo->tag);
     *emu.enabled = 1;
 
     emu.time_start = time_ms();
