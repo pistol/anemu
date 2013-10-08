@@ -366,7 +366,7 @@ cpumode_t TargetInstrSet(uint32_t instr) {
 }
 
 void BranchWritePC(uint32_t addr) {
-    EMU_ENTRY;
+    /* EMU_ENTRY; */
 
     emu_log_debug("RREGN(PC): %x\n", RREGN(PC));
     emu_log_debug("addr: %x\n", addr);
@@ -469,7 +469,7 @@ void emu_type_branch_misc(const darm_t * d) {
 }
 
 void emu_type_move_imm(const darm_t * d) {
-    EMU_ENTRY;
+    /* EMU_ENTRY; */
 
     switch(d->instr) {
     case I_MOV: {
@@ -498,7 +498,7 @@ void emu_type_move_imm(const darm_t * d) {
 }
 
 void emu_type_cmp_op(const darm_t * d) {
-    EMU_ENTRY;
+    /* EMU_ENTRY; */
 
     switch(d->instr) {
     case I_CMP: {
@@ -514,7 +514,7 @@ void emu_type_cmp_op(const darm_t * d) {
 }
 
 void emu_type_cmp_imm(const darm_t * d) {
-    EMU_ENTRY;
+    /* EMU_ENTRY; */
 
     switch(d->instr) {
     case I_CMP: {
@@ -530,7 +530,7 @@ void emu_type_cmp_imm(const darm_t * d) {
 }
 
 void emu_type_opless(const darm_t * d) {
-    EMU_ENTRY;
+    /* EMU_ENTRY; */
 
     switch(d->instr) {
     case I_NOP: {
@@ -542,7 +542,7 @@ void emu_type_opless(const darm_t * d) {
 }
 
 void emu_type_dst_src(const darm_t * d) {
-    EMU_ENTRY;
+    /* EMU_ENTRY; */
 
     if (d->S == B_SET) {
         emu_log_debug("S flag, we're Screwed!\n");
