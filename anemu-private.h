@@ -3,6 +3,8 @@
 
 #include "anemu.h"
 
+#define PROFILE
+
 #ifdef ANDROID
 /* #include <sys/cdefs.h> */
 #include <sys/ucontext.h>
@@ -12,6 +14,19 @@
 #define printf LOGI
 #else
 #include <ucontext.h>
+#endif
+
+/* TODO: use LOGE, LOGW, LOGI, LOGD */
+#ifndef PROFILE
+#define emu_log_error(...) LOGI(__VA_ARGS__)
+#define emu_log_warn(...)  LOGI(__VA_ARGS__)
+#define emu_log_info(...)  LOGI(__VA_ARGS__)
+#define emu_log_debug(...) LOGI(__VA_ARGS__)
+#else
+#define emu_log_error(...) LOGI(__VA_ARGS__)
+#define emu_log_warn(...)  (void)(NULL)
+#define emu_log_info(...)  (void)(NULL)
+#define emu_log_debug(...) (void)(NULL)
 #endif
 
 /* darm disassembler */
@@ -29,7 +44,7 @@
 #define CPU(reg) (emu.current.uc_mcontext.arm_##reg)
 
 #define EMU(stmt)                                 \
-    printf("EMU: %s\n", #stmt);                   \
+    emu_log_debug("EMU: %s\n", #stmt);            \
     stmt;                                         \
 
 #define emu_printf(...) printf("%s: ", __PRETTY_FUNCTION__); printf(__VA_ARGS__)
