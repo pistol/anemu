@@ -129,6 +129,7 @@ typedef struct _emu_t {
     uint32_t   taintpages[MAX_TAINTPAGES]; /* unique taint pages */
     bool      *enabled;          /* shared VM enabled flag */
     uint32_t   handled_instr;     /* number of ops seen so far */
+    pthread_mutex_t lock;        /* page fault handler sync */
 } emu_t;
 
 /* read/write register by number */

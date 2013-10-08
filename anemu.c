@@ -7,6 +7,7 @@
 #include <sys/mman.h>           /* mprotect */
 #include <errno.h>
 #include <asm/ptrace.h>         /* PSR bit macros */
+#include <pthread.h>
 
 #if HAVE_SETRLIMIT
 # include <sys/types.h>
@@ -38,6 +39,7 @@ uint8_t emu_regs_tainted() {
 
 /* SIGTRAP handler used for single-stepping */
 static void emu_handler(int sig, siginfo_t *si, void *ucontext) {
+    pthread_mutex_lock(&emu.lock);
     uint32_t pc = (*(ucontext_t *)ucontext).uc_mcontext.arm_pc;
 
     emu_log_debug("SIG %d with TRAP code: %d pc: %x addr: %x\n",
@@ -65,6 +67,7 @@ void emu_init(ucontext_t *ucontext) {
     if (emu.initialized == 1) return;
 
     emu.handled_instr = 0;
+    pthread_mutex_init(&emu.lock, NULL);
 
     emu_log_debug("initializing rasm2 disassembler ...\n");
 
@@ -1021,6 +1024,7 @@ void emu_stop() {
     }
     dbg_dump_ucontext(&emu.current);
     emu_log_debug("### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###\n");
+    pthread_mutex_unlock(&emu.lock);
     setcontext((const ucontext_t *)&emu.current); /* never returns */
 }
 
@@ -1300,6 +1304,8 @@ getAlignedPage(uint32_t addr) {
 
 static void
 mprotectHandler(int sig, siginfo_t *si, void *ucontext) {
+    pthread_mutex_lock(&emu.lock);
+
     uint32_t pc = (*(ucontext_t *)ucontext).uc_mcontext.arm_pc;
     uint32_t addr_fault = (*(ucontext_t *)ucontext).uc_mcontext.fault_address;
 
