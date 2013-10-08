@@ -875,7 +875,8 @@ static void emu_advance_pc() {
     if (!emu.branched) CPU(pc) += (emu_thumb_mode() ? 2 : 4);
     emu.branched = 0;
     emu_dump_diff();
-    printf("handled instructions: %d\n", ++emu.handled_instr);
+    emu.handled_instr++;
+    emu_log_debug("handled instructions: %d\n", emu.handled_instr);
     dbg_dump_ucontext(&emu.current);
     emu_log_debug("\n");
     emu_log_debug("*** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***\n");
