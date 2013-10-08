@@ -778,6 +778,28 @@ void emu_type_bits(const darm_t * d) {
         }
         break;
     }
+    case I_CLZ: {
+        WREG(Rd) = LeadingZerosCount(RREG(Rm));
+        WTREG1(Rd, Rm);
+        break;
+    }
+        SWITCH_COMMON;
+    }
+}
+
+void emu_type_mul(const darm_t * d) {
+    switch(d->instr) {
+    case I_MUL: {
+        /* TODO: move MUL to emu_dataop() and use OP macro instead */
+        EMU(WREG(Rd) = RREG(Rn) * RREG(Rm));
+        WTREG2(Rd, Rn, Rm);
+        break;
+    }
+    case I_MLA: {
+        EMU(WREG(Rd) = RREG(Rn) * RREG(Rm) + RREG(Ra));
+        WTREG2(Rd, Rn, Rm);
+        break;
+    }
         SWITCH_COMMON;
     }
 }
@@ -971,8 +993,13 @@ void emu_singlestep(uint32_t pc) {
         emu_type_mvcr(d);
         break;
     }
-    case T_ARM_BITS: {
+    case T_ARM_BITS:
+    case T_ARM_BITREV: {
         emu_type_bits(d);
+        break;
+    }
+    case T_ARM_MUL: {
+        emu_type_mul(d);
         break;
     }
     case T_INVLD: {
