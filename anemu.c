@@ -1112,9 +1112,10 @@ void emu_register_handler(DvmEmuGlobals* state) {
     sigemptyset(&sa.sa_mask);
     sa.sa_sigaction = emu_handler;
     /* sigaction (SIGSEGV, &sa, NULL); */
-    if (sigaction (SIGPROF, &sa, NULL) == -1) {
-        emu_abort("error: sigaction SIGPROF");
-    }
+    /* FIX: do not register SIGPROF, used for profiling */
+    // if (sigaction (SIGPROF, &sa, NULL) == -1) {
+    //    emu_abort("error: sigaction SIGPROF");
+    // }
     if (sigaction (SIGTRAP, &sa, NULL) == -1) {
         emu_abort("error: sigaction SIGTRAP");
     }
