@@ -130,6 +130,8 @@ typedef struct _emu_t {
     bool      *enabled;          /* shared VM enabled flag */
     uint32_t   handled_instr;     /* number of ops seen so far */
     pthread_mutex_t lock;        /* page fault handler sync */
+    double     time_start;       /* execution time measurements */
+    double     time_end;
 } emu_t;
 
 /* read/write register by number */
@@ -361,6 +363,7 @@ static void mmap_init();
 
 static inline uint32_t instr_mask(darm_instr_t instr);
 
+static inline double time_ms();
 /* Page Protections */
 
 static int32_t getPageSize();

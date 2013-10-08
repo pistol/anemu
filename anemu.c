@@ -8,6 +8,7 @@
 #include <errno.h>
 #include <asm/ptrace.h>         /* PSR bit macros */
 #include <pthread.h>
+#include <time.h>
 
 #if HAVE_SETRLIMIT
 # include <sys/types.h>
@@ -1002,6 +1003,7 @@ void emu_start() {
     WTMEM(emu.tinfo->addr, emu.tinfo->tag);
     *emu.enabled = 1;
 
+    emu.time_start = time_ms();
     while(1) {                  /* infinite loop */
         emu_singlestep(CPU(pc));
     }
@@ -1014,9 +1016,15 @@ void emu_start() {
 void emu_stop() {
     CPU(pc) |= emu_thumb_mode() ? 1 : 0; /* LSB set for Thumb */
 
-    printf("resuming exec pc old: %0lx new: %0lx\n",
+    emu.time_end = time_ms();
+    double delta = emu.time_end - emu.time_start;
+    printf("time total (ms): %f", delta);
+
+    printf("resuming exec pc old: %0lx new: %0lx handled instr: %d time/instr (ns): %f\n",
            emu.original.uc_mcontext.arm_pc,
-           emu.current.uc_mcontext.arm_pc);
+           emu.current.uc_mcontext.arm_pc,
+           emu.handled_instr,
+           (delta * 1e6) / emu.handled_instr);
 
     *emu.enabled = 0;
     if (emu_regs_tainted()) {
@@ -1610,4 +1618,12 @@ instr_mask(darm_instr_t instr) {
     case I_STRH: { return 0xffff; }
     default:     { return 0xffffffff; }
     }
+}
+
+static inline double time_ms(void) {
+    struct timespec res;
+    clock_gettime(CLOCK_MONOTONIC, &res);
+    double result = 1000.0 * res.tv_sec + (double) res.tv_nsec / 1e6;
+    // printf("sec: %ld nsec: %ld\n", res.tv_sec, res.tv_nsec);
+    return result;
 }
