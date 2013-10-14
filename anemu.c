@@ -1,6 +1,5 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <stdbool.h>
 #include <unistd.h>
 // #include <assert.h>
 #include <signal.h>
@@ -9,6 +8,7 @@
 #include <asm/ptrace.h>         /* PSR bit macros */
 #include <pthread.h>
 #include <time.h>
+#include <string.h>             /* memset */
 
 #if HAVE_SETRLIMIT
 # include <sys/types.h>
@@ -64,28 +64,6 @@ void emu_init(ucontext_t *ucontext) {
     emu.branched = 0;
 
     emu_dump();
-
-    if (emu.initialized == 1) return;
-
-    emu.handled_instr = 0;
-    pthread_mutex_init(&emu.lock, NULL);
-
-    emu_log_debug("initializing rasm2 disassembler ...\n");
-
-    /* init darm */
-    emu_log_debug("initializing darm disassembler ...\n");
-    darm = malloc(sizeof(darm_t));
-
-    /* process maps */
-    emu_map_parse();
-
-    /* taint tag storage */
-    mmap_init();
-
-    emu_clear_taintpages();
-
-    emu.initialized = 1;
-    emu_log_debug("finished\n");
 }
 
 uint8_t emu_eval_cond(uint32_t cond) {
@@ -1069,6 +1047,23 @@ uint8_t emu_stop_trigger() {
 
 /* Setup emulation handler. */
 void emu_register_handler() {
+    if (emu.initialized == 1) return;
+
+    emu.handled_instr = 0;
+    pthread_mutex_init(&emu.lock, NULL);
+
+    /* init darm */
+    emu_log_debug("initializing darm disassembler ...\n");
+    darm = malloc(sizeof(darm_t));
+
+    /* process maps */
+    emu_map_parse();
+
+#ifndef NO_TAINT
+    /* taint tag storage */
+    mmap_init();
+    emu_clear_taintpages();
+#endif
 
 #if HAVE_SETRLIMIT
     /* Be recursion friendly */
@@ -1108,6 +1103,8 @@ void emu_register_handler() {
 
     /* 3. setup mprotect handler */
     mprotectInit();
+
+    emu.initialized = 1;
 }
 
 const darm_t* emu_disasm(uint32_t pc) {
