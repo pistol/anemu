@@ -56,7 +56,7 @@ static void emu_handler(int sig, siginfo_t *si, void *ucontext) {
 }
 
 void emu_init(ucontext_t *ucontext) {
-    assert(*emu.enabled == false);
+    assert(emu.enabled == false);
 
     // emu_log_debug("saving original ucontext ...\n");
     emu.previous = emu.current = emu.original = *ucontext;
@@ -1018,20 +1018,9 @@ void emu_singlestep(uint32_t pc) {
 void emu_start() {
     emu_log_info("starting emulation ...\n\n");
 
-    // determine entry mode: emu or trap-single-step-emu
-    // read arguments from JNI trap: addr + tag
-    emu_log_debug("taint info: addr: %x tag: %x length: %x\n",
-           emu.tinfo->addr,
-           emu.tinfo->tag,
-           emu.tinfo->length);
-    if (!emu.tinfo->addr || !emu.tinfo->tag || !emu.tinfo->length) {
-        emu_abort("taint: trap taint info invalid");
-    } else {
-        /* FIXME: consider length when tainting mem, not just the first word at addr */
-        WTMEM(emu.tinfo->addr, emu.tinfo->tag);
-    }
+    /* disabled taintinfo_t usage and instead using explicit emu_set_taint APIs before entering emu */
 
-    *emu.enabled = 1;
+    emu.enabled = 1;
 
     emu.time_start = time_ms();
     while(1) {                  /* infinite loop */
@@ -1056,7 +1045,7 @@ void emu_stop() {
            emu.handled_instr,
            (delta * 1e6) / emu.handled_instr);
 
-    *emu.enabled = 0;
+    emu.enabled = 0;
     if (emu_regs_tainted()) {
         emu_log_warn("WARNING: stopping emu with tainted regs!\n");
     }
@@ -1079,12 +1068,7 @@ uint8_t emu_stop_trigger() {
 }
 
 /* Setup emulation handler. */
-void emu_register_handler(DvmEmuGlobals* state) {
-    if (state == NULL) {
-        emu_abort("shared state == NULL");
-    }
-    emu.tinfo   = &state->tinfo;
-    emu.enabled = &state->enabled;
+void emu_register_handler() {
 
 #if HAVE_SETRLIMIT
     /* Be recursion friendly */
@@ -1373,7 +1357,7 @@ mprotectHandler(int sig, siginfo_t *si, void *ucontext) {
     emu_map_lookup(pc);
     emu_map_lookup(addr_fault);
 
-    if (*emu.enabled == 1) {
+    if (emu.enabled == 1) {
         dbg_dump_ucontext((ucontext_t *)ucontext);
         emu_abort("massive fuckup, trapping while in emu!\n");
     }
@@ -1398,7 +1382,7 @@ mprotectHandler(int sig, siginfo_t *si, void *ucontext) {
         emu_log_debug("un-protecting mem before singlestep...\n");
         emu_unprotect_mem();
 
-        *emu.enabled = 1;
+        emu.enabled = 1;
 
         emu_log_debug("singlestep instruction at pc: %x\n", pc);
         emu_singlestep(pc);
@@ -1530,6 +1514,10 @@ emu_get_taint_mem(uint32_t addr) {
 }
 
 void emu_set_taint_mem(uint32_t addr, uint32_t tag) {
+    if (!addr || !tag) {
+        emu_abort("invalid taint addr: %x tag: %x", addr, tag);
+    }
+
     addr = Align(addr, 4);      /* word align */
     taintmap_t *taintmap   = emu_get_taintmap(addr);
     uint32_t    offset     = (addr - taintmap->start) >> 2;
@@ -1552,6 +1540,10 @@ void emu_set_taint_mem(uint32_t addr, uint32_t tag) {
         emu_mark_page(addr);
     }
     taintmap->data[offset] = tag;  /* word (32-bit) based tag storage */
+}
+
+void emu_set_taint_array(uint32_t addr, uint32_t tag, uint32_t length) {
+    emu_abort("unimplemented");
 }
 
 static int emu_mark_page(uint32_t addr) {
@@ -1638,6 +1630,10 @@ emu_unprotect_mem() {
             mprotectPage(page, flags);
         }
     }
+}
+
+bool emu_enabled() {
+    return emu.enabled;
 }
 
 static inline uint32_t

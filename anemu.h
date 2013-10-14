@@ -10,21 +10,12 @@ extern "C" {  // only need to export C interface if
 #define EMU_MARKER_STOP  asm volatile("bkpt 1337")
 
 /* Public API */
-
-typedef struct _taintinfo_t {
-    uint32_t addr;
-    uint32_t length;
-    uint32_t tag;
-} taintinfo_t;
-
-typedef struct _DvmEmuGlobals {
-    taintinfo_t tinfo;
-    bool enabled;
-} DvmEmuGlobals;
-
-void emu_register_handler(DvmEmuGlobals* state);
+void emu_register_handler();
 
 void emu_set_taint_mem(uint32_t addr, uint32_t tag);
+void emu_set_taint_array(uint32_t addr, uint32_t tag, uint32_t length);
+
+bool emu_enabled();
 
 #ifdef __cplusplus
 }

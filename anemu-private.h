@@ -123,12 +123,11 @@ typedef struct _emu_t {
     uint32_t  *regs;            /* easy access to ucontext regs */
     uint16_t   nr_maps;
     map_t      maps[MAX_MAPS];
-    taintinfo_t *tinfo;          /* trap tainted data (addr + tag) */
     uint32_t   taintreg[N_REGS]; /* taint storage for regs */
     taintmap_t taintmaps[MAX_TAINTMAPS]; /* taint storage for memory */
     uint32_t   taintpages[MAX_TAINTPAGES]; /* unique taint pages */
-    bool      *enabled;          /* shared VM enabled flag */
     uint32_t   handled_instr;     /* number of ops seen so far */
+    bool       enabled;          /* is emulation currently running */
     pthread_mutex_t lock;        /* page fault handler sync */
     double     time_start;       /* execution time measurements */
     double     time_end;
