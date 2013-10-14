@@ -1015,11 +1015,11 @@ void emu_stop() {
 
     emu.time_end = time_ms();
     double delta = emu.time_end - emu.time_start;
-    printf("time total (ms): %f", delta);
 
-    printf("resuming exec pc old: %0lx new: %0lx handled instr: %d time/instr (ns): %f\n",
+    printf("resuming exec pc old: %0lx new: %0lx time total (ms): %f handled instr: %d time/instr (ns): %f\n",
            emu.original.uc_mcontext.arm_pc,
            emu.current.uc_mcontext.arm_pc,
+           delta,
            emu.handled_instr,
            (delta * 1e6) / emu.handled_instr);
 
@@ -1361,8 +1361,7 @@ mprotectHandler(int sig, siginfo_t *si, void *ucontext) {
 
     emu_init((ucontext_t *) ucontext);
 
-    uint32_t addr_aligned = getAlignedPage(addr_fault);
-    emu_log_debug("fault addr: %x fixing permissions for page: %x\n", addr_fault, addr_aligned);
+    emu_log_debug("fault addr: %x fixing permissions for page: %x\n", addr_fault, getAlignedPage(addr_fault));
 
     mprotectPage(addr_fault, PROT_READ | PROT_WRITE); /* will align internally */
 

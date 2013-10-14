@@ -3,7 +3,10 @@
 
 #include "anemu.h"
 
+// #define ANDROID
+// disable verbose logging for perf measurements
 #define PROFILE
+#define NO_TAINT
 
 #ifdef ANDROID
 /* #include <sys/cdefs.h> */
@@ -18,12 +21,12 @@
 
 /* TODO: use LOGE, LOGW, LOGI, LOGD */
 #ifndef PROFILE
-#define emu_log_error(...) LOGI(__VA_ARGS__)
-#define emu_log_warn(...)  LOGI(__VA_ARGS__)
-#define emu_log_info(...)  LOGI(__VA_ARGS__)
-#define emu_log_debug(...) LOGI(__VA_ARGS__)
+#define emu_log_error(...) printf(__VA_ARGS__)
+#define emu_log_warn(...)  printf(__VA_ARGS__)
+#define emu_log_info(...)  printf(__VA_ARGS__)
+#define emu_log_debug(...) printf(__VA_ARGS__)
 #else
-#define emu_log_error(...) LOGI(__VA_ARGS__)
+#define emu_log_error(...) printf(__VA_ARGS__)
 #define emu_log_warn(...)  (void)(NULL)
 #define emu_log_info(...)  (void)(NULL)
 #define emu_log_debug(...) (void)(NULL)
@@ -124,10 +127,10 @@ typedef struct _emu_t {
     uint16_t   nr_maps;
     map_t      maps[MAX_MAPS];
     uint32_t   taintreg[N_REGS]; /* taint storage for regs */
-    taintmap_t taintmaps[MAX_TAINTMAPS]; /* taint storage for memory */
+    taintmap_t taintmaps[MAX_TAINTMAPS];   /* taint storage for memory */
     uint32_t   taintpages[MAX_TAINTPAGES]; /* unique taint pages */
-    uint32_t   handled_instr;     /* number of ops seen so far */
     bool       enabled;          /* is emulation currently running */
+    uint32_t   handled_instr;    /* number of ops seen so far */
     pthread_mutex_t lock;        /* page fault handler sync */
     double     time_start;       /* execution time measurements */
     double     time_end;
@@ -156,9 +159,13 @@ typedef struct _emu_t {
 #define WTREGN(dest, tag)  emu_set_taint_reg(dest, tag)
 
 /* taint memory */
+#ifndef NO_TAINT
 #define RTMEM(addr)      emu_get_taint_mem(addr)
 #define WTMEM(addr, tag) emu_set_taint_mem(addr, tag)
-
+#else
+#define RTMEM(addr)      (0)
+#define WTMEM(addr, tag) (0)
+#endif
 /* process two operands according to instr type */
 #define OP(a, b) emu_dataop(d, a, b)
 
