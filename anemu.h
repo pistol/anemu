@@ -1,13 +1,16 @@
 #ifndef _INCLUDE_ANEMU_H_
 #define _INCLUDE_ANEMU_H_
 
+#include <stdint.h>
+#include <stdbool.h>
+
 #ifdef __cplusplus
 extern "C" {  // only need to export C interface if
               // used by C++ source code
 #endif
 
 #define EMU_MARKER_START asm volatile("bkpt 0");
-#define EMU_MARKER_STOP  asm volatile("bkpt 1337")
+#define EMU_MARKER_STOP  asm volatile("bkpt 1")
 
 /* Public API */
 void emu_register_handler();
