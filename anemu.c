@@ -1434,8 +1434,8 @@ mmap_init() {
     emu.taintmaps[TAINTMAP_LIB].bytes    = bytes;
 
     emu_log_debug("mmap lib   returned: %p\n", emu.taintmaps[TAINTMAP_LIB].data);
-    if(emu.taintmaps[TAINTMAP_STACK].data == MAP_FAILED) {
-        emu_abort("mmap stack failed");
+    if(emu.taintmaps[TAINTMAP_LIB].data == MAP_FAILED) {
+        emu_abort("mmap lib failed");
     }
 
     /* stack taintmap */
@@ -1452,8 +1452,8 @@ mmap_init() {
     emu.taintmaps[TAINTMAP_STACK].bytes  = bytes;
 
     emu_log_debug("mmap stack returned: %p\n", emu.taintmaps[TAINTMAP_STACK].data);
-    if (emu.taintmaps[TAINTMAP_LIB].data  == MAP_FAILED) {
-        emu_abort("mmap lib failed");
+    if (emu.taintmaps[TAINTMAP_STACK].data  == MAP_FAILED) {
+        emu_abort("mmap stack failed");
     }
 
     emu_log_debug("taintmaps initialized\n");
