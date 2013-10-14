@@ -6,13 +6,15 @@ DARM=../darm-v7
 
 
 # Debugging
-CFLAGS=-gdwarf-2 -g3 -O0
+CFLAGS=-gdwarf-2 -g3 -O0 -ggdb -fno-omit-frame-pointer
+# CFLAGS=-O3
 # ARM specific
-CFLAGS+=-march=armv7-a -mcpu=cortex-a9 -marm -mfloat-abi=softfp
+CFLAGS+=-march=armv7-a -mcpu=cortex-a9 -mtune=cortex-a9 -marm
 # Inline functions
-CFLAGS+=-finline-functions
+# CFLAGS+=-finline-functions
 # Show all warnings
 CFLAGS+=-Wall
+CFLAGS+=-fPIC
 # Includes
 CFLAGS+=-I$(DARM)
 
@@ -44,6 +46,8 @@ CFLAGS+=-DHAVE_SETRLIMIT
 LDFLAGS+=-L$(DARM)
 # LDFLAGS+=$(DARM)/libdarm.a
 LDFLAGS+=-ldarm
+# clock_gettime
+LDFLAGS+=-lrt
 
 C=$(wildcard *.c)
 EXCLUDES=rasm.c
@@ -51,29 +55,34 @@ C:=$(filter-out $(EXCLUDES),$(C))
 SRCS=$(C)
 O=$(C:.c=.o)
 
+LIBS=libanemu.a libanemu.so
+TEST_BIN=tests/matrix tests/zlib
+
 .PHONY: all run clean
 
-all: $(TARGET).dis
+default: lib $(TEST_BIN)
 
-run: all
-	./$(TARGET)
+lib: $(LIBS)
 
-$(TARGET): $(O)
-	@echo "Objects: $+"
-	$(MAKE) -C $(DARM)
-	$(CC) $+ $(LDFLAGS) -o $@
+%.o: %.c
+  # $(MAKE) -C $(DARM)
+	$(CC) $(CFLAGS) -o $@ -c $^ $(LDFLAGS)
 
-# %.o: %.c
-# 	@echo "C files: $(C)"
-# 	$(CC) $(CFLAGS) -c $< -o $@
+%.a: $(O)
+	$(AR) cr $@ $^
 
-# %.o: %.s
-# 	@echo "S files: $(S)"
-# 	$(AS) $(ASFLAGS) $< -o $@
+%.so: $(O)
+	$(CC) -shared $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
 %.dis: %
 	objdump -d $^ > $^.dis
 #	objdump -dSsClwt $^ > $^.dis
 
+%: %.c
+	$(CC) $(CFLAGS) -o $@ $^ -I. -Itests $(LDFLAGS) -L. -lanemu -lz
+
+test: lib $(TEST_BIN)
+	./tests/matrix 0 128
+
 clean:
-	rm -f $(TARGET) $(wildcard *.o) $(TARGET).s $(TARGET).dis
+	rm -f $(LIBS) $(wildcard *.o) $(TEST_BIN)
