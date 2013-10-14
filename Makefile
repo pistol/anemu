@@ -41,29 +41,15 @@ endif
 
 # Custom defines
 CFLAGS+=-DHAVE_SETRLIMIT
-# R2 libs
-# CFLAGS+=`pkg-config --libs --cflags r_asm`
-
-# CFLAGS+=-lr_asm
-# CFLAGS+=-I$(RADARE)/libr/include
-
-# LDFLAGS+=-L/usr/local/lib
-# LDFLAGS+=-lr_asm
 LDFLAGS+=-L$(DARM)
 # LDFLAGS+=$(DARM)/libdarm.a
 LDFLAGS+=-ldarm
 
-# Debug Symbols
-# ASFLAGS=-g3
-# ARM specific
-ASFLAGS+=-march=armv7-a -mcpu=cortex-a9
-# Assembly + Source listing
-# ASFLAGS+=-alh
-
 C=$(wildcard *.c)
-S=$(wildcard *.S)
-SRCS=$(C) $(S)
-O=$(C:.c=.o) $(S:.S=.o)
+EXCLUDES=rasm.c
+C:=$(filter-out $(EXCLUDES),$(C))
+SRCS=$(C)
+O=$(C:.c=.o)
 
 .PHONY: all run clean
 
