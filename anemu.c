@@ -499,6 +499,10 @@ void emu_type_cmp_imm(const darm_t * d) {
         ASM_RI_CMP(CMP, Rn, imm);
         break;
     }
+    case I_CMN: {
+        ASM_RI_CMP(CMN, Rn, imm);
+        break;
+    }
     case I_TST: {
         ASM_RI_CMP(TST, Rn, imm);
         break;
