@@ -316,7 +316,8 @@ struct sigcontext {
 
 /* API */
 
-void emu_init(ucontext_t *ucontext);
+void emu_init();
+void emu_ucontext(ucontext_t *ucontext);
 void emu_start();
 void emu_stop();
 uint8_t emu_stop_trigger();

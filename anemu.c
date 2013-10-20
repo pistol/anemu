@@ -49,13 +49,13 @@ static void emu_handler(int sig, siginfo_t *si, void *ucontext) {
                pc,
                (int) si->si_addr);
 
-    emu_init((ucontext_t *)ucontext); /* one time emu state initialization */
+    emu_ucontext((ucontext_t *)ucontext); /* one time emu state initialization */
     emu_map_lookup(pc);
     emu_start();
     emu_stop();
 }
 
-void emu_init(ucontext_t *ucontext) {
+void emu_ucontext(ucontext_t *ucontext) {
     assert(emu.enabled == false);
 
     // emu_log_debug("saving original ucontext ...\n");
@@ -998,6 +998,30 @@ void emu_singlestep(uint32_t pc) {
     emu_advance_pc();
 }
 
+void emu_init() {
+    if (emu.initialized == 1) return;
+
+    emu.handled_instr = 0;
+    emu.disasm_bytes  = 0;
+    emu.standalone    = false;
+    pthread_mutex_init(&emu.lock, NULL);
+
+    /* init darm */
+    emu_log_debug("initializing darm disassembler ...\n");
+    darm = malloc(sizeof(darm_t));
+
+    /* process maps */
+    emu_map_parse();
+
+#ifndef NO_TAINT
+    /* taint tag storage */
+    mmap_init();
+    emu_clear_taintpages();
+#endif
+
+    emu.initialized = 1;
+}
+
 void emu_start() {
     emu_log_info("starting emulation ...\n\n");
 
@@ -1052,23 +1076,7 @@ uint8_t emu_stop_trigger() {
 
 /* Setup emulation handler. */
 void emu_register_handler() {
-    if (emu.initialized == 1) return;
-
-    emu.handled_instr = 0;
-    pthread_mutex_init(&emu.lock, NULL);
-
-    /* init darm */
-    emu_log_debug("initializing darm disassembler ...\n");
-    darm = malloc(sizeof(darm_t));
-
-    /* process maps */
-    emu_map_parse();
-
-#ifndef NO_TAINT
-    /* taint tag storage */
-    mmap_init();
-    emu_clear_taintpages();
-#endif
+    emu_init();
 
 #if HAVE_SETRLIMIT
     /* Be recursion friendly */
@@ -1109,7 +1117,6 @@ void emu_register_handler() {
     /* 3. setup mprotect handler */
     mprotectInit();
 
-    emu.initialized = 1;
 }
 
 const darm_t* emu_disasm(uint32_t pc) {
@@ -1364,7 +1371,7 @@ mprotectHandler(int sig, siginfo_t *si, void *ucontext) {
         emu_abort("massive fuckup, trapping while in emu!\n");
     }
 
-    emu_init((ucontext_t *) ucontext);
+    emu_ucontext((ucontext_t *) ucontext);
 
     emu_log_debug("fault addr: %x fixing permissions for page: %x\n", addr_fault, getAlignedPage(addr_fault));
 
