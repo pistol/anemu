@@ -855,7 +855,8 @@ inline uint32_t emu_regshift(const darm_t *d) {
 }
 
 static void emu_advance_pc() {
-    if (!emu.branched) CPU(pc) += (emu_thumb_mode() ? 2 : 4);
+    assert(emu.disasm_bytes == 2 || emu.disasm_bytes == 4);
+    if (!emu.branched) CPU(pc) += emu.disasm_bytes;
     emu.branched = 0;
     emu_dump_diff();
     emu.handled_instr++;
@@ -1129,16 +1130,17 @@ const darm_t* emu_disasm_internal(darm_t *d, uint32_t pc) {
     uint16_t w     = ins & 0xffff;
     uint16_t w2    = ins >> 16;
     uint32_t addr  = pc | emu_thumb_mode(); /* LSB set for Thumb / Thumb2 */
-    uint8_t  bytes = darm_disasm(d, w, w2, addr);
+    uint8_t  ret   = darm_disasm(d, w, w2, addr);
     /* Returns 0 on failure, 1 for Thumb, 2 for Thumb2, and 2 for ARMv7. */
-    emu_log_debug("emu_disasm : w: %x w2: %x addr: %x T: %d\n", w, w2, addr, emu_thumb_mode());
-    if (bytes) {
+    emu_log_debug("emu_disasm : w: %x w2: %x addr: %x T: %d ret: %d\n", w, w2, addr, emu_thumb_mode(), ret);
+    if (ret) {
 #ifndef PROFILE
         darm_str_t str;
         darm_str2(d, &str, 1); /* lowercase str */
         emu_log_debug("darm : %x %x %s\n", pc, d->w, str.total);
 #endif
-        emu_log_debug("bytes: %d\n", bytes);
+        emu.disasm_bytes = ret * 2 /* bytes */;
+        emu_log_debug("bytes: %d\n", emu.disasm_bytes);
     } else {
         emu_log_error("darm : %x %x %x <invalid instruction>\n", pc, w, w2);
         return NULL;

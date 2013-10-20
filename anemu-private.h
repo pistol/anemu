@@ -123,6 +123,7 @@ typedef struct _emu_t {
     ucontext_t original;        /* process state when trap occured */
     uint8_t    initialized;     /* boolean */
     uint8_t    branched;        /* branch taken? */
+    uint8_t    disasm_bytes;    /* bytes used in last disasm */
     uint32_t  *regs;            /* easy access to ucontext regs */
     uint16_t   nr_maps;
     map_t      maps[MAX_MAPS];
