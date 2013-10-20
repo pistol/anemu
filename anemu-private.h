@@ -268,9 +268,6 @@ formats for S instructions:
 
 #define PLD(regname) asm volatile("pld [%[reg]]" :: [reg] "r" (d->regname));
 
-#define MARKER_START_VAL    0
-#define MARKER_STOP_VAL     1
-
 #define SIGCONTEXT_REG_COUNT 21
 static const char *sigcontext_names[] = {"trap_no", "error_code", "oldmask",
                                          "r0", "r1", "r2", "r3", "r4", "r5",
