@@ -687,7 +687,8 @@ void emu_type_memory(const darm_t * d) {
     case I_PUSH: {
         uint16_t reglist       = d->reglist;
         const uint8_t regcount = BitCount(reglist); /* number of bits set to 1 */
-        uint32_t addr          = RREG(Rn) - 4 * regcount;
+        if (d->Rn != R_INVLD) assert(d->Rn == SP);
+        uint32_t addr          = RREGN(SP) - 4 * regcount;
         uint8_t reg            = 0;
 
         while (reglist) {
@@ -700,13 +701,14 @@ void emu_type_memory(const darm_t * d) {
             addr          += 4;
         }
 
-        WREG(Rn) = RREG(Rn) - 4 * regcount; /* update SP */
+        WREGN(SP) = RREGN(SP) - 4 * regcount; /* update SP */
         break;
     }
     case I_POP: {
         uint16_t reglist       = d->reglist;
         const uint8_t regcount = BitCount(reglist); /* number of bits set to 1 */
-        uint32_t addr          = RREG(Rn);
+        if (d->Rn != R_INVLD) assert(d->Rn == SP);
+        uint32_t addr          = RREGN(SP);
         uint8_t reg            = 0;
 
         while (reglist) {
@@ -723,7 +725,7 @@ void emu_type_memory(const darm_t * d) {
             BXWritePC(RMEM(addr));
         }
         if (!BitCheck(d->reglist, SP)) {
-            EMU(WREG(Rn) = RREG(Rn) + 4 * regcount); /* update SP */
+            EMU(WREGN(SP) = RREGN(SP) + 4 * regcount); /* update SP */
         } else {
             emu_abort("unknown Rn %d %x", d->Rn, RREG(Rn));
         }
