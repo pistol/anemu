@@ -336,7 +336,7 @@ cpumode_t CurrentInstrSet() {
 }
 
 cpumode_t TargetInstrSet(uint32_t instr) {
-    if (instr == I_BX) {        /* swap mode */
+    if (instr == I_BX || instr == I_BLX) { /* swap mode */
         return (CurrentInstrSet() == M_ARM ? M_THUMB : M_ARM);
     } else {                    /* keep current mode */
         return (CurrentInstrSet());
@@ -804,6 +804,11 @@ void emu_type_uncond(const darm_t * d) {
     case I_PLD:
     case I_PLI: {
         emu_log_debug("treating as NOP\n");
+        break;
+    }
+    case I_BLX: {
+        /* HACK: avoiding duplicate code by re-using BLX defined elsewhere */
+        emu_type_branch_syscall(d);
         break;
     }
         SWITCH_COMMON;
