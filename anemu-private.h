@@ -165,7 +165,7 @@ typedef struct _emu_t {
 #define WTMEM(addr, tag) emu_set_taint_mem(addr, tag)
 #else
 #define RTMEM(addr)      (0)
-#define WTMEM(addr, tag) (0)
+#define WTMEM(addr, tag) (void)(NULL)
 #endif
 /* process two operands according to instr type */
 #define OP(a, b) emu_dataop(d, a, b)
@@ -270,11 +270,13 @@ formats for S instructions:
 #define PLD(regname) asm volatile("pld [%[reg]]" :: [reg] "r" (d->regname));
 
 #define SIGCONTEXT_REG_COUNT 21
+#ifndef PROFILE
 static const char *sigcontext_names[] = {"trap_no", "error_code", "oldmask",
                                          "r0", "r1", "r2", "r3", "r4", "r5",
                                          "r6", "r7", "r8", "r9", "r10",
                                          "fp", "ip", "sp", "lr", "pc", "cpsr",
                                          "fault_address"};
+#endif
 
 typedef enum _cpumode_t {
     M_ARM, M_THUMB

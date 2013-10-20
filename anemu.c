@@ -63,7 +63,9 @@ void emu_ucontext(ucontext_t *ucontext) {
     emu.regs = (uint32_t *)&emu.current.uc_mcontext.arm_r0;
     emu.branched = 0;
 
+#ifndef PROFILE
     emu_dump();
+#endif
 }
 
 uint8_t emu_eval_cond(uint32_t cond) {
@@ -670,7 +672,6 @@ void emu_type_memory(const darm_t * d) {
             reglist       &= ~(1 << reg);                 /* unset this bit */
             emu_log_debug("addr: %x, r%d: %8x\n", addr, reg, RMEM(addr));
             if (reg == PC) break;
-            /* EMU(WREGN(reg) = RMEM(addr)); */
             WREGN(reg) = RMEM(addr);
             if (RTREGN(reg) || RTMEM(addr)) WTREGN(reg, RTMEM(addr));
             addr          += 4;
@@ -700,7 +701,6 @@ void emu_type_memory(const darm_t * d) {
             reglist       &= ~(1 << reg);                 /* unset this bit */
             emu_log_debug("addr: %x, r%d: %8x\n", addr, reg, RREGN(reg));
             WMEM(addr)     = RREGN(reg);
-            /* EMU(WMEM(addr) = RREGN(reg)); */
             if (RTMEM(addr) || RTREGN(reg)) WTMEM(addr, RTREGN(reg));
             addr          += 4;
         }
@@ -720,7 +720,6 @@ void emu_type_memory(const darm_t * d) {
             reglist       &= ~(1 << reg);                 /* unset this bit */
             emu_log_debug("addr: %x, r%d: %8x\n", addr, reg, RMEM(addr));
             if (reg == PC) break;
-            /* EMU(WREGN(reg) = RMEM(addr)); */
             WREGN(reg) = RMEM(addr);
             if (RTREGN(reg) || RTMEM(addr)) WTREGN(reg, RTMEM(addr));
             addr          += 4;
@@ -864,20 +863,20 @@ static void emu_advance_pc() {
     assert(emu.disasm_bytes == 2 || emu.disasm_bytes == 4);
     if (!emu.branched) CPU(pc) += emu.disasm_bytes;
     emu.branched = 0;
-    emu_dump_diff();
     emu.handled_instr++;
-    emu_log_debug("handled instructions: %d\n", emu.handled_instr);
-    dbg_dump_ucontext(&emu.current);
-    emu_log_debug("\n");
-    emu_log_debug("*** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***\n");
 #ifndef PROFILE
+    emu_log_debug("handled instructions: %d\n", emu.handled_instr);
+    emu_dump_diff();
+    dbg_dump_ucontext(&emu.current);
     usleep(10 * 1000);          /* delay to allow printf flush to logcat */
-#endif
     if (emu_regs_tainted() == 0) {
         emu_protect_mem();
         emu_stop();             /* will not return */
         emu_log_debug("taint: no tainted regs remaining, enable protection and leave emu\n");
     }
+    emu_log_debug("*** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***\n");
+    emu_log_debug("\n");
+#endif
 }
 
 static inline void emu_set_taint_reg(uint32_t reg, uint32_t tag) {
@@ -1199,16 +1198,16 @@ static inline uint32_t *emu_write_reg(darm_reg_t reg) {
 
 static void dbg_dump_ucontext(ucontext_t *uc) {
     mcontext_t *r = &uc->uc_mcontext;
-    emu_log_debug("ucontext dump:\n");
-    emu_log_debug("fault addr %8x\n",
+    printf("ucontext dump:\n");
+    printf("fault addr %8x\n",
            (uint32_t)r->fault_address);
-    emu_log_debug("r0: %8x  r1: %8x  r2: %8x  r3: %8x\n",
+    printf("r0: %8x  r1: %8x  r2: %8x  r3: %8x\n",
            (uint32_t)r->arm_r0, (uint32_t)r->arm_r1, (uint32_t)r->arm_r2,  (uint32_t)r->arm_r3);
-    emu_log_debug("r4: %8x  r5: %8x  r6: %8x  r7: %8x\n",
+    printf("r4: %8x  r5: %8x  r6: %8x  r7: %8x\n",
            (uint32_t)r->arm_r4, (uint32_t)r->arm_r5, (uint32_t)r->arm_r6,  (uint32_t)r->arm_r7);
-    emu_log_debug("r8: %8x  r9: %8x  sl: %8x  fp: %8x\n",
+    printf("r8: %8x  r9: %8x  sl: %8x  fp: %8x\n",
            (uint32_t)r->arm_r8, (uint32_t)r->arm_r9, (uint32_t)r->arm_r10, (uint32_t)r->arm_fp);
-    emu_log_debug("ip: %8x  sp: %8x  lr: %8x  pc: %8x  cpsr: %8x\n",
+    printf("ip: %8x  sp: %8x  lr: %8x  pc: %8x  cpsr: %8x\n",
            (uint32_t)r->arm_ip, (uint32_t)r->arm_sp, (uint32_t)r->arm_lr,  (uint32_t)r->arm_pc, (uint32_t)r->arm_cpsr);
 }
 
@@ -1314,7 +1313,7 @@ static map_t* emu_map_lookup(uint32_t addr) {
             return m;
         }
     }
-    emu_log_debug("unable to locate addr: %x\n", addr);
+    emu_abort("unable to locate addr: %x\n", addr);
     return NULL;
 }
 
@@ -1495,7 +1494,7 @@ emu_dump_taintmaps() {
         tm = &emu.taintmaps[idx];
         if (tm->data == NULL) {
             /* FIXME: this should only occur for the 3rd (heap, idx 2) unused map */
-            emu_log_debug("unallocated data for taintmap %d", idx);
+            emu_log_debug("unallocated data for taintmap %d\n", idx);
             continue;
         }
         for (offset = 0; offset < tm->bytes >> 2; offset++) {
