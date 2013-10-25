@@ -20,7 +20,7 @@
 
 #define TAINT_CLEAR 0x0
 
-uint8_t emu_regs_tainted() {
+inline uint8_t emu_regs_tainted() {
     int i, tainted;
     tainted = N_REGS;
     for (i = 0; i < N_REGS; i++) {
@@ -55,7 +55,7 @@ static void emu_handler(int sig, siginfo_t *si, void *ucontext) {
     emu_stop();
 }
 
-void emu_ucontext(ucontext_t *ucontext) {
+inline void emu_ucontext(ucontext_t *ucontext) {
     assert(emu.enabled == false);
 
     // emu_log_debug("saving original ucontext ...\n");
@@ -68,7 +68,7 @@ void emu_ucontext(ucontext_t *ucontext) {
 #endif
 }
 
-uint8_t emu_eval_cond(uint32_t cond) {
+inline uint8_t emu_eval_cond(uint32_t cond) {
     emu_dump_cpsr();
 
     switch(cond) {
@@ -95,7 +95,7 @@ uint8_t emu_eval_cond(uint32_t cond) {
     }
 }
 
-void emu_type_arith_shift(const darm_t * d) {
+inline void emu_type_arith_shift(const darm_t * d) {
     emu_log_debug("Rs: %d shift_type: %d shift: %d\n", d->Rs, d->shift_type, d->shift);
     assert((d->Rs != R_INVLD) || (d->shift_type != S_INVLD) || (d->shift == 0));
     if (d->instr == I_BIC && d->shift == 0) {
@@ -110,7 +110,7 @@ void emu_type_arith_shift(const darm_t * d) {
     WTREG2(Rd, Rn, Rm);
 }
 
-void emu_type_arith_imm(const darm_t * d) {
+inline void emu_type_arith_imm(const darm_t * d) {
     if (d->S == B_SET) {
         emu_log_debug("S flag, we're Screwed!\n");
 
@@ -169,7 +169,7 @@ void emu_type_arith_imm(const darm_t * d) {
     }
 }
 
-void emu_type_pusr(const darm_t * d) {
+inline void emu_type_pusr(const darm_t * d) {
     switch(d->instr) {
     case I_UXTB: {
         uint32_t rotated = ROR(RREG(Rm), d->rotate);
@@ -181,7 +181,7 @@ void emu_type_pusr(const darm_t * d) {
     }
 }
 
-void emu_type_sync(const darm_t * d) {
+inline void emu_type_sync(const darm_t * d) {
     switch(d->instr) {
     case I_LDREX: {
         emu_log_debug("LDREX before:\n");
@@ -296,7 +296,7 @@ void emu_type_sync(const darm_t * d) {
     }
 }
 
-void emu_type_mvcr(const darm_t * d) {
+inline void emu_type_mvcr(const darm_t * d) {
     switch(d->instr) {
     case I_MRC: {
         // FIXME: hacky detect mcr
@@ -312,7 +312,7 @@ void emu_type_mvcr(const darm_t * d) {
     }
 }
 
-void SelectInstrSet(cpumode_t mode) {
+inline void SelectInstrSet(cpumode_t mode) {
     switch(mode) {
     case M_ARM: {
         if (CurrentInstrSet() == M_THUMB) {
@@ -333,11 +333,11 @@ void SelectInstrSet(cpumode_t mode) {
     }
 }
 
-cpumode_t CurrentInstrSet() {
+inline cpumode_t CurrentInstrSet() {
     return (emu_thumb_mode() ? M_THUMB : M_ARM);
 }
 
-cpumode_t TargetInstrSet(uint32_t instr) {
+inline cpumode_t TargetInstrSet(uint32_t instr) {
     if (instr == I_BX || instr == I_BLX) { /* swap mode */
         return (CurrentInstrSet() == M_ARM ? M_THUMB : M_ARM);
     } else {                    /* keep current mode */
@@ -345,7 +345,7 @@ cpumode_t TargetInstrSet(uint32_t instr) {
     }
 }
 
-void BranchWritePC(uint32_t addr) {
+inline void BranchWritePC(uint32_t addr) {
     /* EMU_ENTRY; */
 
     emu_log_debug("RREGN(PC): %x\n", RREGN(PC));
@@ -360,7 +360,7 @@ void BranchWritePC(uint32_t addr) {
     }
 }
 
-void BXWritePC(uint32_t addr) {
+inline void BXWritePC(uint32_t addr) {
     emu_log_debug("RREGN(PC): %x addr: %x\n", RREGN(PC), addr);
 #ifndef PROFILE
     emu_map_lookup(addr);
@@ -376,7 +376,7 @@ void BXWritePC(uint32_t addr) {
     }
 }
 
-void emu_type_branch_syscall(const darm_t * d) {
+inline void emu_type_branch_syscall(const darm_t * d) {
     switch(d->instr) {
     case I_B: {
         BranchWritePC(RREGN(PC) + d->imm);
@@ -414,7 +414,7 @@ void emu_type_branch_syscall(const darm_t * d) {
     }
 }
 
-void emu_type_branch_misc(const darm_t * d) {
+inline void emu_type_branch_misc(const darm_t * d) {
     switch(d->instr) {
     case I_BX: {
         /* special standalone stop case */
@@ -439,7 +439,7 @@ void emu_type_branch_misc(const darm_t * d) {
     }
 }
 
-void emu_type_move_imm(const darm_t * d) {
+inline void emu_type_move_imm(const darm_t * d) {
     /* EMU_ENTRY; */
 
     switch(d->instr) {
@@ -468,7 +468,7 @@ void emu_type_move_imm(const darm_t * d) {
     WTREG(Rd, TAINT_CLEAR);
 }
 
-void emu_type_cmp_op(const darm_t * d) {
+inline void emu_type_cmp_op(const darm_t * d) {
     /* EMU_ENTRY; */
 
     switch(d->instr) {
@@ -484,7 +484,7 @@ void emu_type_cmp_op(const darm_t * d) {
     }
 }
 
-void emu_type_cmp_imm(const darm_t * d) {
+inline void emu_type_cmp_imm(const darm_t * d) {
     /* EMU_ENTRY; */
 
     switch(d->instr) {
@@ -504,7 +504,7 @@ void emu_type_cmp_imm(const darm_t * d) {
     }
 }
 
-void emu_type_opless(const darm_t * d) {
+inline void emu_type_opless(const darm_t * d) {
     /* EMU_ENTRY; */
 
     switch(d->instr) {
@@ -516,7 +516,7 @@ void emu_type_opless(const darm_t * d) {
     }
 }
 
-void emu_type_dst_src(const darm_t * d) {
+inline void emu_type_dst_src(const darm_t * d) {
     /* EMU_ENTRY; */
 
     if (d->S == B_SET) {
@@ -557,7 +557,7 @@ void emu_type_dst_src(const darm_t * d) {
     WTREG1(Rd, Rm);
 }
 
-void emu_type_memory(const darm_t * d) {
+inline void emu_type_memory(const darm_t * d) {
     /* EMU_ENTRY; */
 
     switch(d->instr) {
@@ -730,7 +730,7 @@ void emu_type_memory(const darm_t * d) {
     }
 }
 
-void emu_type_bits(const darm_t * d) {
+inline void emu_type_bits(const darm_t * d) {
     switch(d->instr) {
     case I_BFI: {
         uint32_t lsb = d->lsb;
@@ -761,7 +761,7 @@ void emu_type_bits(const darm_t * d) {
     }
 }
 
-void emu_type_mul(const darm_t * d) {
+inline void emu_type_mul(const darm_t * d) {
     switch(d->instr) {
     case I_MUL: {
         /* TODO: move MUL to emu_dataop() and use OP macro instead */
@@ -778,7 +778,7 @@ void emu_type_mul(const darm_t * d) {
     }
 }
 
-void emu_type_uncond(const darm_t * d) {
+inline void emu_type_uncond(const darm_t * d) {
     switch(d->instr) {
     case I_DMB: {
         /* Options: SY, ST, ISH, ISHST, NSH, NSHST, OSH, OSHST */
@@ -850,7 +850,7 @@ inline uint32_t emu_regshift(const darm_t *d) {
     return val;
 }
 
-static void emu_advance_pc() {
+static inline void emu_advance_pc() {
     assert(emu.disasm_bytes == 2 || emu.disasm_bytes == 4);
     if (!emu.branched) CPU(pc) += emu.disasm_bytes;
     emu.branched = 0;
@@ -883,7 +883,7 @@ static inline uint32_t emu_get_taint_reg(uint32_t reg) {
     return emu.taintreg[reg];
 }
 
-void emu_singlestep(uint32_t pc) {
+inline void emu_singlestep(uint32_t pc) {
     /* standalone signaled completion */
     if (!emu.enabled) return;
 
@@ -1070,7 +1070,7 @@ void emu_stop() {
     }
 }
 
-uint8_t emu_stop_trigger(const darm_t * d) {
+inline uint8_t emu_stop_trigger(const darm_t * d) {
     switch(d->instr) {
     case I_BKPT: {
         /* special flags */
@@ -1174,7 +1174,7 @@ const darm_t* emu_disasm(uint32_t pc) {
     return emu_disasm_internal(darm, pc); /* darm is a global variable */
 }
 
-const darm_t* emu_disasm_internal(darm_t *d, uint32_t pc) {
+inline const darm_t* emu_disasm_internal(darm_t *d, uint32_t pc) {
     uint32_t ins = *(const uint32_t *)pc;
 
     uint16_t w     = ins & 0xffff;
@@ -1241,7 +1241,7 @@ static inline uint32_t *emu_write_reg(darm_reg_t reg) {
 
 /* Debugging */
 
-static void dbg_dump_ucontext(ucontext_t *uc) {
+static inline void dbg_dump_ucontext(ucontext_t *uc) {
     mcontext_t *r = &uc->uc_mcontext;
     printf("ucontext dump:\n");
     printf("fault addr %8x\n",
@@ -1256,12 +1256,12 @@ static void dbg_dump_ucontext(ucontext_t *uc) {
            (uint32_t)r->arm_ip, (uint32_t)r->arm_sp, (uint32_t)r->arm_lr,  (uint32_t)r->arm_pc, (uint32_t)r->arm_cpsr);
 }
 
-static void emu_dump() {
+static inline void emu_dump() {
     dbg_dump_ucontext(&emu.current);
 }
 
 /* show register changes since last diff call */
-static void emu_dump_diff() {
+static inline void emu_dump_diff() {
     static int i;
     for (i = 0; i < SIGCONTEXT_REG_COUNT; i++) {
         uint32_t current  = ((uint32_t *)&emu.current.uc_mcontext)[i];
@@ -1275,7 +1275,7 @@ static void emu_dump_diff() {
     emu.previous = emu.current;
 }
 
-static void emu_dump_cpsr() {
+static inline void emu_dump_cpsr() {
     emu_log_debug("cpsr [%c%c%c%c %c %c]\n",
            CPSR_N ? 'N' : 'n',
            CPSR_Z ? 'Z' : 'z',
@@ -1286,7 +1286,7 @@ static void emu_dump_cpsr() {
            );
 }
 
-static void emu_map_dump(map_t *m) {
+static inline void emu_map_dump(map_t *m) {
     if (m != NULL) {
         emu_log_debug("%x-%x %c%c%c%c %x %x:%x %u %s [%u pages]\n",
                m->vm_start,
@@ -1466,7 +1466,7 @@ mprotectInit() {
 }
 
 /* TODO: add length and determine if page boundary crossed */
-static void
+static inline void
 mprotectPage(uint32_t addr, uint32_t flags) {
     uint32_t addr_aligned = getAlignedPage(addr); /* align at pageSize */
     emu_log_debug("update protection on page: %x given addr: %x\n", addr_aligned, addr);
@@ -1522,7 +1522,7 @@ mmap_init() {
     emu_log_debug("taintmaps initialized\n");
 }
 
-static taintmap_t *
+static inline taintmap_t *
 emu_get_taintmap(uint32_t addr) {
     addr = Align(addr, 4);      /* word align */
 
@@ -1555,7 +1555,7 @@ emu_dump_taintmaps() {
     return 0;
 }
 
-static uint32_t
+static inline uint32_t
 emu_get_taint_mem(uint32_t addr) {
     addr = Align(addr, 4);      /* word align */
     taintmap_t *taintmap = emu_get_taintmap(addr);
@@ -1573,7 +1573,7 @@ emu_get_taint_mem(uint32_t addr) {
     return tag;
 }
 
-void emu_set_taint_mem(uint32_t addr, uint32_t tag) {
+inline void emu_set_taint_mem(uint32_t addr, uint32_t tag) {
     if (!addr || !tag) {
         emu_abort("invalid taint addr: %x tag: %x", addr, tag);
     }
@@ -1602,11 +1602,11 @@ void emu_set_taint_mem(uint32_t addr, uint32_t tag) {
     taintmap->data[offset] = tag;  /* word (32-bit) based tag storage */
 }
 
-void emu_set_taint_array(uint32_t addr, uint32_t tag, uint32_t length) {
+inline void emu_set_taint_array(uint32_t addr, uint32_t tag, uint32_t length) {
     emu_abort("unimplemented");
 }
 
-static int emu_mark_page(uint32_t addr) {
+static inline int emu_mark_page(uint32_t addr) {
     uint32_t page = getAlignedPage(addr);
     uint32_t idx;
     uint8_t found = 0;
@@ -1638,7 +1638,7 @@ static int emu_mark_page(uint32_t addr) {
     return added;
 }
 
-static int emu_unmark_page(uint32_t addr) {
+static inline int emu_unmark_page(uint32_t addr) {
     uint32_t page = getAlignedPage(addr);
     uint32_t idx;
     uint8_t found = 0;
@@ -1656,7 +1656,7 @@ static int emu_unmark_page(uint32_t addr) {
     return found;
 }
 
-static void
+static inline void
 emu_clear_taintpages() {
     uint32_t idx;
     for (idx = 0; idx < MAX_TAINTPAGES; idx++) {
@@ -1664,7 +1664,7 @@ emu_clear_taintpages() {
     }
 }
 
-static void
+static inline void
 emu_protect_mem() {
     uint32_t idx;
     /* protect all pages in unique list */
@@ -1677,7 +1677,7 @@ emu_protect_mem() {
     }
 }
 
-static void
+static inline void
 emu_unprotect_mem() {
     uint32_t idx;
     uint32_t flags = PROT_READ | PROT_WRITE;
@@ -1692,7 +1692,7 @@ emu_unprotect_mem() {
     }
 }
 
-bool emu_enabled() {
+inline bool emu_enabled() {
     return emu.enabled;
 }
 
