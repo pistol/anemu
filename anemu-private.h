@@ -109,7 +109,7 @@ typedef struct _map_t {
 } map_t;
 
 #define N_REGS 16               /* r0-r15 */
-
+#define STACK_SIZE 8096
 typedef struct _taintmap_t {
     uint32_t *data;             /* mmap-ed data */
     uint32_t  start;            /* address range start */
@@ -131,6 +131,8 @@ typedef struct _emu_t {
     taintmap_t taintmaps[MAX_TAINTMAPS];   /* taint storage for memory */
     uint32_t   taintpages[MAX_TAINTPAGES]; /* unique taint pages */
     bool       enabled;          /* is emulation currently running */
+    bool       standalone;       /* standalone or target based emu */
+    uint32_t   stack[STACK_SIZE];/* stack for standalone */
     uint32_t   handled_instr;    /* number of ops seen so far */
     pthread_mutex_t lock;        /* page fault handler sync */
     double     time_start;       /* execution time measurements */

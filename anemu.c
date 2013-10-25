@@ -416,22 +416,13 @@ void emu_type_branch_syscall(const darm_t * d) {
 
 void emu_type_branch_misc(const darm_t * d) {
     switch(d->instr) {
-    case I_BKPT: {
-        /* special flags */
-        /* entering- JNI: 1337 */
-        /* emu_single_step(); */
-        if (d->imm == MARKER_START_VAL) {
-            emu_log_debug("MARKER: starting emu\n");
-        } else if (d->imm == MARKER_STOP_VAL) {
-            emu_log_debug("MARKER: leaving emu due to JNI re-entry\n");
-            emu_advance_pc();
-            emu_stop();
-        } else {
-            emu_abort("MARKER: unexpected value! %x\n", d->imm);
-        }
-        break;
-    }
     case I_BX: {
+        /* special standalone stop case */
+        if (RREG(Rm) == MARKER_STOP_VAL) {
+            emu_log_debug("MARKER: stopping standalone emu\n");
+            emu.enabled = false;
+            break;
+        }
         BXWritePC(RREG(Rm));
         break;
     }
@@ -893,6 +884,9 @@ static inline uint32_t emu_get_taint_reg(uint32_t reg) {
 }
 
 void emu_singlestep(uint32_t pc) {
+    /* standalone signaled completion */
+    if (!emu.enabled) return;
+
 #ifndef PROFILE
     emu_map_lookup(pc);
 #endif
@@ -910,6 +904,10 @@ void emu_singlestep(uint32_t pc) {
 #ifndef PROFILE
     darm_dump(d);           /* dump internal darm_t state */
 #endif
+
+    if (emu_stop_trigger(d)) {
+        goto next;
+    }
 
     if (!emu_eval_cond(d->cond)) {
         emu_log_debug("skipping instruction: condition NOT passed\n");
@@ -1034,9 +1032,9 @@ void emu_start() {
     /* disabled taintinfo_t usage and instead using explicit emu_set_taint APIs before entering emu */
 
     emu.enabled = 1;
-
     emu.time_start = time_ms();
-    while(1) {                  /* infinite loop */
+
+    while(emu.enabled) {
         emu_singlestep(CPU(pc));
     }
 }
@@ -1065,24 +1063,50 @@ void emu_stop() {
     dbg_dump_ucontext(&emu.current);
     emu_log_debug("### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###\n");
     pthread_mutex_unlock(&emu.lock);
-    setcontext((const ucontext_t *)&emu.current); /* never returns */
+    emu_log_info("emulation stopped.\n");
+    /* if we are not in standalone, we need to restore execution context to latest values */
+    if (!emu.standalone) {
+        setcontext((const ucontext_t *)&emu.current); /* never returns */
+    }
 }
 
-uint8_t emu_stop_trigger() {
-    static const darm_instr_t trigger = I_BKPT;
-
-    if (darm->instr == trigger) {
-        emu_log_debug("\n");
-        emu_log_debug("special op %s being skipped\n", darm_mnemonic_name(trigger));
-        CPU(pc) += 4;
-        return 1;
+uint8_t emu_stop_trigger(const darm_t * d) {
+    switch(d->instr) {
+    case I_BKPT: {
+        /* special flags */
+        /* entering- JNI: 1337 */
+        /* emu_single_step(); */
+        if (d->imm == MARKER_START_VAL) {
+            emu_log_debug("MARKER: starting emu\n");
+            /* advance PC but leave emu enabled */
+            return 1;
+        } else if (d->imm == MARKER_STOP_VAL) {
+            emu_log_debug("MARKER: leaving emu due to JNI re-entry\n");
+            emu.enabled = false;
+        } else {
+            emu_abort("MARKER: unexpected value! %x\n", d->imm);
+        }
+        break;
     }
-    return 0;
+    case I_BX: {
+        /* special standalone stop case */
+        if (RREG(Rm) == MARKER_STOP_VAL) {
+            emu_log_debug("MARKER: stopping standalone emu\n");
+            emu.enabled = false;
+        }
+        break;
+    }
+    default: {
+        /* empty: avoids unhandled case warnings */
+    }
+    }
+    return !emu.enabled;
 }
 
 /* Setup emulation handler. */
 void emu_register_handler() {
     emu_init();
+    emu.standalone = false;
 
 #if HAVE_SETRLIMIT
     /* Be recursion friendly */
@@ -1123,6 +1147,27 @@ void emu_register_handler() {
     /* 3. setup mprotect handler */
     mprotectInit();
 
+/* Standalone on-demand emulation */
+ uint32_t emu_target(void (*fun)()) {
+    pthread_mutex_lock(&emu.lock);
+    uint32_t pc = (uint32_t)*fun;
+    emu_init();
+    emu.standalone = true;
+    emu_map_lookup(pc);
+
+    /* create reasonable ucontext to start with */
+    CPU(r0) = CPU(r1) = CPU(r2) = CPU(r3) = CPU(r4) = CPU(r5) = 0;
+    CPU(r6) = CPU(r7) = CPU(r8) = CPU(r9) = CPU(r10) = 0;
+    CPU(fp) = CPU(ip) = 0;
+    CPU(lr) = MARKER_STOP_VAL;
+    CPU(sp) = (uint32_t)&emu.stack + STACK_SIZE;
+    CPU(pc) = pc;
+    CPU(cpsr) = b10000;         /* User Mode */
+
+    emu_ucontext(&emu.current);
+    emu_start(pc);
+    emu_stop();
+    return emu.handled_instr;
 }
 
 const darm_t* emu_disasm(uint32_t pc) {

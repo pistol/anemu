@@ -18,6 +18,9 @@ extern "C" {  // only need to export C interface if
 /* Public API */
 void emu_register_handler();
 
+/* emulate starting at a given address (e.g. function) */
+uint32_t emu_target(void (*fun)());
+
 void emu_set_taint_mem(uint32_t addr, uint32_t tag);
 void emu_set_taint_array(uint32_t addr, uint32_t tag, uint32_t length);
 
