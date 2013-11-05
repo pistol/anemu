@@ -49,6 +49,7 @@ static void emu_handler(int sig, siginfo_t *si, void *ucontext) {
                pc,
                (int) si->si_addr);
 
+    emu_init();
     emu_ucontext((ucontext_t *)ucontext); /* one time emu state initialization */
     emu_map_lookup(pc);
     emu_start();
@@ -1105,7 +1106,6 @@ inline uint8_t emu_stop_trigger(const darm_t * d) {
 
 /* Setup emulation handler. */
 void emu_register_handler() {
-    emu_init();
     emu.standalone = false;
 
 #if HAVE_SETRLIMIT
@@ -1415,6 +1415,7 @@ mprotectHandler(int sig, siginfo_t *si, void *ucontext) {
         break;
     }
 
+    emu_init();
     emu_map_lookup(pc);
     emu_map_lookup(addr_fault);
 
