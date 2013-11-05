@@ -501,6 +501,10 @@ inline void emu_type_cmp_imm(const darm_t * d) {
         ASM_RI_CMP(TST, Rn, imm);
         break;
     }
+    case I_TEQ: {
+        ASM_RI_CMP(TEQ, Rn, imm);
+        break;
+    }
         SWITCH_COMMON;
     }
 }
