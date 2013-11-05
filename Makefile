@@ -50,6 +50,8 @@ LDFLAGS+=-ldarm
 LDFLAGS+=-lrt
 # shared libs: pthread
 LDFLAGS+=-lpthread
+# locally installed libs: zlib
+LDFLAGS+=-L$(HOME)/local/lib
 LDFLAGS+=-L.
 
 C=$(wildcard *.c)
@@ -59,7 +61,7 @@ SRCS=$(C)
 O=$(C:.c=.o)
 
 LIBS=libanemu.a libanemu.so
-TEST_BIN=tests/matrix tests/zlib
+TEST_BIN=tests/matrix tests/zlib tests/target
 
 .PHONY: all run clean
 
@@ -82,7 +84,7 @@ lib: $(LIBS)
 #	objdump -dSsClwt $^ > $^.dis
 
 %: %.c
-	$(CC) $(CFLAGS) -o $@ $^ -I. -Itests $(LDFLAGS) -L. -lanemu -lz
+	$(CC) $(CFLAGS) -O0 -o $@ $^ -I. -Itests -lanemu -lz $(LDFLAGS)
 
 test: lib $(TEST_BIN)
 	./tests/matrix 0 128
