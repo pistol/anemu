@@ -567,7 +567,8 @@ inline void emu_type_memory(const darm_t * d) {
 
     switch(d->instr) {
     case I_LDR:
-    case I_LDRB: {
+    case I_LDRB:
+    case I_LDRH: {
         uint32_t imm = (d->Rm == R_INVLD) ? d->imm : emu_regshift(d); /* RREG(Rm) or shift */
         uint32_t offset_addr = d->U == B_SET ?
             (RREG(Rn) + imm) :
@@ -628,7 +629,8 @@ inline void emu_type_memory(const darm_t * d) {
         map_t *m = emu_map_lookup(addr);
         if (m) emu_log_debug("addr: %x %s\n", addr, m->name);
 #endif
-        if (addr != Align(addr, 4)) { /* word aligned */
+        if (d->instr == I_LDR &&
+            addr != Align(addr, 4)) { /* unaligned addr */
             emu_abort("unaligned address");
         }
         /* depending on instr, 1, 2 or 4 bytes of RREG(Rt) will be used and stored to mem */
