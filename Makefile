@@ -6,10 +6,10 @@ DARM=../darm-v7
 
 
 # Debugging
-CFLAGS=-gdwarf-2 -g3 -O0 -ggdb -fno-omit-frame-pointer
-# CFLAGS=-O3
+CFLAGS+=-g -fno-omit-frame-pointer
+CFLAGS+=-O2
 # ARM specific
-CFLAGS+=-march=armv7-a -mcpu=cortex-a9 -mtune=cortex-a9 -marm
+CFLAGS+=-mtune=cortex-a9 -marm
 # Inline functions
 # CFLAGS+=-finline-functions
 # Show all warnings
@@ -48,6 +48,9 @@ LDFLAGS+=-L$(DARM)
 LDFLAGS+=-ldarm
 # clock_gettime
 LDFLAGS+=-lrt
+# shared libs: pthread
+LDFLAGS+=-lpthread
+LDFLAGS+=-L.
 
 C=$(wildcard *.c)
 EXCLUDES=rasm.c
