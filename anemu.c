@@ -178,6 +178,19 @@ inline void emu_type_pusr(const darm_t * d) {
         WTREG1(Rd, Rm);
         break;
     }
+    case I_UXTH: {
+        // assert(d->rotate == B_UNSET);
+        uint32_t rotated = ROR(RREG(Rm), d->rotate);
+        WREG(Rd) = rotated & 0xffffffff;
+        WTREG1(Rd, Rm);
+        break;
+    }
+    case I_SXTB: {
+        uint32_t rotated = ROR(RREG(Rm), d->rotate);
+        WREG(Rd) = SignExtend(rotated & 0xff);
+        WTREG1(Rd, Rm);
+        break;
+    }
     SWITCH_COMMON;
     }
 }
@@ -757,6 +770,13 @@ inline void emu_type_bits(const darm_t * d) {
             emu_log_debug("Rd set bits    : %x\n", val);
             WREG(Rd) = val;
         }
+        break;
+    }
+    case I_UBFX: {
+        uint32_t lsb = d->lsb;
+        uint32_t msb = lsb + d->width - 1;
+        WREG(Rd) = BitExtract(RREG(Rn), lsb, msb);
+        WTREG1(Rd, Rn);
         break;
     }
     case I_CLZ: {
