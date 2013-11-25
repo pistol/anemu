@@ -217,6 +217,16 @@ formats for S instructions:
                   );                                                    \
     CPSR_UPDATE(temp);
 
+#define ASM_RRR(instr, R1, R2, R3)                                      \
+    uint32_t temp;                                                      \
+    asm volatile (#instr "s  %[reg1], %[reg2], %[reg3]\n"  /* updates flags */ \
+                  "mrs %[cpsr], cpsr\n"                    /* save new cpsr */ \
+                  : [cpsr] "=r" (temp)                     /* output */ \
+                  : [reg1] "r"  (RREG(R1)), [reg2] "r"  (RREG(R2)), [reg3] "r" (R3) /* input */ \
+                  : "cc"                        /* clobbers condition codes */ \
+                  );                                                    \
+    CPSR_UPDATE(temp);
+
 #define ASM_RRI(instr, R1, R2, IS)                                      \
     uint32_t temp;                                                      \
     asm volatile (#instr "s %[reg1], %[reg2], %[imm]\n"    /* updates flags */ \
@@ -250,6 +260,7 @@ formats for S instructions:
 /* switch case helper for ASM */
 #define CASE_RR( instr, R1, R2)      case I_##instr: { ASM_RR (instr, R1, R2);      break; }
 #define CASE_RRI(instr, R1, R2, imm) case I_##instr: { ASM_RRI(instr, R1, R2, imm); break; }
+#define CASE_RRR(instr, R1, R2, R3)  case I_##instr: { ASM_RRR(instr, R1, R2, R3);  break; }
 
 #define BitCount(x)           __builtin_popcount(x)
 #define TrailingZerosCount(x) __builtin_ctz(x)

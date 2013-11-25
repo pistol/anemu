@@ -99,14 +99,42 @@ inline uint8_t emu_eval_cond(uint32_t cond) {
 inline void emu_type_arith_shift(const darm_t * d) {
     emu_log_debug("Rs: %d shift_type: %d shift: %d\n", d->Rs, d->shift_type, d->shift);
     assert((d->Rs != R_INVLD) || (d->shift_type != S_INVLD) || (d->shift == 0));
-    if (d->instr == I_BIC && d->shift == 0) {
-        /* shift type 0 is LSL */
-        EMU(WREG(Rd) = LSL(RREG(Rn), RREG(Rm)));
+
+    if (d->S == B_SET) {
+        emu_log_debug("S flag, we're Screwed!\n");
+
+        uint32_t imm = emu_regshift(d);
+        switch(d->instr) {
+            CASE_RRR(ADD, Rd, Rn, imm);
+            CASE_RRR(ADC, Rd, Rn, imm);
+            CASE_RRR(AND, Rd, Rn, imm);
+            CASE_RRR(ASR, Rd, Rn, imm);
+            CASE_RRR(BIC, Rd, Rn, imm);
+            CASE_RRR(EOR, Rd, Rn, imm);
+            CASE_RRR(LSL, Rd, Rn, imm);
+            CASE_RRR(LSR, Rd, Rn, imm);
+            CASE_RRR(ORR, Rd, Rn, imm);
+            CASE_RRR(ROR, Rd, Rn, imm);
+            CASE_RRR(RSB, Rd, Rn, imm);
+            CASE_RRR(RSC, Rd, Rn, imm);
+            CASE_RRR(SBC, Rd, Rn, imm);
+            CASE_RRR(SUB, Rd, Rn, imm);
+
+            SWITCH_COMMON;
+        }
     } else {
-        uint32_t sreg = emu_regshift(d);
-        emu_log_debug("sreg = %x\n", sreg);
         /* FIXME: BIC has no Rs or shift */
-        EMU(WREG(Rd) = OP(RREG(Rn), sreg));
+        /* BIC has no Rs or shift */
+        /* FIXME: can we drop this special case? */
+        if (d->instr == I_BIC && d->shift == 0) {
+            /* shift type 0 is LSL */
+            EMU(WREG(Rd) = LSL(RREG(Rn), RREG(Rm)));
+        } else {
+            uint32_t sreg = emu_regshift(d);
+            emu_log_debug("sreg = %x\n", sreg);
+            /* FIXME: BIC has no Rs or shift */
+            EMU(WREG(Rd) = OP(RREG(Rn), sreg));
+        }
     }
     WTREG2(Rd, Rn, Rm);
 }
