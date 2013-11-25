@@ -349,43 +349,43 @@ inline uint32_t emu_regshift(const darm_t *d);
 
 /* Debugging / Internal only */
 
-static void dbg_dump_ucontext(ucontext_t *uc);
-static void emu_dump();
-static void emu_dump_diff();
-static void emu_dump_cpsr();
+void dbg_dump_ucontext(ucontext_t *uc);
+void emu_dump();
+void emu_dump_diff();
+void emu_dump_cpsr();
 void armv7_dump(const darm_t *d);
-static inline uint32_t emu_read_reg(darm_reg_t reg);
-static inline uint32_t *emu_write_reg(darm_reg_t reg);
-static inline uint8_t emu_thumb_mode();
+inline uint32_t emu_read_reg(darm_reg_t reg);
+inline uint32_t *emu_write_reg(darm_reg_t reg);
+inline uint8_t emu_thumb_mode();
 
-static void emu_map_dump(map_t *m);
-static void emu_map_parse();
-static map_t* emu_map_lookup(uint32_t addr);
+void emu_map_dump(map_t *m);
+void emu_map_parse();
+map_t* emu_map_lookup(uint32_t addr);
 
-static void emu_advance_pc();
-static uint32_t emu_dump_taintmaps();
+void emu_advance_pc();
+uint32_t emu_dump_taintmaps();
 void emu_set_taint_mem(uint32_t addr, uint32_t tag);
-static uint32_t emu_get_taint_mem(uint32_t addr);
-static inline void emu_set_taint_reg(uint32_t reg, uint32_t tag);
-static inline uint32_t emu_get_taint_reg(uint32_t reg);
-static void mmap_init();
+uint32_t emu_get_taint_mem(uint32_t addr);
+inline void emu_set_taint_reg(uint32_t reg, uint32_t tag);
+inline uint32_t emu_get_taint_reg(uint32_t reg);
+void mmap_init();
 
-static inline uint32_t instr_mask(darm_instr_t instr);
+inline uint32_t instr_mask(darm_instr_t instr);
 
-static inline double time_ms();
+inline double time_ms();
 /* Page Protections */
 
-static int32_t getPageSize();
-static uint32_t getAlignedPage(uint32_t addr);
-static void mprotectHandler(int sig, siginfo_t *si, void *ucontext);
-static void mprotectInit();
-static void mprotectPage(uint32_t addr, uint32_t flags);
+int32_t getPageSize();
+uint32_t getAlignedPage(uint32_t addr);
+void mprotectHandler(int sig, siginfo_t *si, void *ucontext);
+void mprotectInit();
+void mprotectPage(uint32_t addr, uint32_t flags);
 
-static void emu_protect_mem();
-static void emu_unprotect_mem();
-static int emu_mark_page(uint32_t addr);
-static int emu_unmark_page(uint32_t addr);
-static void emu_clear_taintpages();
+void emu_protect_mem();
+void emu_unprotect_mem();
+int emu_mark_page(uint32_t addr);
+int emu_unmark_page(uint32_t addr);
+void emu_clear_taintpages();
 
 /* ARM manual util functions */
 void SelectInstrSet(cpumode_t mode);

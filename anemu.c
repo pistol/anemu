@@ -39,7 +39,7 @@ inline uint8_t emu_regs_tainted() {
 }
 
 /* SIGTRAP handler used for single-stepping */
-static void emu_handler(int sig, siginfo_t *si, void *ucontext) {
+void emu_handler(int sig, siginfo_t *si, void *ucontext) {
     pthread_mutex_lock(&emu.lock);
     uint32_t pc = (*(ucontext_t *)ucontext).uc_mcontext.arm_pc;
 
@@ -857,7 +857,7 @@ inline uint32_t emu_regshift(const darm_t *d) {
     return val;
 }
 
-static inline void emu_advance_pc() {
+inline void emu_advance_pc() {
     assert(emu.disasm_bytes == 2 || emu.disasm_bytes == 4);
     if (!emu.branched) CPU(pc) += emu.disasm_bytes;
     emu.branched = 0;
@@ -877,7 +877,7 @@ static inline void emu_advance_pc() {
 #endif
 }
 
-static inline void emu_set_taint_reg(uint32_t reg, uint32_t tag) {
+inline void emu_set_taint_reg(uint32_t reg, uint32_t tag) {
     if (emu.taintreg[reg] != TAINT_CLEAR && tag == TAINT_CLEAR) {
         emu_log_debug("taint: un-tainting r%d\n", reg);
     } else if (emu.taintreg[reg] == TAINT_CLEAR && tag != TAINT_CLEAR) {
@@ -886,7 +886,7 @@ static inline void emu_set_taint_reg(uint32_t reg, uint32_t tag) {
     emu.taintreg[reg] = tag;
 }
 
-static inline uint32_t emu_get_taint_reg(uint32_t reg) {
+inline uint32_t emu_get_taint_reg(uint32_t reg) {
     return emu.taintreg[reg];
 }
 
@@ -1204,12 +1204,12 @@ inline const darm_t* emu_disasm_internal(darm_t *d, uint32_t pc) {
     return d;
 }
 
-static inline uint8_t emu_thumb_mode() {
+inline uint8_t emu_thumb_mode() {
     return CPSR_T;              /* 0: ARM, 1: Thumb */
 }
 
 /* map register number (0-15) to ucontext reg entry (r0-r10, fp, ip, sp, lr pc) */
-static inline uint32_t emu_read_reg(darm_reg_t reg) {
+inline uint32_t emu_read_reg(darm_reg_t reg) {
     assert(reg >= 0 && reg <= 15);
     if (reg == R_INVLD) return R_INVLD;
 
@@ -1235,7 +1235,7 @@ static inline uint32_t emu_read_reg(darm_reg_t reg) {
     return -1;
 }
 
-static inline uint32_t *emu_write_reg(darm_reg_t reg) {
+inline uint32_t *emu_write_reg(darm_reg_t reg) {
     assert(reg >= 0 && reg <= 15);
     if (reg == R_INVLD) return NULL;
 
@@ -1247,7 +1247,7 @@ static inline uint32_t *emu_write_reg(darm_reg_t reg) {
 
 /* Debugging */
 
-static inline void dbg_dump_ucontext(ucontext_t *uc) {
+inline void dbg_dump_ucontext(ucontext_t *uc) {
     mcontext_t *r = &uc->uc_mcontext;
     printf("ucontext dump:\n");
     printf("fault addr %8x\n",
@@ -1262,12 +1262,12 @@ static inline void dbg_dump_ucontext(ucontext_t *uc) {
            (uint32_t)r->arm_ip, (uint32_t)r->arm_sp, (uint32_t)r->arm_lr,  (uint32_t)r->arm_pc, (uint32_t)r->arm_cpsr);
 }
 
-static inline void emu_dump() {
+inline void emu_dump() {
     dbg_dump_ucontext(&emu.current);
 }
 
 /* show register changes since last diff call */
-static inline void emu_dump_diff() {
+inline void emu_dump_diff() {
     static int i;
     for (i = 0; i < SIGCONTEXT_REG_COUNT; i++) {
         uint32_t current  = ((uint32_t *)&emu.current.uc_mcontext)[i];
@@ -1281,7 +1281,7 @@ static inline void emu_dump_diff() {
     emu.previous = emu.current;
 }
 
-static inline void emu_dump_cpsr() {
+inline void emu_dump_cpsr() {
     emu_log_debug("cpsr [%c%c%c%c %c %c]\n",
            CPSR_N ? 'N' : 'n',
            CPSR_Z ? 'Z' : 'z',
@@ -1292,7 +1292,7 @@ static inline void emu_dump_cpsr() {
            );
 }
 
-static inline void emu_map_dump(map_t *m) {
+inline void emu_map_dump(map_t *m) {
     if (m != NULL) {
         emu_log_debug("%x-%x %c%c%c%c %x %x:%x %u %s [%u pages]\n",
                m->vm_start,
@@ -1310,7 +1310,7 @@ static inline void emu_map_dump(map_t *m) {
 
 // Sample format
 // 00400000-004d0000 r-xp 00000000 08:01 3973335 /usr/bin/irssi
-static void emu_map_parse() {
+void emu_map_parse() {
     FILE *file;
     char buf[1024];
     emu.nr_maps = 0;
@@ -1352,7 +1352,7 @@ static void emu_map_parse() {
     fclose(file);
 }
 
-static map_t* emu_map_lookup(uint32_t addr) {
+map_t* emu_map_lookup(uint32_t addr) {
     unsigned int i;
     map_t *m;
 
@@ -1370,7 +1370,7 @@ static map_t* emu_map_lookup(uint32_t addr) {
 
 /* Page Protection */
 
-static inline int32_t
+inline int32_t
 getPageSize() {
     static int32_t pageSize = 0;
 
@@ -1387,12 +1387,12 @@ getPageSize() {
     return pageSize;
 }
 
-static inline uint32_t
+inline uint32_t
 getAlignedPage(uint32_t addr) {
     return addr & ~ (getPageSize() - 1);
 }
 
-static void
+void
 mprotectHandler(int sig, siginfo_t *si, void *ucontext) {
     pthread_mutex_lock(&emu.lock);
 
@@ -1461,7 +1461,7 @@ mprotectHandler(int sig, siginfo_t *si, void *ucontext) {
     }
 }
 
-static void
+void
 mprotectInit() {
     struct sigaction sa;
     sa.sa_flags = SA_SIGINFO | SA_ONSTACK; /* doesn't clobber original stack */
@@ -1473,7 +1473,7 @@ mprotectInit() {
 }
 
 /* TODO: add length and determine if page boundary crossed */
-static inline void
+inline void
 mprotectPage(uint32_t addr, uint32_t flags) {
     uint32_t addr_aligned = getAlignedPage(addr); /* align at pageSize */
     emu_log_debug("update protection on page: %x given addr: %x\n", addr_aligned, addr);
@@ -1486,7 +1486,7 @@ mprotectPage(uint32_t addr, uint32_t flags) {
     emu_log_debug("page protection updated\n");
 }
 
-static void
+void
 mmap_init() {
     uint32_t start, end, bytes;
 
@@ -1529,7 +1529,7 @@ mmap_init() {
     emu_log_debug("taintmaps initialized\n");
 }
 
-static inline taintmap_t *
+inline taintmap_t *
 emu_get_taintmap(uint32_t addr) {
     addr = Align(addr, 4);      /* word align */
 
@@ -1538,7 +1538,7 @@ emu_get_taintmap(uint32_t addr) {
     return &emu.taintmaps[idx];
 }
 
-static uint32_t
+uint32_t
 emu_dump_taintmaps() {
     uint32_t idx, offset;
     taintmap_t *tm;
@@ -1562,7 +1562,7 @@ emu_dump_taintmaps() {
     return 0;
 }
 
-static inline uint32_t
+inline uint32_t
 emu_get_taint_mem(uint32_t addr) {
     addr = Align(addr, 4);      /* word align */
     taintmap_t *taintmap = emu_get_taintmap(addr);
@@ -1613,7 +1613,7 @@ inline void emu_set_taint_array(uint32_t addr, uint32_t tag, uint32_t length) {
     emu_abort("unimplemented");
 }
 
-static inline int emu_mark_page(uint32_t addr) {
+inline int emu_mark_page(uint32_t addr) {
     uint32_t page = getAlignedPage(addr);
     uint32_t idx;
     uint8_t found = 0;
@@ -1645,7 +1645,7 @@ static inline int emu_mark_page(uint32_t addr) {
     return added;
 }
 
-static inline int emu_unmark_page(uint32_t addr) {
+inline int emu_unmark_page(uint32_t addr) {
     uint32_t page = getAlignedPage(addr);
     uint32_t idx;
     uint8_t found = 0;
@@ -1663,7 +1663,7 @@ static inline int emu_unmark_page(uint32_t addr) {
     return found;
 }
 
-static inline void
+inline void
 emu_clear_taintpages() {
     uint32_t idx;
     for (idx = 0; idx < MAX_TAINTPAGES; idx++) {
@@ -1671,7 +1671,7 @@ emu_clear_taintpages() {
     }
 }
 
-static inline void
+inline void
 emu_protect_mem() {
     uint32_t idx;
     /* protect all pages in unique list */
@@ -1684,7 +1684,7 @@ emu_protect_mem() {
     }
 }
 
-static inline void
+inline void
 emu_unprotect_mem() {
     uint32_t idx;
     uint32_t flags = PROT_READ | PROT_WRITE;
@@ -1703,7 +1703,7 @@ inline bool emu_enabled() {
     return emu.enabled;
 }
 
-static inline uint32_t
+inline uint32_t
 instr_mask(darm_instr_t instr) {
     switch(instr) {
     case I_LDRB:
@@ -1714,7 +1714,7 @@ instr_mask(darm_instr_t instr) {
     }
 }
 
-static inline double time_ms(void) {
+inline double time_ms(void) {
     struct timespec res;
     clock_gettime(CLOCK_MONOTONIC, &res);
     double result = 1000.0 * res.tv_sec + (double) res.tv_nsec / 1e6;
