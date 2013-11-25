@@ -229,7 +229,7 @@ formats for S instructions:
 
 #define ASM_RI_CMP(instr, R1, IS)                                       \
     uint32_t temp;                                                      \
-    asm volatile (#instr "  %[reg1], %[imm]\n"             /* updates flags */ \
+    asm volatile (#instr "s %[reg1], %[imm]\n"             /* updates flags */ \
                   "mrs %[cpsr], cpsr\n"                    /* save new cpsr */ \
                   : [cpsr] "=r" (temp)                     /* output */ \
                   : [reg1] "r"  (RREG(R1)), [imm] "r"  (d->IS)     /* input */ \
