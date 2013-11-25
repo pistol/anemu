@@ -89,7 +89,7 @@ T: Thumb mode
 #define CPSR_T ((CPU(cpsr) & PSR_T_BIT) >>  5)
 
 /* update NZCV bits given a temp CPSR value (from MRS) */
-#define CPSR_UPDATE(temp) (CPU(cpsr) = (CPU(cpsr) & ~(b1111 << 28)) | (temp & (b1111 << 28)))
+#define CPSR_UPDATE(temp) (CPU(cpsr) = (CPU(cpsr) & ~(0b1111 << 28)) | (temp & (0b1111 << 28)))
 
 #define MAX_MAPS 4096           /* number of memory map entries */
 #define MAX_TAINTMAPS 2         /* libs + stack (heap part of libs) */

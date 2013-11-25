@@ -641,7 +641,7 @@ inline void emu_type_memory(const darm_t * d) {
         data = RMEMB(addr);
         emu_log_debug("RMEMB: %x\n", data);
         if (d->Rt == PC) {
-            if ((addr & b11) == 0) {
+            if ((addr & 0b11) == 0) {
                 BXWritePC(data);
             } else {
                 emu_abort("unpredictable");
@@ -1218,7 +1218,7 @@ void emu_register_handler() {
     CPU(lr) = MARKER_STOP_VAL;
     CPU(sp) = (uint32_t)&emu.stack + STACK_SIZE;
     CPU(pc) = pc;
-    CPU(cpsr) = b10000;         /* User Mode */
+    CPU(cpsr) = 0b10000;         /* User Mode */
 
     emu_ucontext(&emu.current);
     emu_start(pc);
