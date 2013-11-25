@@ -83,7 +83,7 @@ inline uint8_t emu_eval_cond(uint32_t cond) {
     case C_VC: return !CPSR_V;
     case C_HI: return  CPSR_C && !CPSR_Z;
     case C_LS: return !CPSR_C ||  CPSR_Z;
-    case C_GE: return  CPSR_N &&  CPSR_V;
+    case C_GE: return  CPSR_N ==  CPSR_V;
     case C_LT: return  CPSR_N !=  CPSR_V;
     case C_GT: return !CPSR_Z && (CPSR_N == CPSR_V);
     case C_LE: return  CPSR_Z || (CPSR_N != CPSR_V);
