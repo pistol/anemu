@@ -487,11 +487,13 @@ inline void emu_type_cmp_op(const darm_t * d) {
 
     switch(d->instr) {
     case I_CMP: {
-        ASM_RR_CMP(CMP, Rn, Rm);
+        uint32_t shifted = emu_regshift(d);
+        ASM_RS_CMP(CMP, Rn, shifted);
         break;
     }
     case I_TEQ: {
-        ASM_RR_CMP(TEQ, Rn, Rm);
+        uint32_t shifted = emu_regshift(d);
+        ASM_RS_CMP(TEQ, Rn, shifted);
         break;
     }
         SWITCH_COMMON;
