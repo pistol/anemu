@@ -123,7 +123,6 @@ inline void emu_type_arith_shift(const darm_t * d) {
             SWITCH_COMMON;
         }
     } else {
-        /* FIXME: BIC has no Rs or shift */
         /* BIC has no Rs or shift */
         /* FIXME: can we drop this special case? */
         if (d->instr == I_BIC && d->shift == 0) {
@@ -458,12 +457,6 @@ inline void emu_type_branch_syscall(const darm_t * d) {
 inline void emu_type_branch_misc(const darm_t * d) {
     switch(d->instr) {
     case I_BX: {
-        /* special standalone stop case */
-        if (RREG(Rm) == MARKER_STOP_VAL) {
-            emu_log_debug("MARKER: stopping standalone emu\n");
-            emu.enabled = false;
-            break;
-        }
         BXWritePC(RREG(Rm));
         break;
     }

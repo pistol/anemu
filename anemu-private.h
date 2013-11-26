@@ -9,7 +9,7 @@
 #define NO_TAINT
 
 #ifdef ANDROID
-/* #include <sys/cdefs.h> */
+// #include <sys/cdefs.h>
 #include <sys/ucontext.h>
 #include <android/log.h>
 #define LOG_TAG "anemu"
@@ -149,8 +149,6 @@ typedef struct _emu_t {
 /* read/write memory */
 #define WMEM(addr) *(uint32_t *)(addr)
 #define RMEM(addr) WMEM(addr)   /* identical pointer cast */
-#define WMEMB(addr, data) WMEM(Align(addr,4)) = (RMEM(Align(addr,4)) & ~instr_mask(d->instr)) | (data & instr_mask(d->instr))
-#define RMEMB(addr) (RMEM(addr) & instr_mask(d->instr))
 
 /* taint register by darm specifier */
 #define RTREG(reg) emu_get_taint_reg(d->reg)
