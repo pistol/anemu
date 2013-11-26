@@ -264,6 +264,8 @@ formats for S instructions:
 #define TrailingZerosCount(x) __builtin_ctz(x)
 #define LeadingZerosCount(x)  __builtin_clz(x)
 #define BitCheck(x, pos)      ((x) & (1 << (pos)))
+#define BitExtract(x, i, j)   ((((1 << j) - (1 << i) ) & x) >> i )
+#define SignExtend(x) ((int32_t)((int16_t)x))
 
 #define Align(x,a)            __ALIGN_MASK(x,(typeof(x))(a)-1)
 #define __ALIGN_MASK(x,mask)  (((x)+(mask))&~(mask))
