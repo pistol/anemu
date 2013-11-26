@@ -35,8 +35,9 @@ void matrixMulBasic(int dimension) {
     }
 
     double start, end;
+    start = end = 0;
     if (emulation) {
-        asm volatile("bkpt 0");
+        EMU_MARKER_START;
     } else {
         start = time_ms();
     }
@@ -51,7 +52,7 @@ void matrixMulBasic(int dimension) {
         }
     }
     if (emulation) {
-        asm volatile("bkpt 1");
+        EMU_MARKER_STOP;
     } else {
         end = time_ms();
         printf("time inner (ms): %f", end - start);

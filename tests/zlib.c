@@ -185,10 +185,11 @@ int main(int argc, char **argv)
     SET_BINARY_MODE(stdout);
 
     double start, end;
+    start = end = 0;
     emulation = atoi(argv[1]);
     if (emulation) {
         emu_register_handler();
-        asm volatile("bkpt 0");
+        EMU_MARKER_START;
     } else {
         start = time_ms();
     }
@@ -214,7 +215,7 @@ int main(int argc, char **argv)
     }
 
     if (emulation) {
-        asm volatile("bkpt 1");
+        EMU_MARKER_STOP;
     } else {
         end = time_ms();
         fprintf(stderr, "time inner (ms): %f", end - start);

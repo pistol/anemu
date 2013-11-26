@@ -11,6 +11,7 @@ int main(int argc, char ** argv) {
     int dimension = atoi(argv[2]);
     // printf("emu = %d dimension = %d\n", emulation, dimension);
     double start, end, delta;
+    start = end = delta = 0;
     if (emulation) {
         emu_register_handler();
     } else {

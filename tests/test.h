@@ -2,6 +2,8 @@
 #include <stdlib.h>
 #include <time.h>
 
+#include <anemu.h>
+
 extern int emulation;
 
 static inline double time_ms(void) {
