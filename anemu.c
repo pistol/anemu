@@ -699,10 +699,13 @@ inline void emu_type_memory(const darm_t * d) {
 
         break;
     }
-    case I_STM: {
+    case I_STM:
+    case I_STMIB: {
+        assert(d->reglist);
         uint16_t reglist       = d->reglist;
         const uint8_t regcount = BitCount(reglist); /* number of bits set to 1 */
         uint32_t addr          = RREG(Rn);
+        if (d->instr == I_STMIB) addr += 4;
         uint8_t reg            = 0;
 
         while (reglist) {
@@ -719,10 +722,13 @@ inline void emu_type_memory(const darm_t * d) {
         }
         break;
     }
-    case I_LDM: {
+    case I_LDM:
+    case I_LDMIB: {
+        assert(d->reglist);
         uint16_t reglist       = d->reglist;
         const uint8_t regcount = BitCount(reglist); /* number of bits set to 1 */
         uint32_t addr          = RREG(Rn);
+        if (d->instr == I_LDMIB) addr += 4;
         uint8_t reg            = 0;
 
         while (reglist) {
