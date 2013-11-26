@@ -570,6 +570,7 @@ inline void emu_type_dst_src(const darm_t * d) {
         emu_log_debug("S flag, we're Screwed!\n");
 
         switch(d->instr) {
+            CASE_RRI(ASR, Rd, Rm, shift);
             CASE_RR (MOV, Rd, Rm);
             CASE_RRI(LSL, Rd, Rm, shift);
             CASE_RRI(LSR, Rd, Rm, shift);
