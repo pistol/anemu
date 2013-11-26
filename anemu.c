@@ -611,6 +611,7 @@ inline void emu_type_memory(const darm_t * d) {
     switch(d->instr) {
     case I_LDR:
     case I_LDRB:
+    case I_LDRSB:
     case I_LDRH: {
         uint32_t imm = (d->Rm == R_INVLD) ? d->imm : emu_regshift(d); /* RREG(Rm) or shift */
         uint32_t offset_addr = d->U == B_SET ?
@@ -638,8 +639,17 @@ inline void emu_type_memory(const darm_t * d) {
 
         uint32_t data;
         /* read 1, 2 or 4 bytes depending on instr type */
-        data = RMEMB(addr);
-        emu_log_debug("RMEMB: %x\n", data);
+        if (d->instr == I_LDRB) {
+            data = *(uint8_t  *)addr;
+        } else if (d->instr == I_LDRSB) {
+            data = *(uint8_t  *)addr;
+            data = SignExtend(data); /* 8 bit to 32 bit sign extend */
+        } else if (d->instr == I_LDRH) {
+            data = *(uint16_t *)addr;
+        } else {
+            data = RMEM(addr);
+        }
+
         if (d->Rt == PC) {
             if ((addr & 0b11) == 0) {
                 BXWritePC(data);
@@ -672,12 +682,19 @@ inline void emu_type_memory(const darm_t * d) {
         map_t *m = emu_map_lookup(addr);
         if (m) emu_log_debug("addr: %x %s\n", addr, m->name);
 #endif
-        if (d->instr == I_LDR &&
+        if (d->instr == I_STR &&
             addr != Align(addr, 4)) { /* unaligned addr */
             emu_abort("unaligned address");
         }
         /* depending on instr, 1, 2 or 4 bytes of RREG(Rt) will be used and stored to mem */
-        WMEMB(addr, RREG(Rt));
+        uint32_t data = RREG(Rt) & instr_mask(d->instr);
+        if (d->instr == I_STRB) {
+            *(uint8_t  *)addr = data;
+        } else if (d->instr == I_STRH) {
+            *(uint16_t *)addr = data;
+        } else {
+            WMEM(addr) = data;
+        }
         WTMEM(addr, RTREG(Rt));
 
         break;
