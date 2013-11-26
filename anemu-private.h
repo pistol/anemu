@@ -272,7 +272,7 @@ formats for S instructions:
 
 #define LSL(val, shift) (val << shift)
 #define LSR(val, shift) (val >> shift)
-#define ASR(val, shift) (val  / shift) /* expensive, need better alternative */
+#define ASR(val, shift) LSR((int32_t)val, shift)
 #define ROR(val, rotate) (((val) >> (rotate)) | ((val) << (32 - (rotate))))
 
 #define ISB(option) asm volatile ("isb " #option : : : "memory")
