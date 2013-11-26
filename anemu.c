@@ -755,18 +755,22 @@ inline void emu_type_memory(const darm_t * d) {
     }
     case I_PUSH: {
         uint16_t reglist       = d->reglist;
-        const uint8_t regcount = BitCount(reglist); /* number of bits set to 1 */
+        const uint8_t regcount = reglist ? BitCount(reglist) : 1; /* number of bits set to 1 */
         if (d->Rn != R_INVLD) assert(d->Rn == SP);
         uint32_t addr          = RREGN(SP) - 4 * regcount;
         uint8_t reg            = 0;
 
-        while (reglist) {
-            reg            = TrailingZerosCount(reglist); /* count trailing zeros */
-            reglist       &= ~(1 << reg);                 /* unset this bit */
-            emu_log_debug("addr: %x, r%d: %8x\n", addr, reg, RREGN(reg));
-            WMEM(addr)     = RREGN(reg);
-            if (RTMEM(addr) || RTREGN(reg)) WTMEM(addr, RTREGN(reg));
-            addr          += 4;
+        if (reglist) {
+            while (reglist) {
+                reg            = TrailingZerosCount(reglist); /* count trailing zeros */
+                reglist       &= ~(1 << reg);                 /* unset this bit */
+                emu_log_debug("addr: %x, r%d: %8x\n", addr, reg, RREGN(reg));
+                WMEM(addr)     = RREGN(reg);
+                if (RTMEM(addr) || RTREGN(reg)) WTMEM(addr, RTREGN(reg));
+                addr          += 4;
+            }
+        } else  {
+            WMEM(addr) = RREG(Rt);
         }
 
         WREGN(SP) = RREGN(SP) - 4 * regcount; /* update SP */
@@ -774,19 +778,23 @@ inline void emu_type_memory(const darm_t * d) {
     }
     case I_POP: {
         uint16_t reglist       = d->reglist;
-        const uint8_t regcount = BitCount(reglist); /* number of bits set to 1 */
+        const uint8_t regcount = reglist ? BitCount(reglist) : 1; /* number of bits set to 1 */
         if (d->Rn != R_INVLD) assert(d->Rn == SP);
         uint32_t addr          = RREGN(SP);
         uint8_t reg            = 0;
 
-        while (reglist) {
-            reg            = TrailingZerosCount(reglist); /* count trailing zeros */
-            reglist       &= ~(1 << reg);                 /* unset this bit */
-            emu_log_debug("addr: %x, r%d: %8x\n", addr, reg, RMEM(addr));
-            if (reg == PC) break;
-            WREGN(reg) = RMEM(addr);
-            if (RTREGN(reg) || RTMEM(addr)) WTREGN(reg, RTMEM(addr));
-            addr          += 4;
+        if (reglist) {
+            while (reglist) {
+                reg            = TrailingZerosCount(reglist); /* count trailing zeros */
+                reglist       &= ~(1 << reg);                 /* unset this bit */
+                emu_log_debug("addr: %x, r%d: %8x\n", addr, reg, RMEM(addr));
+                if (reg == PC) break;
+                WREGN(reg) = RMEM(addr);
+                if (RTREGN(reg) || RTMEM(addr)) WTREGN(reg, RTMEM(addr));
+                addr          += 4;
+            }
+        } else {
+            WREG(Rt) = RMEM(addr);
         }
         if (BitCheck(d->reglist, PC)) {
             BXWritePC(RMEM(addr));
