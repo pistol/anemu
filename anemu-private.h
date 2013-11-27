@@ -219,8 +219,8 @@ formats for S instructions:
     uint32_t temp;                                                      \
     asm volatile (#instr "s  %[reg1], %[reg2], %[reg3]\n"  /* updates flags */ \
                   "mrs %[cpsr], cpsr\n"                    /* save new cpsr */ \
-                  : [cpsr] "=r" (temp)                     /* output */ \
-                  : [reg1] "r"  (RREG(R1)), [reg2] "r"  (RREG(R2)), [reg3] "r" (R3) /* input */ \
+                  : [reg1] "=r" (WREG(R1)), [cpsr] "=r" (temp)    /* output */ \
+                  : [reg2] "r"  (RREG(R2)), [reg3] "r" (R3)       /* input */ \
                   : "cc"                        /* clobbers condition codes */ \
                   );                                                    \
     CPSR_UPDATE(temp);
