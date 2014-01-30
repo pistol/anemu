@@ -663,17 +663,38 @@ inline void emu_type_memory(const darm_t * d) {
             emu_abort("unaligned address");
         }
 
+        emu_log_debug("RMEM before (aligned): %x\n", RMEM(addr));
         uint32_t data;
         /* read 1, 2 or 4 bytes depending on instr type */
-        if (d->instr == I_LDRB) {
-            data = *(uint8_t  *)addr;
-        } else if (d->instr == I_LDRSB) {
-            data = *(uint8_t  *)addr;
-            data = SignExtend(data); /* 8 bit to 32 bit sign extend */
-        } else if (d->instr == I_LDRH) {
-            data = *(uint16_t *)addr;
-        } else {
+
+        switch(d->instr) {
+        case I_LDR:
             data = RMEM(addr);
+            break;
+        case I_LDRB:
+            data = *(uint8_t  *)addr;
+            break;
+        case I_LDRSB:
+            data = *(uint8_t  *)addr;
+            emu_log_debug("data: %x\n", data);
+            data = SignExtend(data); /* 8 bit to 32 bit sign extend */
+            emu_log_debug("data extended: %x\n", data);
+            break;
+        case I_LDRSH:
+            data = *(uint16_t *)addr;
+            emu_log_debug("data: %x\n", data);
+            data = SignExtend(data); /* 16 bit to 32 bit sign extend */
+            emu_log_debug("data extended: %x\n", data);
+            break;
+        case I_LDRH:
+            data = *(uint16_t *)addr;
+            break;
+        case I_LDRD:
+            data = RMEM(addr);
+            EMU(WREGN(d->Rt + 1) = RMEM(addr + 4));
+            WTREGN(d->Rt + 1, RTMEM(addr + 4));
+            break;
+        default: emu_abort("unexpected op");
         }
 
         if (d->Rt == PC) {
@@ -1872,8 +1893,10 @@ inline bool emu_enabled() {
 inline uint32_t
 instr_mask(darm_instr_t instr) {
     switch(instr) {
+    case I_LDRSB:
     case I_LDRB:
     case I_STRB: { return 0xff; }
+    case I_LDRSH:
     case I_LDRH:
     case I_STRH: { return 0xffff; }
     default:     { return 0xffffffff; }
