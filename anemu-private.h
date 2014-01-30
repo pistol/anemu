@@ -293,12 +293,15 @@ formats for S instructions:
 #define ISB(option) asm volatile ("isb " #option : : : "memory")
 #define DSB(option) asm volatile ("dsb " #option : : : "memory")
 #define DMB(option) asm volatile ("dmb " #option : : : "memory")
-// SVC requires the arguments passed in r7 register
+// SVC special case
+// argument: r7 register (sys call number)
+// return:   r0 register
 #define SVC(option) asm volatile("mov r7, %[sys]\n"/* syscall number */ \
                                  "svc " #option "\n"                    \
-                                 :                        /* output */  \
-                                 : [sys] "r" (RREGN(7))   /* input */   \
-                                 : "r7"                                 \
+                                 "mov %[ret], r0\n"                     \
+                                 : [ret] "=r" (WREGN(0))  /* output */  \
+                                 : [sys] "r"  (RREGN(7))  /* input */   \
+                                 : "r0", "r7"                           \
                                  );
 
 #define PLD(regname) asm volatile("pld [%[reg]]" :: [reg] "r" (d->regname));
