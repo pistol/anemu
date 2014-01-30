@@ -1076,7 +1076,8 @@ inline void emu_singlestep(uint32_t pc) {
     case T_THUMB_RW_MEMO:
     case T_THUMB_RW_MEMI:
     case T_THUMB_STACK:
-    case T_THUMB_LDR_PC: {
+    case T_THUMB_LDR_PC:
+    case T_THUMB_PUSHPOP: {
         emu_type_memory(d);
         break;
     }
