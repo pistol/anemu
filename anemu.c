@@ -251,6 +251,7 @@ inline void emu_type_sync(const darm_t * d) {
         emu_disasm_internal(&d3, CPU(pc) +  8);
         emu_disasm_internal(&d4, CPU(pc) + 12);
 
+        /* pthread_mutex_lock */
         /* __bionic_cmpxchg() */
         if (d2.instr == I_MOV &&
             d3.instr == I_TEQ &&
@@ -276,6 +277,8 @@ inline void emu_type_sync(const darm_t * d) {
             /* which means PC is not advanced a further +2/4 */
             /* thus we have to use CPU(pc) instead of WREGN(pc) */
             CPU(pc) += 3 * 4;
+            /* account for extras: mov + teq + strexeq */
+            emu.handled_instr += 3;
 
             if (emu_read_reg(d2.Rd) == 0) {    /* 0 if memory was updated  */
                 emu_log_debug("Lock aquire (LDREX/STREX) succesfull!\n");
@@ -286,6 +289,7 @@ inline void emu_type_sync(const darm_t * d) {
                 emu_abort("STREX failed to update memory\n");
             }
         }
+        /* pthread_mutex_unlock */
         /* __bionic_atomic_dec() */
         else if (d2.instr == I_SUB &&
                  d3.instr == I_STREX) {
@@ -307,6 +311,8 @@ inline void emu_type_sync(const darm_t * d) {
             WTREGN(d3.Rd, TAINT_CLEAR);
 
             CPU(pc) += 2 * 4;
+            /* account for extras: sub + strex */
+            emu.handled_instr += 2;
 
             if (emu_read_reg(d3.Rd) == 0) {    /* 0 if memory was updated  */
                 emu_log_debug("Lock aquire (LDREX/STREX) succesfull!\n");
