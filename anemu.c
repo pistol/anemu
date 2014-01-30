@@ -76,8 +76,6 @@ void emu_handler(int sig, siginfo_t *si, void *ucontext) {
 }
 
 inline void emu_ucontext(ucontext_t *ucontext) {
-    assert(emu.enabled == false);
-
     // emu_log_debug("saving original ucontext ...\n");
     emu.previous = emu.current = emu.original = *ucontext;
     emu.regs = (uint32_t *)&emu.current.uc_mcontext.arm_r0;
@@ -257,7 +255,7 @@ inline void emu_type_sync(const darm_t * d) {
         if (d2.instr == I_MOV &&
             d3.instr == I_TEQ &&
             d4.instr == I_STREX) {
-            emu_log_info("Detecting lock aquire (LDREX/STDEX)! Executing atomically.\n");
+            emu_log_info("Detecting lock aquire (LDREX/STREX)! Executing atomically.\n");
 
             asm volatile ("ldrex %[Rt], [%[Rn]]\n"
                           "mov %[Rd2], #0\n"
@@ -290,7 +288,7 @@ inline void emu_type_sync(const darm_t * d) {
         /* __bionic_atomic_dec() */
         else if (d2.instr == I_SUB &&
                  d3.instr == I_STREX) {
-            emu_log_info("Detecting lock aquire (LDREX/STDEX)! Executing atomically.\n");
+            emu_log_info("Detecting lock aquire (LDREX/STREX)! Executing atomically.\n");
 
             asm volatile ("ldrex %[Rt], [%[Rn]]\n"
                           "sub %[Rd2], %[Rt], #1\n"
@@ -322,7 +320,6 @@ inline void emu_type_sync(const darm_t * d) {
                           : [Rn] "r" (RREG(Rn))
                           :
                           );
-
             WTREG1(Rt, Rn);
         }
 
@@ -1005,22 +1002,19 @@ inline void emu_singlestep(uint32_t pc) {
     /* standalone signaled completion */
     if (!emu.enabled) return;
 
-#ifndef PROFILE
-    emu_map_lookup(pc);
-#endif
-
     // 1. decode instr
     // emu_disasm_ref(pc, (emu_thumb_mode() ? 16 : 32)); /* rasm2 with libopcodes backend */
     /* static const darm_t *d; */
     const darm_t *d;
-    d = emu_disasm(pc); /* darm */
+    d = emu_disasm_internal(darm, pc); /* darm */
+
     /* check for invalid disassembly */
     /* best we can do is stop emu and resume execution at the instruction before the issue */
     if (!d) {
         emu_abort("invalid disassembly"); /* emu_stop() will get called after */
     }
 #ifndef PROFILE
-    darm_dump(d);           /* dump internal darm_t state */
+    darm_dump(d, emu.trace_file); /* dump internal darm_t state */
 #endif
 
     if (emu_stop_trigger(d)) {
@@ -1421,16 +1415,16 @@ inline uint32_t *emu_write_reg(darm_reg_t reg) {
 
 inline void dbg_dump_ucontext(ucontext_t *uc) {
     mcontext_t *r = &uc->uc_mcontext;
-    printf("ucontext dump:\n");
-    printf("fault addr %8x\n",
+    emu_log_info("ucontext dump:\n");
+    emu_log_info("fault addr %8x\n",
            (uint32_t)r->fault_address);
-    printf("r0: %8x  r1: %8x  r2: %8x  r3: %8x\n",
+    emu_log_info("r0: %8x  r1: %8x  r2: %8x  r3: %8x\n",
            (uint32_t)r->arm_r0, (uint32_t)r->arm_r1, (uint32_t)r->arm_r2,  (uint32_t)r->arm_r3);
-    printf("r4: %8x  r5: %8x  r6: %8x  r7: %8x\n",
+    emu_log_info("r4: %8x  r5: %8x  r6: %8x  r7: %8x\n",
            (uint32_t)r->arm_r4, (uint32_t)r->arm_r5, (uint32_t)r->arm_r6,  (uint32_t)r->arm_r7);
-    printf("r8: %8x  r9: %8x  sl: %8x  fp: %8x\n",
+    emu_log_info("r8: %8x  r9: %8x  sl: %8x  fp: %8x\n",
            (uint32_t)r->arm_r8, (uint32_t)r->arm_r9, (uint32_t)r->arm_r10, (uint32_t)r->arm_fp);
-    printf("ip: %8x  sp: %8x  lr: %8x  pc: %8x  cpsr: %8x\n",
+    emu_log_info("ip: %8x  sp: %8x  lr: %8x  pc: %8x  cpsr: %8x\n",
            (uint32_t)r->arm_ip, (uint32_t)r->arm_sp, (uint32_t)r->arm_lr,  (uint32_t)r->arm_pc, (uint32_t)r->arm_cpsr);
 }
 
