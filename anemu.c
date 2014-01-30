@@ -263,7 +263,7 @@ inline void emu_type_sync(const darm_t * d) {
                           "mov %[Rd2], #0\n"
                           "teq %[Rt], %[Rm3]\n"
                           "strexeq %[Rd2], %[Rt4], [%[Rn]]"
-                          : [Rt] "=&r" (*emu_write_reg(d->Rt)), [Rd2] "=&r" (*emu_write_reg(d2.Rd))
+                          : [Rt] "=&r" (*emu_write_reg(d->Rt)), [Rd2] "=&r" (*emu_write_reg(d2.Rd)), "+m" (WMEM(RREG(Rn)))
                           : [Rn] "r" (emu_read_reg(d->Rn)), [Rm3] "Ir" (emu_read_reg(d3.Rm)), [Rt4] "r" (emu_read_reg(d4.Rt))
                           : "cc"
                           );
