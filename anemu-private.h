@@ -6,6 +6,7 @@
 // #define ANDROID
 // disable verbose logging for perf measurements
 #define PROFILE
+#define TRACE
 #define NO_TAINT
 
 #ifdef ANDROID
@@ -21,12 +22,12 @@
 
 /* TODO: use LOGE, LOGW, LOGI, LOGD */
 #ifndef PROFILE
-#define emu_log_error(...) printf(__VA_ARGS__)
-#define emu_log_warn(...)  printf(__VA_ARGS__)
-#define emu_log_info(...)  printf(__VA_ARGS__)
-#define emu_log_debug(...) printf(__VA_ARGS__)
+#define emu_log_error(...) { fprintf(emu.trace_file, __VA_ARGS__); printf(__VA_ARGS__); fflush(NULL); }
+#define emu_log_warn(...)  { fprintf(emu.trace_file, __VA_ARGS__); }
+#define emu_log_info(...)  { fprintf(emu.trace_file, __VA_ARGS__); }
+#define emu_log_debug(...) { fprintf(emu.trace_file, __VA_ARGS__); }
 #else
-#define emu_log_error(...) printf(__VA_ARGS__)
+#define emu_log_error(...) { fprintf(emu.trace_file, __VA_ARGS__); printf(__VA_ARGS__); fflush(NULL); }
 #define emu_log_warn(...)  (void)(NULL)
 #define emu_log_info(...)  (void)(NULL)
 #define emu_log_debug(...) (void)(NULL)
@@ -50,17 +51,18 @@
     emu_log_debug("EMU: %s\n", #stmt);            \
     stmt;                                         \
 
-#define emu_printf(...) printf("%s: ", __PRETTY_FUNCTION__); printf(__VA_ARGS__)
-#define EMU_ENTRY emu_printf("\n")
-#define emu_abort(...) emu_printf(__VA_ARGS__);             \
-    printf("\n");                                           \
-    printf("dumping taintmaps:\n");                         \
-    emu_dump_taintmaps();                                   \
-    printf("\n");                                           \
-    printf("*********************************\n");          \
-    printf("FATAL ERROR! ABORTING EMU!\n");                 \
-    printf("*********************************\n\n");        \
-    exit(1);
+#define emu_printf(...) emu_log_error("%s: ", __PRETTY_FUNCTION__); printf(__VA_ARGS__)
+#define EMU_ENTRY emu_printf()
+#define emu_abort(...) emu_log_error(__VA_ARGS__);                 \
+    emu_log_error("\n");                                           \
+    emu_log_error("dumping taintmaps:\n");                         \
+    emu_dump_taintmaps();                                          \
+    emu_log_error("\n");                                           \
+    emu_log_error("*********************************\n");          \
+    emu_log_error("FATAL ERROR! ABORTING EMU!\n");                 \
+    emu_log_error("*********************************\n\n");        \
+    fflush(NULL);                                                  \
+    emu_stop();
 
 #define SWITCH_COMMON                                                  \
     case I_INVLD: {                                                    \
@@ -137,6 +139,8 @@ typedef struct _emu_t {
     pthread_mutex_t lock;        /* page fault handler sync */
     double     time_start;       /* execution time measurements */
     double     time_end;
+    FILE      *trace_file;       /* instruction trace file */
+    uint8_t    lock_acquired;    /* target program holding a lock */
 } emu_t;
 
 /* read/write register by number */
@@ -344,6 +348,7 @@ void emu_start();
 void emu_stop();
 uint8_t emu_stop_trigger();
 void emu_singlestep(uint32_t pc);
+void emu_set_enabled(bool state);
 
 uint8_t emu_regs_tainted();
 

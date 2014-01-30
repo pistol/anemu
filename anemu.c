@@ -9,6 +9,9 @@
 #include <pthread.h>
 #include <time.h>
 #include <string.h>             /* memset */
+#include <sys/prctl.h>          /* thread name */
+#include <dlfcn.h>              /* dladdr */
+#include <corkscrew/demangle.h> /* demangle C++ */
 
 #if HAVE_SETRLIMIT
 # include <sys/types.h>
@@ -20,6 +23,7 @@
 
 #define TAINT_CLEAR 0x0
 
+extern void dlemu_set_tid(pid_t tid);
 inline uint8_t emu_regs_tainted() {
     int i, tainted;
     tainted = N_REGS;
@@ -1084,13 +1088,40 @@ inline void emu_singlestep(uint32_t pc) {
     emu_advance_pc();
 }
 
+void emu_set_enabled(bool status) {
+    emu.enabled = status;
+    /* synchronize with libc dlmalloc() */
+    if (status) {
+        dlemu_set_tid(gettid());
+    } else {
+        dlemu_set_tid(0);
+    }
+}
+
 void emu_init() {
     if (emu.initialized == 1) return;
 
     emu.handled_instr = 0;
     emu.disasm_bytes  = 0;
     emu.standalone    = false;
-    pthread_mutex_init(&emu.lock, NULL);
+    emu_set_enabled(false);
+    emu.trace_file    = stdout;
+    if (pthread_mutex_init(&emu.lock, NULL) != 0) {
+        emu_abort("lock init failed");
+    }
+
+#ifdef TRACE
+    /* need to initialize log file before any printfs */
+    FILE *ifp, *ofp;
+    char *mode = "w";
+    char traceFilename[] = "/sdcard/trace";
+
+    emu.trace_file = fopen(traceFilename, mode);
+
+    if (emu.trace_file == NULL) {
+        emu_abort("Can't open trace file %s!\n", traceFilename);
+    }
+#endif
 
     /* init darm */
     emu_log_debug("initializing darm disassembler ...\n");
@@ -1113,7 +1144,7 @@ void emu_start() {
 
     /* disabled taintinfo_t usage and instead using explicit emu_set_taint APIs before entering emu */
 
-    emu.enabled = 1;
+    emu_set_enabled(1);
     emu.time_start = time_ms();
 
     while(emu.enabled) {
@@ -1138,12 +1169,15 @@ void emu_stop() {
            emu.handled_instr,
            (delta * 1e6) / emu.handled_instr);
 
-    emu.enabled = 0;
+    emu_set_enabled(0);
     if (emu_regs_tainted()) {
         emu_log_warn("WARNING: stopping emu with tainted regs!\n");
     }
     dbg_dump_ucontext(&emu.current);
     emu_log_debug("### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###\n");
+#ifdef TRACE
+    fflush(emu.trace_file);
+#endif
     pthread_mutex_unlock(&emu.lock);
     emu_log_info("emulation stopped.\n");
     /* if we are not in standalone, we need to restore execution context to latest values */
@@ -1164,7 +1198,7 @@ inline uint8_t emu_stop_trigger(const darm_t * d) {
             return 1;
         } else if (d->imm == MARKER_STOP_VAL) {
             emu_log_debug("MARKER: leaving emu due to JNI re-entry\n");
-            emu.enabled = false;
+            emu_set_enabled(0);
         } else {
             emu_abort("MARKER: unexpected value! %x\n", d->imm);
         }
@@ -1174,7 +1208,7 @@ inline uint8_t emu_stop_trigger(const darm_t * d) {
         /* special standalone stop case */
         if (RREG(Rm) == MARKER_STOP_VAL) {
             emu_log_debug("MARKER: stopping standalone emu\n");
-            emu.enabled = false;
+            emu_set_enabled(0);
         }
         break;
     }
@@ -1265,10 +1299,41 @@ inline const darm_t* emu_disasm_internal(darm_t *d, uint32_t pc) {
     /* Returns 0 on failure, 1 for Thumb, 2 for Thumb2, and 2 for ARMv7. */
     emu_log_debug("emu_disasm : w: %x w2: %x addr: %x T: %d ret: %d\n", w, w2, addr, emu_thumb_mode(), ret);
     if (ret) {
-#ifndef PROFILE
+#ifdef TRACE
         darm_str_t str;
         darm_str2(d, &str, 1); /* lowercase str */
-        emu_log_debug("darm : %x %x %s\n", pc, d->w, str.total);
+        map_t *m = emu_map_lookup(pc);
+
+        Dl_info info;
+        const char* symbol_name;
+        uintptr_t function_offset = 0;
+        static char buf[256];
+        if (dladdr((void *)pc, &info)) {
+            /* FIXME: can't use strdup since it uses dlmalloc... */
+            /* HACK: temporarily disable dlmalloc marker to allow call  */
+            dlemu_set_tid(0);
+            char* demangled = emu.lock_acquired ? "locked" : demangle_symbol_name(info.dli_sname);
+            dlemu_set_tid(gettid());
+            symbol_name = demangled ? demangled : info.dli_sname;
+            function_offset = (uintptr_t)info.dli_saddr - (uintptr_t)info.dli_fbase;
+
+            snprintf(buf, sizeof(buf), "TRACE %6d %8x %08x %-32s %-32s %8x %-32s",
+                     emu.handled_instr,
+                     pc - m->vm_start,
+                     d->w,
+                     str.total,
+                     m->name,
+                     function_offset,
+                     symbol_name
+                     );
+
+            if (!emu.lock_acquired) free(demangled);
+        } else {
+            emu_abort("dladdr failed");
+        }
+
+        fprintf(emu.trace_file, "%s\n", buf);
+        fflush(emu.trace_file);
 #endif
         emu.disasm_bytes = ret * 2 /* bytes */;
         emu_log_debug("bytes: %d\n", emu.disasm_bytes);
@@ -1524,7 +1589,7 @@ mprotectHandler(int sig, siginfo_t *si, void *ucontext) {
         emu_log_debug("un-protecting mem before singlestep...\n");
         emu_unprotect_mem();
 
-        emu.enabled = 1;
+        emu_set_enabled(1);
 
         emu_log_debug("singlestep instruction at pc: %x\n", pc);
         emu_singlestep(pc);
