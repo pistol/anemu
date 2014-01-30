@@ -840,11 +840,15 @@ inline void emu_type_memory(const darm_t * d) {
         WREGN(SP) = RREGN(SP) - 4 * regcount; /* update SP */
         break;
     }
-    case I_POP: {
+    case I_POP:
+    case I_LDM:
+    case I_LDMIB: {
         uint16_t reglist       = d->reglist;
         const uint8_t regcount = reglist ? BitCount(reglist) : 1; /* number of bits set to 1 */
-        if (d->Rn != R_INVLD) assert(d->Rn == SP);
         uint32_t addr          = RREGN(SP);
+        uint32_t addr          = RREG(Rn);
+        if (d->instr == I_LDMIB) addr += 4;
+        if (d->instr == I_POP) assert(d->Rn == SP);
         uint8_t reg            = 0;
 
         if (reglist) {
@@ -852,21 +856,23 @@ inline void emu_type_memory(const darm_t * d) {
                 reg            = TrailingZerosCount(reglist); /* count trailing zeros */
                 reglist       &= ~(1 << reg);                 /* unset this bit */
                 emu_log_debug("addr: %x, r%d: %8x\n", addr, reg, RMEM(addr));
-                if (reg == PC) break;
+                if (reg == PC) break; /* PC is last reg, handled specially */
                 WREGN(reg) = RMEM(addr);
                 if (RTREGN(reg) || RTMEM(addr)) WTREGN(reg, RTMEM(addr));
                 addr          += 4;
             }
-        } else {
-            WREG(Rt) = RMEM(addr);
+        } else  {
+            WMEM(addr) = RREG(Rt);
         }
         if (BitCheck(d->reglist, PC)) {
             BXWritePC(RMEM(addr));
         }
-        if (!BitCheck(d->reglist, SP)) {
-            EMU(WREGN(SP) = RREGN(SP) + 4 * regcount); /* update SP */
-        } else {
-            emu_abort("unknown Rn %d %x", d->Rn, RREG(Rn));
+        if (d->W == B_SET) {    /* writeback */
+            if (BitCheck(d->reglist, d->Rn) == 0) {
+                EMU(WREG(Rn) = RREG(Rn) + 4 * regcount);
+            } else {
+                emu_abort("unknown Rn %d %x", d->Rn, RREG(Rn));
+            }
         }
 
         break;
