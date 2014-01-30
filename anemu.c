@@ -118,7 +118,7 @@ inline void emu_type_arith_shift(const darm_t * d) {
     if (d->S == B_SET) {
         emu_log_debug("S flag, we're Screwed!\n");
 
-        uint32_t imm = emu_regshift(d);
+        uint32_t imm = emu_regshift(d, RREG(Rm));
         switch(d->instr) {
             CASE_RRR(ADD, Rd, Rn, imm);
             CASE_RRR(ADC, Rd, Rn, imm);
@@ -144,7 +144,7 @@ inline void emu_type_arith_shift(const darm_t * d) {
             /* shift type 0 is LSL */
             EMU(WREG(Rd) = LSL(RREG(Rn), RREG(Rm)));
         } else {
-            uint32_t sreg = emu_regshift(d);
+            uint32_t sreg = emu_regshift(d, RREG(Rm));
             emu_log_debug("sreg = %x\n", sreg);
             /* FIXME: BIC has no Rs or shift */
             EMU(WREG(Rd) = OP(RREG(Rn), sreg));
@@ -500,15 +500,18 @@ inline void emu_type_move_imm(const darm_t * d) {
 inline void emu_type_cmp_op(const darm_t * d) {
     /* EMU_ENTRY; */
 
+    uint32_t shifted = emu_regshift(d, RREG(Rm));
     switch(d->instr) {
     case I_CMP: {
-        uint32_t shifted = emu_regshift(d);
         ASM_RS_CMP(CMP, Rn, shifted);
         break;
     }
     case I_TEQ: {
-        uint32_t shifted = emu_regshift(d);
         ASM_RS_CMP(TEQ, Rn, shifted);
+        break;
+    }
+    case I_TST: {
+        ASM_RS_CMP(TST, Rn, shifted);
         break;
     }
         SWITCH_COMMON;
@@ -600,8 +603,10 @@ inline void emu_type_memory(const darm_t * d) {
     case I_LDR:
     case I_LDRB:
     case I_LDRSB:
-    case I_LDRH: {
-        uint32_t imm = (d->Rm == R_INVLD) ? d->imm : emu_regshift(d); /* RREG(Rm) or shift */
+    case I_LDRSH:
+    case I_LDRH:
+    case I_LDRD: {
+        uint32_t imm = (d->Rm == R_INVLD) ? d->imm : emu_regshift(d, RREG(Rm)); /* RREG(Rm) or shift */
         uint32_t offset_addr = d->U == B_SET ?
             (RREG(Rn) + imm) :
             (RREG(Rn) - imm);
@@ -910,9 +915,10 @@ inline uint32_t emu_dataop(const darm_t *d, const uint32_t a, const uint32_t b) 
     return 0xdeadc0de;
 }
 
-inline uint32_t emu_regshift(const darm_t *d) {
+/* val: Rm or Rn */
+inline uint32_t emu_regshift(const darm_t *d, uint32_t val) {
     uint32_t amount = d->Rs != R_INVLD ? RREG(Rs) : d->shift; /* shift register value or shift constant */
-    uint32_t val = RREG(Rm);
+    emu_log_debug("regshift: amount: %x val: %x\n", amount, val);
 
     if (amount == 0) return val;
 
