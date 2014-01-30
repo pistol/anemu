@@ -38,20 +38,35 @@ inline uint8_t emu_regs_tainted() {
     return tainted;
 }
 
+// see man(2) prctl, specifically the section about PR_GET_NAME
+#define MAX_TASK_NAME_LEN (16)
+
 /* SIGTRAP handler used for single-stepping */
 void emu_handler(int sig, siginfo_t *si, void *ucontext) {
     pthread_mutex_lock(&emu.lock);
     uint32_t pc = (*(ucontext_t *)ucontext).uc_mcontext.arm_pc;
-
-    emu_log_debug("SIG %d with TRAP code: %d pc: %x addr: %x\n",
-               sig,
-               si->si_code,
-               pc,
-               (int) si->si_addr);
+    char threadname[MAX_TASK_NAME_LEN + 1]; // one more for termination
+    if (prctl(PR_GET_NAME, (unsigned long)threadname, 0, 0, 0) != 0) {
+        strcpy(threadname, "<name unknown>");
+    } else {
+        // short names are null terminated by prctl, but the manpage
+        // implies that 16 byte names are not.
+        threadname[MAX_TASK_NAME_LEN] = 0;
+    }
 
     emu_init();
-    emu_ucontext((ucontext_t *)ucontext); /* one time emu state initialization */
+    emu_log_debug("emu.enabled = %d\n", emu.enabled);
+    emu_log_debug("SIG %d with TRAP code: %d pc: %x addr: %x pid: %d tid: %d (%s)\n",
+                  sig,
+                  si->si_code,
+                  pc,
+                  (int) si->si_addr,
+                  getpid(),
+                  gettid(),
+                  threadname);
     emu_map_lookup(pc);
+    assert(emu.enabled == false);
+    emu_ucontext((ucontext_t *)ucontext); /* one time emu state initialization */
     emu_start();
     emu_stop();
 }
