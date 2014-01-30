@@ -323,12 +323,7 @@ inline void emu_type_sync(const darm_t * d) {
                 emu_abort("STREX failed to update memory\n");
             }
         } else {
-            asm volatile ("ldrex %[Rt], [%[Rn]]"
-                          : [Rt] "=&r" (WREG(Rt))
-                          : [Rn] "r" (RREG(Rn))
-                          :
-                          );
-            WTREG1(Rt, Rn);
+            emu_abort("Lonely LDREX...\n");
         }
 
         break;
