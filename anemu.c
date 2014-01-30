@@ -712,7 +712,8 @@ inline void emu_type_memory(const darm_t * d) {
     }
     case I_STR:
     case I_STRB:
-    case I_STRH: {
+    case I_STRH:
+    case I_STRD: {
         uint32_t offset_addr = d->U == B_SET ?
             (RREG(Rn) + d->imm) :
             (RREG(Rn) - d->imm);
@@ -733,15 +734,29 @@ inline void emu_type_memory(const darm_t * d) {
             addr != Align(addr, 4)) { /* unaligned addr */
             emu_abort("unaligned address");
         }
+        emu_log_debug("RMEM before:  %x\n", RMEM(addr));
         /* depending on instr, 1, 2 or 4 bytes of RREG(Rt) will be used and stored to mem */
         uint32_t data = RREG(Rt) & instr_mask(d->instr);
-        if (d->instr == I_STRB) {
-            *(uint8_t  *)addr = data;
-        } else if (d->instr == I_STRH) {
-            *(uint16_t *)addr = data;
-        } else {
+        switch(d->instr) {
+        case I_STR:
             WMEM(addr) = data;
+            break;
+        case I_STRB:
+            *(uint8_t  *)addr = data;
+            break;
+        case I_STRH:
+            *(uint16_t *)addr = data;
+            break;
+        case I_STRD:
+            WMEM(addr)     = RREGN(d->Rt);
+            WMEM(addr + 4) = RREGN(d->Rt + 1);
+            /* WTMEM(addr) case handled commonly below */
+            WTMEM(addr + 4, RTREGN(d->Rt + 1));
+            break;
+        default: emu_abort("unexpected op");
         }
+
+        emu_log_debug("RMEM after:   %x\n", RMEM(addr));
         WTMEM(addr, RTREG(Rt));
 
         break;
