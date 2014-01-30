@@ -763,65 +763,17 @@ inline void emu_type_memory(const darm_t * d) {
 
         break;
     }
+    case I_PUSH:
     case I_STM:
     case I_STMIB: {
-        assert(d->reglist);
-        uint16_t reglist       = d->reglist;
-        const uint8_t regcount = BitCount(reglist); /* number of bits set to 1 */
-        uint32_t addr          = RREG(Rn);
-        if (d->instr == I_STMIB) addr += 4;
-        uint8_t reg            = 0;
-
-        while (reglist) {
-            reg            = TrailingZerosCount(reglist); /* count trailing zeros */
-            reglist       &= ~(1 << reg);                 /* unset this bit */
-            emu_log_debug("addr: %x, r%d: %8x\n", addr, reg, RREGN(reg));
-            WMEM(addr)     = RREGN(reg);
-            if (RTMEM(addr) || RTREGN(reg)) WTMEM(addr, RTREGN(reg));
-            WTMEM(addr, RTREGN(reg));
-            addr          += 4;
-        }
-        if (d->W == B_SET) {    /* writeback */
-            EMU(WREG(Rn) = RREG(Rn) + 4 * regcount);
-        }
-        break;
-    }
-    case I_LDM:
-    case I_LDMIB: {
-        assert(d->reglist);
-        uint16_t reglist       = d->reglist;
-        const uint8_t regcount = BitCount(reglist); /* number of bits set to 1 */
-        uint32_t addr          = RREG(Rn);
-        if (d->instr == I_LDMIB) addr += 4;
-        uint8_t reg            = 0;
-
-        while (reglist) {
-            reg            = TrailingZerosCount(reglist); /* count trailing zeros */
-            reglist       &= ~(1 << reg);                 /* unset this bit */
-            emu_log_debug("addr: %x, r%d: %8x\n", addr, reg, RMEM(addr));
-            if (reg == PC) break;
-            WREGN(reg) = RMEM(addr);
-            if (RTREGN(reg) || RTMEM(addr)) WTREGN(reg, RTMEM(addr));
-            addr          += 4;
-        }
-        if (BitCheck(d->reglist, PC)) {
-            BXWritePC(RMEM(addr));
-        }
-        if (d->W == B_SET) {    /* writeback */
-            if (BitCheck(d->reglist, d->Rn)) {
-                EMU(WREG(Rn) = RREG(Rn) + 4 * regcount);
-            } else {
-                emu_abort("unknown Rn %d %x", d->Rn, RREG(Rn));
-            }
-        }
-
-        break;
-    }
-    case I_PUSH: {
         uint16_t reglist       = d->reglist;
         const uint8_t regcount = reglist ? BitCount(reglist) : 1; /* number of bits set to 1 */
-        if (d->Rn != R_INVLD) assert(d->Rn == SP);
-        uint32_t addr          = RREGN(SP) - 4 * regcount;
+        uint32_t addr          = RREG(Rn);
+        if (d->instr == I_STMIB) addr += 4;
+        if (d->instr == I_PUSH)  {
+            assert(d->Rn == SP);
+            addr -= 4 * regcount;
+        }
         uint8_t reg            = 0;
 
         if (reglist) {
@@ -831,13 +783,19 @@ inline void emu_type_memory(const darm_t * d) {
                 emu_log_debug("addr: %x, r%d: %8x\n", addr, reg, RREGN(reg));
                 WMEM(addr)     = RREGN(reg);
                 if (RTMEM(addr) || RTREGN(reg)) WTMEM(addr, RTREGN(reg));
+                WTMEM(addr, RTREGN(reg));
                 addr          += 4;
             }
-        } else  {
+        } else {
             WMEM(addr) = RREG(Rt);
         }
-
-        WREGN(SP) = RREGN(SP) - 4 * regcount; /* update SP */
+        if (d->W == B_SET) {    /* writeback */
+            if (d->Rn == SP) {
+                EMU(WREG(Rn) = RREG(Rn) - 4 * regcount);
+            } else {
+                EMU(WREG(Rn) = RREG(Rn) + 4 * regcount);
+            }
+        }
         break;
     }
     case I_POP:
