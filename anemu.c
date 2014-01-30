@@ -561,43 +561,75 @@ inline void emu_type_opless(const darm_t * d) {
 inline void emu_type_dst_src(const darm_t * d) {
     /* EMU_ENTRY; */
 
-    if (d->S == B_SET) {
-        emu_log_debug("S flag, we're Screwed!\n");
+    if (d->instr != I_MOV && d->Rm == R_INVLD) assert(d->shift != 0);
+    assert(d->Rm != R_INVLD);
 
-        switch(d->instr) {
-            CASE_RRI(ASR, Rd, Rm, shift);
-            CASE_RR (MOV, Rd, Rm);
-            CASE_RRI(LSL, Rd, Rm, shift);
-            CASE_RRI(LSR, Rd, Rm, shift);
-        case I_NOP: {
-            /* nothing to do */
-            break;
+    // ins{S}<c> <Rd>,<Rm>
+    // ins{S}<c> <Rd>,<Rm>,#<imm>
+    if (d->Rn == R_INVLD && d->Rm != R_INVLD) {
+        uint32_t imm = emu_regshift(d, RREG(Rm));
+        // RdImm
+        if (d->S == B_SET) {
+            emu_log_debug("S flag, we're Screwed!\n");
+            switch(d->instr) {
+                CASE_RImm(ASR, Rd, imm);
+                CASE_RImm(LSL, Rd, imm);
+                CASE_RImm(LSR, Rd, imm);
+                CASE_RImm(MOV, Rd, imm);
+            case I_NOP: {
+                /* nothing to do */
+                break;
+            }
+                SWITCH_COMMON;
+            }
+        } else {
+            switch(d->instr) {
+            case I_ASR:
+            case I_LSL:
+            case I_LSR:
+            case I_MOV: {
+                WREG(Rd) = imm;
+                break;
+            }
+            case I_NOP: {
+                /* nothing to do */
+                break;
+            }
+                SWITCH_COMMON;
+            }
         }
-            SWITCH_COMMON;
-        }
-    } else {
-        switch(d->instr) {
-        case I_MOV: {
-            EMU(WREG(Rd) = RREG(Rm));
-            break;
-        }
-        case I_LSL: {
-            EMU(WREG(Rd) = LSL(RREG(Rm), d->shift));
-            break;
-        }
-        case I_LSR: {
-            EMU(WREG(Rd) = LSR(RREG(Rm), d->shift));
-            break;
-        }
-        case I_NOP: {
-            /* nothing to do */
-            break;
-        }
-            SWITCH_COMMON;
-        }
+        /* FIXME: what about NOP? */
+        WTREG1(Rd, Rm);
     }
-    /* FIXME: what about NOP? */
-    WTREG1(Rd, Rm);
+    // ins{S}<c> <Rd>,<Rn>,<Rm>
+    else if (d->Rn != R_INVLD && d->Rm != R_INVLD) {
+        //RdRnRm
+        if (d->S == B_SET) {
+            emu_log_debug("S flag, we're Screwed!\n");
+            switch(d->instr) {
+                CASE_RRR(ASR, Rd, Rn, d->Rm);
+                CASE_RRR(LSL, Rd, Rn, d->Rm);
+                CASE_RRR(LSR, Rd, Rn, d->Rm);
+            case I_NOP: {
+                /* nothing to do */
+                break;
+            }
+                SWITCH_COMMON;
+            }
+        } else {
+            switch(d->instr) {
+            case I_ASR: WREG(Rd) = ASR(RREG(Rn), RREG(Rm)); break;
+            case I_LSL: WREG(Rd) = LSL(RREG(Rn), RREG(Rm)); break;
+            case I_LSR: WREG(Rd) = LSR(RREG(Rn), RREG(Rm)); break;
+            case I_NOP: /* nothing to do */                 break;
+                SWITCH_COMMON;
+            }
+        }
+        /* FIXME: what about NOP? */
+        WTREG2(Rd, Rn, Rm);
+    } else {
+        emu_abort("unexpected format");
+    }
 }
 
 inline void emu_type_memory(const darm_t * d) {
