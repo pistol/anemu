@@ -279,6 +279,7 @@ inline void emu_type_sync(const darm_t * d) {
 
             if (emu_read_reg(d2.Rd) == 0) {    /* 0 if memory was updated  */
                 emu_log_debug("Lock aquire (LDREX/STREX) succesfull!\n");
+                emu.lock_acquired = 1;
                 /* FIXME: deadlock on malloc! */
                 // WTMEM(RREG(Rn), RTREGN(d4.Rt));
             } else {
@@ -309,6 +310,7 @@ inline void emu_type_sync(const darm_t * d) {
 
             if (emu_read_reg(d3.Rd) == 0) {    /* 0 if memory was updated  */
                 emu_log_debug("Lock aquire (LDREX/STREX) succesfull!\n");
+                emu.lock_acquired = 0;
                 /* FIXME: deadlock on malloc! */
                 // WTMEM(RREG(Rn), RTREGN(d4.Rt));
             } else {
