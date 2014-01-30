@@ -310,27 +310,7 @@ inline void emu_type_sync(const darm_t * d) {
         break;
     }
     case I_STREX: {
-        emu_log_debug("STREX before:\n");
-        emu_log_debug("Rt: %x\n", RREG(Rt));
-        emu_log_debug("Rn: %x\n", RREG(Rn));
-        emu_log_debug("Rd: %x\n", RREG(Rd));
-        emu_log_debug("MEM Rn: %x\n", RMEM(RREG(Rn)));
-
-        asm volatile ("strex %[Rd], %[Rt], [%[Rn]]"
-                      : [Rd] "=&r" (WREG(Rd))
-                      : [Rt] "r" (RREG(Rt)), [Rn] "r" (RREG(Rn))
-                      : "memory"
-                      );
-
-        emu_log_debug("STREX after:\n");
-        emu_log_debug("Rd: %x\n", RREG(Rd));
-        emu_log_debug("MEM Rn: %x\n", RMEM(RREG(Rn)));
-
-        if (RREG(Rd) == 0) {    /* 0 if memory was updated  */
-            WTMEM(RREG(Rn), RTREG(Rt));
-        } else {
-            emu_abort("STREX failed to update memory\n");
-        }
+        emu_abort("unexpected STREX (should be part of a previous LDREX pattern)\n");
         break;
     }
     SWITCH_COMMON;
