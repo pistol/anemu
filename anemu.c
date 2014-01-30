@@ -288,7 +288,7 @@ inline void emu_type_sync(const darm_t * d) {
             WTREGN(d2.Rd, RTREG(Rt));
             WTREGN(d3.Rd, TAINT_CLEAR);
 
-            CPU(pc) += 3 * 4;
+            CPU(pc) += 2 * 4;
 
             if (emu_read_reg(d3.Rd) == 0) {    /* 0 if memory was updated  */
                 emu_log_debug("Lock aquire (LDREX/STREX) succesfull!\n");
