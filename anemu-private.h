@@ -144,6 +144,7 @@ typedef struct _emu_t {
     double     time_start;       /* execution time measurements */
     double     time_end;
     FILE      *trace_file;       /* instruction trace file */
+    uint8_t    skip;             /* special hack to skip certain tricky functions */
     uint8_t    lock_acquired;    /* target program holding a lock */
 } emu_t;
 

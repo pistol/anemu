@@ -283,8 +283,8 @@ inline void emu_type_sync(const darm_t * d) {
 
             if (emu_read_reg(d2.Rd) == 0) {    /* 0 if memory was updated  */
                 emu_log_debug("Lock aquire (LDREX/STREX) succesfull!\n");
+                /* special case to avoid deadlock on malloc! */
                 emu.lock_acquired = 1;
-                /* FIXME: deadlock on malloc! */
                 // WTMEM(RREG(Rn), RTREGN(d4.Rt));
             } else {
                 emu_abort("STREX failed to update memory\n");
@@ -982,6 +982,13 @@ inline void emu_advance_pc() {
     emu_log_debug("handled instructions: %d\n", emu.handled_instr);
     emu_dump_diff();
     dbg_dump_ucontext(&emu.current);
+    if (!emu.lock_acquired) {
+        emu_log_debug("checking malloc state...\n");
+        /* DEBUG: for consistency, we directly call to check the internal state of malloc */
+        /* This is for avoiding any memory corruption done by improper EMU of malloc code */
+        check_malloc();
+    }
+
     if (emu_regs_tainted() == 0) {
         emu_protect_mem();
         emu_stop();             /* will not return */
@@ -1014,6 +1021,12 @@ inline void emu_singlestep(uint32_t pc) {
     /* static const darm_t *d; */
     const darm_t *d;
     d = emu_disasm_internal(darm, pc); /* darm */
+
+    if (emu.skip) {
+        emu_set_enabled(0);
+        emu.skip = 0;
+        return;
+    }
 
     /* check for invalid disassembly */
     /* best we can do is stop emu and resume execution at the instruction before the issue */
@@ -1140,6 +1153,7 @@ void emu_init() {
     emu.standalone    = false;
     emu_set_enabled(false);
     emu.trace_file    = stdout;
+    emu.skip          = 0;
     if (pthread_mutex_init(&emu.lock, NULL) != 0) {
         emu_abort("lock init failed");
     }
@@ -1360,6 +1374,21 @@ inline const darm_t* emu_disasm_internal(darm_t *d, uint32_t pc) {
                      function_offset,
                      symbol_name
                      );
+
+            if (symbol_name) {  /* valid symbol */
+                if (strcmp(m->name, "/system/lib/libc.so") == 0) {
+                    if ((strcmp(symbol_name, "dlmalloc") == 0)) {
+                        emu_log_error("SPECIAL avoiding %s %s %x\n", m->name, symbol_name, pc - m->vm_start);
+                        emu.skip = 1;
+                    }
+                }
+                if (strcmp(m->name, "/system/lib/libicuuc.so") == 0) {
+                    if ((strcmp(symbol_name, "utext_openUChars_48") == 0)) { // works, before memset
+                        emu_log_error("SPECIAL avoiding %s %s %x\n", m->name, symbol_name, pc - m->vm_start);
+                        emu.skip = 1;
+                    }
+                }
+            }
 
             if (!emu.lock_acquired) free(demangled);
         } else {
