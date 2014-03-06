@@ -1703,11 +1703,18 @@ mmap_init() {
 
 inline taintmap_t *
 emu_get_taintmap(uint32_t addr) {
+    taintmap_t *tm;
     addr = Align(addr, 4);      /* word align */
 
     uint32_t stack_start = emu.maps[emu.nr_maps - 2].vm_start;
     uint8_t  idx         = (addr > stack_start) ? TAINTMAP_STACK : TAINTMAP_LIB;
-    return &emu.taintmaps[idx];
+    tm = &emu.taintmaps[idx];
+
+    if (tm->data == NULL || tm->start == 0) {
+        emu_abort("uninitialized taintmap");
+    }
+
+    return tm;
 }
 
 uint32_t
@@ -1763,9 +1770,6 @@ inline void emu_set_taint_mem(uint32_t addr, uint32_t tag) {
 
     // emu_log_debug("addr: %x offset: %x tag: %x", addr, offset, tag);
 
-    if (taintmap->data == NULL || taintmap->start == 0) {
-        emu_abort("uninitialized taintmap");
-    }
     if (offset < taintmap->start && offset > taintmap->end) {
         emu_abort("out of bounds offset");
     }
