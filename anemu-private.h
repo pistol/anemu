@@ -14,13 +14,17 @@
 #include <sys/ucontext.h>
 #include <android/log.h>
 #define LOG_TAG "anemu"
-#define LOGI(...) ((void)__android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__))
-#define printf LOGI
+#define LOGI(...) ((void)__android_log_print(ANDROID_LOG_INFO,    LOG_TAG, __VA_ARGS__))
+#define LOGD(...) ((void)__android_log_print(ANDROID_LOG_DEBUG,   LOG_TAG, __VA_ARGS__))
+#define LOGV(...) ((void)__android_log_print(ANDROID_LOG_VERBOSE, LOG_TAG, __VA_ARGS__))
+#define LOGE(...) ((void)__android_log_print(ANDROID_LOG_ERROR,   LOG_TAG, __VA_ARGS__))
+#define LOGW(...) ((void)__android_log_print(ANDROID_LOG_WARN,    LOG_TAG, __VA_ARGS__))
+//#define printf LOGI
 #else
 #include <ucontext.h>
 #endif
 
-/* TODO: use LOGE, LOGW, LOGI, LOGD */
+// TODO: use LOGE, LOGW, LOGI, LOGD
 #ifndef PROFILE
 #define emu_log_error(...) { fprintf(emu.trace_file, __VA_ARGS__); printf(__VA_ARGS__); fflush(NULL); }
 #define emu_log_warn(...)  { fprintf(emu.trace_file, __VA_ARGS__); }
