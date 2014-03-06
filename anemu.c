@@ -1123,8 +1123,20 @@ inline void emu_singlestep(uint32_t pc) {
         emu_type_mul(d);
         break;
     }
+    // HACK: temporarily make Thumb2 special cases forward to A32 handlers
+    case T_THUMB_3REG:
+    case T_THUMB_HAS_IMM8:
+    case T_THUMB_MOD_SP_IMM: {
+        darm_enc(d);
+        break;
+    }
     case T_INVLD: {
-        emu_abort("darm invalid type (unsupported yet)\n");
+        // HACK
+        if (emu_thumb_mode()) {
+            darm_enc(d);
+        } else {
+            emu_abort("darm invalid type (unsupported yet)\n");
+        }
         break;
     }
     default:
@@ -1923,6 +1935,56 @@ instr_mask(darm_instr_t instr) {
     }
 }
 
+// HACK: Temporarily handle tricky cases for Thumb. This will be revised
+// once we finish out disassembler rewrite with better Thumb
+
+inline void darm_enc(const darm_t * d) {
+    switch(d->instr_type) {
+        /* Rd Imm */
+    case T_THUMB_HAS_IMM8: {
+        switch (d->instr) {
+        case I_ADD:
+        case I_ADR:
+        case I_SUB: {
+            emu_type_arith_imm(d);
+            break;
+        }
+        case I_CMP: {
+            emu_type_cmp_imm(d);
+            break;
+        }
+        case I_MOV: {
+            emu_type_move_imm(d);
+            break;
+        }
+            SWITCH_COMMON;
+        }
+        break;                  /* inner switch break to outer switch */
+    }
+    case T_THUMB_MOD_SP_IMM: {
+        emu_type_arith_imm(d);
+        break;
+    }
+    case T_THUMB_3REG: {
+        WREG(Rd) = OP(RREG(Rn), RREG(Rm));
+        WTREG2(Rd, Rn, Rm);
+        break;
+    }
+    case T_INVLD: {
+        switch(d->instr) {
+        case I_LDR:
+        case I_PUSH: {
+            emu_type_memory(d);
+            break;
+        }
+            SWITCH_COMMON;
+        }
+        break;                  /* inner switch break to outer switch */
+    }
+    default:
+        emu_abort("unhandled type %s\n", darm_enctype_name(d->instr_type));
+    }
+}
 inline double time_ms(void) {
     struct timespec res;
     clock_gettime(CLOCK_MONOTONIC, &res);
