@@ -809,7 +809,6 @@ inline void emu_type_memory(const darm_t * d) {
     case I_LDMIB: {
         uint16_t reglist       = d->reglist;
         const uint8_t regcount = reglist ? BitCount(reglist) : 1; /* number of bits set to 1 */
-        uint32_t addr          = RREGN(SP);
         uint32_t addr          = RREG(Rn);
         if (d->instr == I_LDMIB) addr += 4;
         if (d->instr == I_POP) assert(d->Rn == SP);
