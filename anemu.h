@@ -12,8 +12,13 @@ extern "C" {  // only need to export C interface if
 #define MARKER_START_VAL    0x100
 #define MARKER_STOP_VAL     0x200
 
-#define EMU_MARKER_START asm volatile("bkpt " #MARKER_START_VAL);
-#define EMU_MARKER_STOP  asm volatile("bkpt " #MARKER_STOP_VAL)
+#define ASM_MARKER(val)  asm volatile("bkpt " #val)
+
+// #define EMU_MARKER_START ASM_MARKER(MARKER_START_VAL)
+// #define EMU_MARKER_STOP  ASM_MARKER(MARKER_STOP_VAL)
+
+#define EMU_MARKER_START asm volatile("bkpt 0x100")
+#define EMU_MARKER_STOP  asm volatile("bkpt 0x200")
 
 /* Public API */
 void emu_register_handler();
