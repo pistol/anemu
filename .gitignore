@@ -1,4 +1,10 @@
 *.o
 *.swp
 *.dis
+log/
 anemu
+tests/zlib
+tests/matrix
+tests/target
+libanemu.a
+libanemu.so
