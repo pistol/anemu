@@ -12,6 +12,7 @@
 #include <sys/prctl.h>          /* thread name */
 #include <dlfcn.h>              /* dladdr */
 #include <corkscrew/demangle.h> /* demangle C++ */
+#include <corkscrew/backtrace.h>
 
 #if HAVE_SETRLIMIT
 # include <sys/types.h>
@@ -1207,6 +1208,7 @@ void emu_stop() {
     emu_log_debug("### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###\n");
 #ifdef TRACE
     fflush(emu.trace_file);
+    dump_backtrace(gettid());
 #endif
     pthread_mutex_unlock(&emu.lock);
     emu_log_info("emulation stopped.\n");
@@ -1892,4 +1894,29 @@ inline double time_ms(void) {
     double result = 1000.0 * res.tv_sec + (double) res.tv_nsec / 1e6;
     // printf("sec: %ld nsec: %ld\n", res.tv_sec, res.tv_nsec);
     return result;
+}
+
+/*
+ * Dump the native stack for the specified thread.
+ * Taken from: dvmDumpNativeStack in dalvik/vm/interp/Stack.cpp
+ */
+void dump_backtrace(pid_t tid)
+{
+    const size_t MAX_DEPTH = 64;
+    backtrace_frame_t backtrace[MAX_DEPTH];
+    ssize_t frames = unwind_backtrace_thread(tid, backtrace, 0, MAX_DEPTH);
+    if (frames > 0) {
+        backtrace_symbol_t backtrace_symbols[MAX_DEPTH];
+        get_backtrace_symbols(backtrace, frames, backtrace_symbols);
+
+        ssize_t i;
+        for (i = 0; i < frames; i++) {
+            char line[MAX_BACKTRACE_LINE_LENGTH];
+            format_backtrace_line(i, &backtrace[i], &backtrace_symbols[i],
+                    line, MAX_BACKTRACE_LINE_LENGTH);
+            LOGD("  %s\n", line);
+        }
+
+        free_backtrace_symbols(backtrace_symbols, frames);
+    }
 }

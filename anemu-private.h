@@ -394,6 +394,7 @@ void emu_dump();
 void emu_dump_diff();
 void emu_dump_cpsr();
 void armv7_dump(const darm_t *d);
+void dump_backtrace(pid_t tid);
 inline uint32_t emu_read_reg(darm_reg_t reg);
 inline uint32_t *emu_write_reg(darm_reg_t reg);
 inline uint8_t emu_thumb_mode();
