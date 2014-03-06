@@ -26,12 +26,12 @@
 
 // TODO: use LOGE, LOGW, LOGI, LOGD
 #ifndef PROFILE
-#define emu_log_error(...) { fprintf(emu.trace_file, __VA_ARGS__); printf(__VA_ARGS__); fflush(NULL); }
-#define emu_log_warn(...)  { fprintf(emu.trace_file, __VA_ARGS__); }
-#define emu_log_info(...)  { fprintf(emu.trace_file, __VA_ARGS__); }
-#define emu_log_debug(...) { fprintf(emu.trace_file, __VA_ARGS__); }
+#define emu_log_error(...) { fprintf(emu.trace_file, __VA_ARGS__); fprintf(stderr, __VA_ARGS__); fflush(NULL); }
+#define emu_log_warn(...)  { fprintf(emu.trace_file, __VA_ARGS__); fflush(emu.trace_file); }
+#define emu_log_info(...)  { fprintf(emu.trace_file, __VA_ARGS__); fflush(emu.trace_file); }
+#define emu_log_debug(...) { fprintf(emu.trace_file, __VA_ARGS__); fflush(emu.trace_file); }
 #else
-#define emu_log_error(...) { fprintf(emu.trace_file, __VA_ARGS__); printf(__VA_ARGS__); fflush(NULL); }
+#define emu_log_error(...) { fprintf(emu.trace_file, __VA_ARGS__); fprintf(stderr, __VA_ARGS__); fflush(NULL); }
 #define emu_log_warn(...)  (void)(NULL)
 #define emu_log_info(...)  (void)(NULL)
 #define emu_log_debug(...) (void)(NULL)
@@ -41,7 +41,7 @@
 #include <darm.h>
 
 /* TODO: guard based on NDEBUG or DEBUG */
-#define assert(x) if (!(x)) { emu_abort("ASSERTION (%s) FAILED in %s line %d", #x, __FILE__, __LINE__); }
+#define assert(x) if (!(x)) { emu_abort("ASSERTION (%s) FAILED in %s line %d\n", #x, __FILE__, __LINE__); }
 
 #define UNUSED __attribute__((unused))
 

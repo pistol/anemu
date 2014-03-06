@@ -340,7 +340,8 @@ inline void emu_type_sync(const darm_t * d) {
 inline void emu_type_mvcr(const darm_t * d) {
     switch(d->instr) {
     case I_MRC: {
-        // FIXME: hacky detect mcr
+        // FIXME: hacky detect mcr given lack of disassembler support
+        // this is the only mrc seen in any libs, so we handle this separately until disassembler supports it
         // ee1d0f70 mrc 15, 0, r0, cr13, cr0, {3}
         if (d->w == 0xee1d0f70) {
             asm volatile("mrc 15, 0, %[reg], cr13, cr0, 3" : [reg] "=r" CPU(r0));
@@ -437,7 +438,10 @@ inline void emu_type_branch_syscall(const darm_t * d) {
         } else {
             targetAddress = RREGN(PC) + d->imm;
         }
-        SelectInstrSet(targetInstrSet);
+        // FIXME: is Select really needed? BLX <label> appears to not switch modes
+        // dc74:   fa0035d6    blx 1b3d4 <__libc_android_abort>
+        // b3d4:   e92d4030    push    {r4, r5, lr}
+        // SelectInstrSet(targetInstrSet);
         BranchWritePC(targetAddress);
         break;
     }
@@ -978,7 +982,6 @@ inline void emu_advance_pc() {
     emu_log_debug("handled instructions: %d\n", emu.handled_instr);
     emu_dump_diff();
     dbg_dump_ucontext(&emu.current);
-    usleep(10 * 1000);          /* delay to allow printf flush to logcat */
     if (emu_regs_tainted() == 0) {
         emu_protect_mem();
         emu_stop();             /* will not return */
@@ -1143,7 +1146,6 @@ void emu_init() {
 
 #ifdef TRACE
     /* need to initialize log file before any printfs */
-    FILE *ifp, *ofp;
     char *mode = "w";
     char traceFilename[] = "/sdcard/trace";
 
@@ -1774,7 +1776,7 @@ inline void emu_set_taint_mem(uint32_t addr, uint32_t tag) {
         emu_abort("out of bounds offset");
     }
 
-    /* incrementally iupdate tainted page list */
+    /* incrementally update tainted page list */
     if (taintmap->data[offset] != TAINT_CLEAR && tag == TAINT_CLEAR) {
         emu_log_debug("taint: un-tainting mem: %x\n", addr);
         emu_unmark_page(addr);
