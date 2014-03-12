@@ -128,7 +128,7 @@ typedef struct _emu_t {
     ucontext_t current;         /* present process emulated state */
     ucontext_t previous;        /* used for diff-ing two contexts */
     ucontext_t original;        /* process state when trap occured */
-    uint8_t    initialized;     /* boolean */
+    volatile uint8_t initialized; /* boolean */
     uint8_t    branched;        /* branch taken? */
     uint8_t    disasm_bytes;    /* bytes used in last disasm */
     uint32_t  *regs;            /* easy access to ucontext regs */
@@ -137,7 +137,7 @@ typedef struct _emu_t {
     uint32_t   taintreg[N_REGS]; /* taint storage for regs */
     taintmap_t taintmaps[MAX_TAINTMAPS];   /* taint storage for memory */
     uint32_t   taintpages[MAX_TAINTPAGES]; /* unique taint pages */
-    bool       enabled;          /* is emulation currently running */
+    volatile bool enabled;                 /* is emulation currently running */
     bool       standalone;       /* standalone or target based emu */
     uint32_t   stack[STACK_SIZE];/* stack for standalone */
     uint32_t   handled_instr;    /* number of ops seen so far */

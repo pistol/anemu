@@ -49,6 +49,8 @@ inline uint8_t emu_regs_tainted() {
 /* SIGTRAP handler used for single-stepping */
 void emu_handler(int sig, siginfo_t *si, void *ucontext) {
     mutex_lock(&emu.lock);
+    if (!emu.initialized) emu_init();
+
     uint32_t pc = (*(ucontext_t *)ucontext).uc_mcontext.arm_pc;
     char threadname[MAX_TASK_NAME_LEN + 1]; // one more for termination
     if (prctl(PR_GET_NAME, (unsigned long)threadname, 0, 0, 0) != 0) {
@@ -59,7 +61,6 @@ void emu_handler(int sig, siginfo_t *si, void *ucontext) {
         threadname[MAX_TASK_NAME_LEN] = 0;
     }
 
-    emu_init();
     emu_log_debug("emu.enabled = %d\n", emu.enabled);
     emu_log_debug("SIG %d with TRAP code: %d pc: %x addr: %x pid: %d tid: %d (%s)\n",
                   sig,
@@ -1326,8 +1327,9 @@ void emu_register_handler() {
 /* Standalone on-demand emulation */
  uint32_t emu_target(void (*fun)()) {
     mutex_lock(&emu.lock);
+    if (!emu.initialized) emu_init();
+
     uint32_t pc = (uint32_t)*fun;
-    emu_init();
     emu.standalone = true;
     emu_map_lookup(pc);
 
@@ -1611,6 +1613,7 @@ getAlignedPage(uint32_t addr) {
 void
 mprotectHandler(int sig, siginfo_t *si, void *ucontext) {
     mutex_lock(&emu.lock);
+    if (!emu.initialized) emu_init();
 
     uint32_t pc = (*(ucontext_t *)ucontext).uc_mcontext.arm_pc;
     uint32_t addr_fault = (*(ucontext_t *)ucontext).uc_mcontext.fault_address;
@@ -1637,7 +1640,6 @@ mprotectHandler(int sig, siginfo_t *si, void *ucontext) {
         break;
     }
 
-    emu_init();
     emu_map_lookup(pc);
     emu_map_lookup(addr_fault);
 
@@ -1921,6 +1923,14 @@ emu_unprotect_mem() {
 
 inline bool emu_enabled() {
     return emu.enabled;
+}
+
+inline bool
+emu_initialized() {
+    mutex_lock(&emu.lock);
+    bool ret = emu.initialized;
+    mutex_unlock(&emu.lock);
+    return ret;
 }
 
 inline int32_t
