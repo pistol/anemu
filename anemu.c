@@ -1872,7 +1872,6 @@ inline int emu_mark_page(uint32_t addr) {
         /* non-zero - marked plage */
         if (emu.taintpages[idx] == page) {
             found = 1;
-            emu.nr_taintpages++;
             return found;
         }
     }
