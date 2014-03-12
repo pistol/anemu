@@ -1763,6 +1763,8 @@ emu_get_taintmap(uint32_t addr) {
     return tm;
 }
 
+// WARNING: extremely slow dump (full sweep) - implement bitmap instead
+// taintmaps are dumped in ranges for compact output
 uint32_t
 emu_dump_taintmaps() {
     uint32_t idx, offset;
@@ -1774,13 +1776,35 @@ emu_dump_taintmaps() {
             emu_log_debug("unallocated data for taintmap %d\n", idx);
             continue;
         }
+        uint8_t  range_inside = 0;
+        uint32_t range_start  = 0;
+        uint32_t range_end    = 0;
+        uint32_t range_tag    = TAINT_CLEAR;
         for (offset = 0; offset < tm->bytes >> 2; offset++) {
-            if (tm->data[offset] != TAINT_CLEAR) {
-                emu_log_debug("taint: %s offset: %x addr: %x tag: %x\n",
-                       (idx == TAINTMAP_LIB) ? "lib" : "stack",
-                       offset,
-                       tm->start + offset * sizeof(uint32_t), tm->data[offset]
-                       );
+            uint32_t tag = tm->data[offset];
+            if (tag != TAINT_CLEAR) {
+                if (!range_inside) {
+                    range_inside = 1;
+                    range_start  = offset;
+                    range_tag    = tag;
+                }
+            } else { // if (tag == TAINT_CLEAR)
+                // end range if we were inside a range
+                if (range_inside) {
+                    assert(offset > 0);
+                    range_end = offset - 1;
+
+                    // convert ranges offset to original word addresses
+                    range_start = tm->start + range_start * sizeof(uint32_t);
+                    range_end   = tm->start + range_end   * sizeof(uint32_t);
+                    emu_log_debug("taint range: %s start: %x end: %x length: %d tag: %x\n",
+                                  (idx == TAINTMAP_LIB) ? "lib" : "stack",
+                                  range_start, range_end, range_end - range_start + 1, range_tag
+                                  );
+
+                    range_tag = TAINT_CLEAR;
+                    range_inside = range_start = range_end = 0;
+                }
             }
         }
     }
