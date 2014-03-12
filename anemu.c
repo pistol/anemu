@@ -1167,6 +1167,7 @@ void emu_init() {
     emu.trace_file    = stdout;
     emu.trace_fd      = STDOUT_FILENO; // stdout = 2
     emu.skip          = 0;
+    emu.nr_taintpages = 0;
 
 #ifdef TRACE
     /* need to initialize log file before any printfs */
@@ -1871,6 +1872,7 @@ inline int emu_mark_page(uint32_t addr) {
         /* non-zero - marked plage */
         if (emu.taintpages[idx] == page) {
             found = 1;
+            emu.nr_taintpages++;
             return found;
         }
     }
@@ -1881,6 +1883,7 @@ inline int emu_mark_page(uint32_t addr) {
             if (emu.taintpages[idx] == 0) {
                 emu.taintpages[idx] = page;
                 added = 1;
+                emu.nr_taintpages++;
                 break;
             }
         }
@@ -1896,6 +1899,8 @@ inline int emu_unmark_page(uint32_t addr) {
     uint32_t idx;
     uint8_t found = 0;
 
+    assert(emu.nr_taintpages > 0);
+
     /* 1. look if page has been marked previously marked */
     for (idx = 0; idx < MAX_TAINTPAGES; idx++) {
         /* 0        - un-marked slot */
@@ -1903,6 +1908,7 @@ inline int emu_unmark_page(uint32_t addr) {
         if (emu.taintpages[idx] == page) {
             found = 1;
             emu.taintpages[idx] = 0;
+            emu.nr_taintpages--;
             break;
         }
     }
@@ -1915,6 +1921,12 @@ emu_clear_taintpages() {
     for (idx = 0; idx < MAX_TAINTPAGES; idx++) {
         emu.taintpages[idx] = 0;
     }
+    emu.nr_taintpages = 0;
+}
+
+inline uint32_t
+emu_get_taintpages() {
+    return emu.nr_taintpages;
 }
 
 inline void

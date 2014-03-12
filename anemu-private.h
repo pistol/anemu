@@ -100,7 +100,7 @@ T: Thumb mode
 
 #define MAX_MAPS 4096           /* number of memory map entries */
 #define MAX_TAINTMAPS 2         /* libs + stack (heap part of libs) */
-#define MAX_TAINTPAGES 32       /* number of distinct tainted pages */
+#define MAX_TAINTPAGES 4096     /* number of distinct tainted pages */
 #define TAINTMAP_LIB   0        /* taintmap index for libs */
 #define TAINTMAP_STACK 1        /* taintmap index for stack */
 
@@ -137,6 +137,7 @@ typedef struct _emu_t {
     uint32_t   taintreg[N_REGS]; /* taint storage for regs */
     taintmap_t taintmaps[MAX_TAINTMAPS];   /* taint storage for memory */
     uint32_t   taintpages[MAX_TAINTPAGES]; /* unique taint pages */
+    uint16_t   nr_taintpages;              /* nr of in use taint pages */
     volatile bool enabled;                 /* is emulation currently running */
     bool       standalone;       /* standalone or target based emu */
     uint32_t   stack[STACK_SIZE];/* stack for standalone */
