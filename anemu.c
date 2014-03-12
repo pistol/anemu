@@ -1181,10 +1181,6 @@ void emu_init() {
     }
 #endif
 
-    /* init darm */
-    emu_log_debug("initializing darm disassembler ...\n");
-    darm = malloc(sizeof(darm_t));
-
     /* process maps */
     emu_map_parse();
 

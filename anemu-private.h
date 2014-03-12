@@ -325,8 +325,8 @@ typedef enum _cpumode_t {
 } cpumode_t;
 
 /* Internal state */
-emu_t emu;                      /* emulator state */
-darm_t *darm;                   /* darm  disassembler */
+static darm_t __darm;
+static darm_t *darm = &__darm;  /* darm  disassembler */
 
 /*
  * Signal context structure - contains all info to do with the state
