@@ -48,7 +48,7 @@ inline uint8_t emu_regs_tainted() {
 
 /* SIGTRAP handler used for single-stepping */
 void emu_handler(int sig, siginfo_t *si, void *ucontext) {
-    pthread_mutex_lock(&emu.lock);
+    mutex_lock(&emu.lock);
     uint32_t pc = (*(ucontext_t *)ucontext).uc_mcontext.arm_pc;
     char threadname[MAX_TASK_NAME_LEN + 1]; // one more for termination
     if (prctl(PR_GET_NAME, (unsigned long)threadname, 0, 0, 0) != 0) {
@@ -1166,9 +1166,6 @@ void emu_init() {
     emu.trace_file    = stdout;
     emu.trace_fd      = STDOUT_FILENO; // stdout = 2
     emu.skip          = 0;
-    if (pthread_mutex_init(&emu.lock, NULL) != 0) {
-        emu_abort("lock init failed");
-    }
 
 #ifdef TRACE
     /* need to initialize log file before any printfs */
@@ -1242,8 +1239,8 @@ void emu_stop() {
     fflush(emu.trace_file);
     dump_backtrace(gettid());
 #endif
-    pthread_mutex_unlock(&emu.lock);
     emu_log_info("emulation stopped.\n");
+    mutex_unlock(&emu.lock);
     /* if we are not in standalone, we need to restore execution context to latest values */
     if (!emu.standalone) {
         setcontext((const ucontext_t *)&emu.current); /* never returns */
@@ -1328,7 +1325,7 @@ void emu_register_handler() {
 
 /* Standalone on-demand emulation */
  uint32_t emu_target(void (*fun)()) {
-    pthread_mutex_lock(&emu.lock);
+    mutex_lock(&emu.lock);
     uint32_t pc = (uint32_t)*fun;
     emu_init();
     emu.standalone = true;
@@ -1613,7 +1610,7 @@ getAlignedPage(uint32_t addr) {
 
 void
 mprotectHandler(int sig, siginfo_t *si, void *ucontext) {
-    pthread_mutex_lock(&emu.lock);
+    mutex_lock(&emu.lock);
 
     uint32_t pc = (*(ucontext_t *)ucontext).uc_mcontext.arm_pc;
     uint32_t addr_fault = (*(ucontext_t *)ucontext).uc_mcontext.fault_address;
@@ -2025,4 +2022,43 @@ void dump_backtrace(pid_t tid)
 
         free_backtrace_symbols(backtrace_symbols, frames);
     }
+}
+
+// mutex wrappers with error checking
+inline int mutex_lock(pthread_mutex_t *mutex) {
+    int ret = pthread_mutex_lock(mutex);
+    if (ret != 0) {
+        LOGE("mutex lock pid: %d tid: %d\n", getpid(), gettid());
+        switch(ret) {
+        case EINVAL:
+            emu_abort("EINVAL\n");
+            break;
+        case EDEADLK:
+            emu_abort("EDEADLK\n");
+            break;
+        default:
+            emu_abort("unknown ret %d\n", ret);
+            break;
+        }
+    }
+    return ret;
+}
+
+inline int mutex_unlock(pthread_mutex_t *mutex) {
+    int ret = pthread_mutex_unlock(mutex);
+    if (ret != 0) {
+        LOGE("mutex unlock pid: %d tid: %d\n", getpid(), gettid());
+        switch(ret) {
+        case EINVAL:
+            emu_abort("EINVAL\n");
+            break;
+        case EPERM:
+            emu_abort("EPERM\n");
+            break;
+        default:
+            emu_abort("unknown ret %d\n", ret);
+            break;
+        }
+    }
+    return ret;
 }

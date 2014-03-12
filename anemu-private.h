@@ -327,6 +327,11 @@ typedef enum _cpumode_t {
 } cpumode_t;
 
 /* Internal state */
+// WARNING: state is not designed to be thread safe
+// currently expecting a single thread to be in emulation a time
+// this is enforced via a global mutex in emu.lock
+
+static emu_t emu = { .lock = PTHREAD_ERRORCHECK_MUTEX_INITIALIZER };
 static darm_t __darm;
 static darm_t *darm = &__darm;  /* darm  disassembler */
 
@@ -419,6 +424,11 @@ void mmap_init();
 inline uint32_t instr_mask(darm_instr_t instr);
 
 inline double time_ms();
+
+// pthread wrappers with error checking
+int mutex_lock(pthread_mutex_t *mutex);
+int mutex_unlock(pthread_mutex_t *mutex);
+
 /* Page Protections */
 
 int32_t getPageSize();
