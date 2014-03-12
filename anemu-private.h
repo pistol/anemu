@@ -8,6 +8,7 @@
 #define PROFILE
 #define TRACE
 #define NO_TAINT
+#define TRACE_PATH "/sdcard/trace"
 
 #ifdef ANDROID
 // #include <sys/cdefs.h>
@@ -144,6 +145,7 @@ typedef struct _emu_t {
     double     time_start;       /* execution time measurements */
     double     time_end;
     FILE      *trace_file;       /* instruction trace file */
+    int32_t    trace_fd;         /* trace file descriptor */
     uint8_t    skip;             /* special hack to skip certain tricky functions */
     uint8_t    lock_acquired;    /* target program holding a lock */
 } emu_t;

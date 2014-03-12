@@ -1164,6 +1164,7 @@ void emu_init() {
     emu.standalone    = false;
     emu_set_enabled(false);
     emu.trace_file    = stdout;
+    emu.trace_fd      = STDOUT_FILENO; // stdout = 2
     emu.skip          = 0;
     if (pthread_mutex_init(&emu.lock, NULL) != 0) {
         emu_abort("lock init failed");
@@ -1172,12 +1173,20 @@ void emu_init() {
 #ifdef TRACE
     /* need to initialize log file before any printfs */
     char *mode = "w";
-    char traceFilename[] = "/sdcard/trace";
+    char traceFilename[256];
+    snprintf(traceFilename, sizeof(traceFilename), "%s-%d", TRACE_PATH, getpid());
 
     emu.trace_file = fopen(traceFilename, mode);
 
     if (emu.trace_file == NULL) {
         emu_abort("Can't open trace file %s!\n", traceFilename);
+    }
+
+    // keep track of trace file fd to use in libc's write call to skip useless logging
+    emu.trace_fd = fileno(emu.trace_file);
+
+    if (emu.trace_fd == 0) {
+        emu_abort("Unable to get fileno for file %s!\n", traceFilename);
     }
 #endif
 
@@ -1915,6 +1924,11 @@ emu_unprotect_mem() {
 
 inline bool emu_enabled() {
     return emu.enabled;
+}
+
+inline int32_t
+emu_get_trace_fd() {
+    return emu.trace_fd;
 }
 
 inline uint32_t

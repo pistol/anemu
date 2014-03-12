@@ -30,6 +30,7 @@ void emu_set_taint_mem(uint32_t addr, uint32_t tag);
 void emu_set_taint_array(uint32_t addr, uint32_t tag, uint32_t length);
 
 bool emu_enabled();
+int32_t emu_get_trace_fd();
 
 #ifdef __cplusplus
 }
