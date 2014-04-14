@@ -38,6 +38,9 @@
 #define emu_log_debug(...) (void)(NULL)
 #endif
 
+#define LOG_BANNER_SIG   "\n### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###\n"
+#define LOG_BANNER_INSTR "*** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***\n\n"
+
 /* darm disassembler */
 #include <darm.h>
 
@@ -367,6 +370,63 @@ struct sigcontext {
 };
 */
 
+// #include <linux/user.h>         /* user_vfp, user_vfp_exc */
+#include "vfp.h"                /* copy of $KERNEL/arch/arm/include/asm/vfp.h */
+
+#ifdef WITH_VFP_D32
+#define NUM_VFP_REGS 32         /* VFPv3 ARMv7-A Cortex-A9 */
+#else
+#define NUM_VFP_REGS 16
+#endif
+
+// value from $KERNEL/arch/arm/include/asm/ucontext.h
+#define VFP_MAGIC	0x56465001
+
+/*
+ * 8 byte for magic and size, 264 byte for ufp, 12 bytes for ufp_exc,
+ * 4 bytes padding.
+ */
+#define VFP_STORAGE_SIZE sizeof(struct vfp_sigframe)
+
+/*
+ * User specific VFP registers. If only VFPv2 is present, registers 16 to 31
+ * are ignored by the ptrace system call and the signal handler.
+ */
+struct user_vfp {
+	unsigned long long fpregs[32];
+	unsigned long fpscr;
+};
+
+/*
+ * VFP exception registers exposed to user space during signal delivery.
+ * Fields not relavant to the current VFP architecture are ignored.
+ */
+struct user_vfp_exc {
+	unsigned long	fpexc;
+	unsigned long	fpinst;
+	unsigned long	fpinst2;
+};
+
+struct vfp_sigframe
+{
+	unsigned long		magic;
+	unsigned long		size;
+	struct user_vfp		ufp;
+	struct user_vfp_exc	ufp_exc;
+} __attribute__((__aligned__(8)));
+
+/*
+ * Auxiliary signal frame.  This saves stuff like FP state.
+ * The layout of this structure is not part of the user ABI,
+ * because the config options aren't.  uc_regspace is really
+ * one of these.
+ */
+struct aux_sigframe {
+	struct vfp_sigframe	vfp;
+	/* Something that isn't a valid magic number for any coprocessor.  */
+	unsigned long		end_magic;
+} __attribute__((__aligned__(8)));
+
 /* API */
 
 void emu_init();
@@ -401,6 +461,7 @@ inline uint32_t emu_regshift(const darm_t *d, uint32_t val);
 /* Debugging / Internal only */
 
 void dbg_dump_ucontext(ucontext_t *uc);
+void dbg_dump_ucontext_vfp(ucontext_t *uc);
 void emu_dump();
 void emu_dump_diff();
 void emu_dump_cpsr();
@@ -412,6 +473,12 @@ inline uint8_t emu_thumb_mode();
 
 void emu_map_dump(map_t *m);
 void emu_map_parse();
+void emu_parse_cmdline(char *cmdline, size_t size);
+char* emu_parse_threadname();
+const char *get_signame(int sig);
+const char *get_sigcode(int signo, int code);
+const char *get_ssname(int code);
+
 map_t* emu_map_lookup(uint32_t addr);
 
 void emu_advance_pc();
@@ -434,7 +501,7 @@ int mutex_unlock(pthread_mutex_t *mutex);
 
 int32_t getPageSize();
 uint32_t getAlignedPage(uint32_t addr);
-void mprotectHandler(int sig, siginfo_t *si, void *ucontext);
+void emu_handler_segv(int sig, siginfo_t *si, void *ucontext);
 void mprotectInit();
 void mprotectPage(uint32_t addr, uint32_t flags);
 

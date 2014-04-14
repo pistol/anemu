@@ -43,36 +43,76 @@ inline uint8_t emu_regs_tainted() {
     return tainted;
 }
 
-// see man(2) prctl, specifically the section about PR_GET_NAME
-#define MAX_TASK_NAME_LEN (16)
+// debug info to be called from signal handlers
+void emu_siginfo(int sig, siginfo_t *si, ucontext_t *uc) {
+    emu_log_debug(LOG_BANNER_SIG);
 
-/* SIGTRAP handler used for single-stepping */
-void emu_handler(int sig, siginfo_t *si, void *ucontext) {
-    mutex_lock(&emu.lock);
-    if (!emu.initialized) emu_init();
+    uint32_t pc = uc->uc_mcontext.arm_pc;
+    uint32_t addr_fault = uc->uc_mcontext.fault_address;
 
-    uint32_t pc = (*(ucontext_t *)ucontext).uc_mcontext.arm_pc;
-    char threadname[MAX_TASK_NAME_LEN + 1]; // one more for termination
-    if (prctl(PR_GET_NAME, (unsigned long)threadname, 0, 0, 0) != 0) {
-        strcpy(threadname, "<name unknown>");
-    } else {
-        // short names are null terminated by prctl, but the manpage
-        // implies that 16 byte names are not.
-        threadname[MAX_TASK_NAME_LEN] = 0;
-    }
+    char cmdline[128];
+    emu_parse_cmdline(cmdline, sizeof(cmdline));
 
-    emu_log_debug("emu.enabled = %d\n", emu.enabled);
-    emu_log_debug("SIG %d with TRAP code: %d pc: %x addr: %x pid: %d tid: %d (%s)\n",
+    emu_log_debug("signal %s (%d) %s (%d) pc: %8x addr: %8x pid: %5d (%s) tid: %5d (%s)\n",
+                  get_signame(sig),
                   sig,
+                  get_sigcode(sig, si->si_code),
                   si->si_code,
                   pc,
-                  (int) si->si_addr,
+                  addr_fault,
                   getpid(),
+                  cmdline,
                   gettid(),
-                  threadname);
+                  emu_parse_threadname());
+
+    // WARNING: a succesful call to execve() will remove any existing alternate signal stack!
+    // check to make sure we are running on the alternate stack
+    stack_t oss;
+    if (sigaltstack(NULL, &oss) == -1) {
+        emu_abort("sigaltstack");
+    }
+    emu_log_debug("sigaltstack sp: %p size: %d flags: %s (%d)\n", oss.ss_sp, oss.ss_size, get_ssname(oss.ss_flags), oss.ss_flags);
+
+    emu_log_debug("emu threads: %d\n", emu_global.thread_count);
+
+    // we only expect two signals in emulation
+    assert(sig == SIGTRAP || sig == SIGSEGV);
+
+    dbg_dump_ucontext(uc);
+#ifdef WITH_VFP
+    dbg_dump_ucontext_vfp(uc);
+#endif
+
     emu_map_lookup(pc);
-    assert(emu.enabled == false);
-    emu_ucontext((ucontext_t *)ucontext); /* one time emu state initialization */
+    emu_map_lookup(addr_fault);
+
+    // paranoid sanity checks follow
+    pthread_internal_t *thread = (pthread_internal_t *)pthread_self();
+    size_t useable_size = thread->altstack_size - thread->altstack_guard_size;
+    uint32_t altstack_base = (uint32_t)thread->altstack + thread->altstack_guard_size;
+    assert(oss.ss_sp == (void *)altstack_base && oss.ss_flags == SS_ONSTACK && oss.ss_size == useable_size);
+    // make sure segv is not on thread->altstack guard page itself!
+    if (addr_fault < altstack_base && addr_fault > (uint32_t)thread->altstack) {
+        emu_abort("[-] fault on thread->altstack guard page!\n");
+    }
+
+    // assert ((uint32_t)si->si_addr == addr_fault);
+    if ((uint32_t)si->si_addr != addr_fault) {
+        emu_log_error("si_addr: %x addr: %x", (uint32_t)si->si_addr, addr_fault);
+        emu_map_lookup((uint32_t)si->si_addr);
+        gdb_wait();
+    }
+}
+
+/* SIGTRAP handler used for single-stepping */
+void emu_handler_trap(int sig, siginfo_t *si, void *ucontext) {
+    emu_thread_t emu;
+    ucontext_t *uc = (ucontext_t *)ucontext;
+    emu_siginfo(sig, si, uc);
+
+    assert(emu_initialized());
+
+    emu_ucontext(&emu, uc);
     emu_start();
     emu_stop();
 }
@@ -1468,21 +1508,61 @@ inline uint32_t *emu_write_reg(darm_reg_t reg) {
 
 inline void dbg_dump_ucontext(ucontext_t *uc) {
     mcontext_t *r = &uc->uc_mcontext;
-    emu_log_info("ucontext dump:\n");
+    emu_log_info("dump gp regs:\n");
     emu_log_info("fault addr %8x\n",
-           (uint32_t)r->fault_address);
+                 (uint32_t)r->fault_address);
     emu_log_info("r0: %8x  r1: %8x  r2: %8x  r3: %8x\n",
-           (uint32_t)r->arm_r0, (uint32_t)r->arm_r1, (uint32_t)r->arm_r2,  (uint32_t)r->arm_r3);
+                 (uint32_t)r->arm_r0, (uint32_t)r->arm_r1, (uint32_t)r->arm_r2,  (uint32_t)r->arm_r3);
     emu_log_info("r4: %8x  r5: %8x  r6: %8x  r7: %8x\n",
-           (uint32_t)r->arm_r4, (uint32_t)r->arm_r5, (uint32_t)r->arm_r6,  (uint32_t)r->arm_r7);
+                 (uint32_t)r->arm_r4, (uint32_t)r->arm_r5, (uint32_t)r->arm_r6,  (uint32_t)r->arm_r7);
     emu_log_info("r8: %8x  r9: %8x  sl: %8x  fp: %8x\n",
-           (uint32_t)r->arm_r8, (uint32_t)r->arm_r9, (uint32_t)r->arm_r10, (uint32_t)r->arm_fp);
-    emu_log_info("ip: %8x  sp: %8x  lr: %8x  pc: %8x  cpsr: %8x\n",
-           (uint32_t)r->arm_ip, (uint32_t)r->arm_sp, (uint32_t)r->arm_lr,  (uint32_t)r->arm_pc, (uint32_t)r->arm_cpsr);
+                 (uint32_t)r->arm_r8, (uint32_t)r->arm_r9, (uint32_t)r->arm_r10, (uint32_t)r->arm_fp);
+    emu_log_info("ip: %8x  sp: %8x  lr: %8x  pc: %8x  cpsr: %08x\n",
+                 (uint32_t)r->arm_ip, (uint32_t)r->arm_sp, (uint32_t)r->arm_lr,  (uint32_t)r->arm_pc, (uint32_t)r->arm_cpsr);
 }
 
-inline void emu_dump() {
-    dbg_dump_ucontext(&emu.current);
+inline void dbg_dump_ucontext_vfp(ucontext_t *uc) {
+    emu_log_debug("dump vfp regs:\n");
+    /* dump VFP registers from uc_regspace */
+    struct aux_sigframe *aux;
+    aux = (struct aux_sigframe *) uc->uc_regspace;
+    struct vfp_sigframe *vfp = &aux->vfp;
+
+    uint64_t magic = vfp->magic;
+    uint64_t size  = vfp->size;
+    assert(magic == VFP_MAGIC && size == VFP_STORAGE_SIZE);
+
+    struct user_vfp vfp_regs = vfp->ufp;
+    int i;
+    for (i = 0; i < NUM_VFP_REGS; i += 2) {
+        emu_log_debug("d%-2d: %16llx  d%-2d: %16llx\n",
+                      i,   vfp_regs.fpregs[i],
+                      i+1, vfp_regs.fpregs[i+1]);
+    }
+    // Floating-point Status and Control Register
+    emu_log_debug("fpscr:   %08lx\n", vfp_regs.fpscr);
+
+    // exception registers
+    struct user_vfp_exc vfp_exc = vfp->ufp_exc;
+    // Floating-Point Exception Control register
+    emu_log_debug("fpexc:   %08lx\n", vfp_exc.fpexc);
+    // Floating-Point Instruction Registers
+    // FPINST contains the exception-generating instruction
+    emu_log_debug("fpinst:  %08lx\n", vfp_exc.fpinst);
+    // FPINST2 contains the bypassed instruction
+    emu_log_debug("fpinst2: %08lx\n", vfp_exc.fpinst2);
+
+    // sanitise exception registers
+    // based on $KERNEL/arch/arm/kernel/signal.c
+    // see: int restore_vfp_context(struct vfp_sigframe __user *frame)
+    // ensure the VFP is enabled
+    assert(vfp_exc.fpexc & FPEXC_EN);
+    // ensure FPINST2 is invalid and the exception flag is cleared
+    assert(!(vfp_exc.fpexc & (FPEXC_EX | FPEXC_FP2V)));
+}
+
+inline void emu_dump(emu_thread_t *emu) {
+    dbg_dump_ucontext(&emu->current);
 }
 
 /* show register changes since last diff call */
