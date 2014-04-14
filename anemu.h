@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <signal.h>
 
 #ifdef __cplusplus
 extern "C" {  // only need to export C interface if
@@ -21,17 +22,29 @@ extern "C" {  // only need to export C interface if
 #define EMU_MARKER_STOP  asm volatile("bkpt 0x200")
 
 /* Public API */
-void emu_register_handler();
+void
+emu_init_handler(int sig,
+                 void (*handler)(int, siginfo_t *, void *),
+                 void *stack,
+                 size_t stack_size);
+
+void emu_handler_trap(int sig, siginfo_t *si, void *uc);
+void emu_handler_segv(int sig, siginfo_t *si, void *uc);
 
 /* emulate starting at a given address (e.g. function) */
-uint32_t emu_target(void (*fun)());
+uint32_t emu_function(void (*fun)());
 
 void emu_set_taint_mem(uint32_t addr, uint32_t tag);
 void emu_set_taint_array(uint32_t addr, uint32_t tag, uint32_t length);
 
-bool emu_enabled();
+bool emu_running();
+uint8_t emu_disabled();
+uint32_t emu_get_taint_pages();
 int32_t emu_get_trace_fd();
-bool emu_initialized();
+int emu_initialized();
+
+/* Debugging */
+void gdb_wait();
 
 #ifdef __cplusplus
 }

@@ -53,24 +53,27 @@
 #define SEGV_FAULT_ADDR (void *)0xdeadbeef
 #define UCONTEXT_REG_OFFSET 3   /* skip first 3 fields (trap_no, error_code, oldmask) of uc_mcontext */
 
-#define CPU(reg) (emu.current.uc_mcontext.arm_##reg)
+#define CPU(reg) (emu->current.uc_mcontext.arm_##reg)
 
 #define EMU(stmt)                                 \
     emu_log_debug("EMU: %s\n", #stmt);            \
     stmt;                                         \
 
-#define emu_printf(...) emu_log_error("%s: ", __PRETTY_FUNCTION__); printf(__VA_ARGS__)
-#define EMU_ENTRY emu_printf()
-#define emu_abort(...) emu_log_error(__VA_ARGS__);                 \
-    emu_log_error("\n");                                           \
-    emu_log_error("dumping taintmaps:\n");                         \
-    emu_dump_taintmaps();                                          \
-    emu_log_error("\n");                                           \
-    emu_log_error("*********************************\n");          \
-    emu_log_error("FATAL ERROR! ABORTING EMU!\n");                 \
-    emu_log_error("*********************************\n\n");        \
-    fflush(NULL);                                                  \
-    emu_stop();
+#define emu_printf(...) { LOGE("%s: ", __func__); LOGE(__VA_ARGS__); }
+#define EMU_ENTRY LOGE("%s\n", __func__)
+#define emu_abort(...)                                        \
+    emu_log_error("\n");                                      \
+    emu_log_error("*********************************\n");     \
+    emu_log_error("SYSTEM FAILURE! ABORTING!\n");             \
+    emu_log_error( "errno %d %s\n", errno, strerror(errno));  \
+    emu_log_error("%s: ", __func__);                          \
+    emu_log_error(__VA_ARGS__);                               \
+    emu_log_error("*********************************\n\n");   \
+    gdb_wait();                                               \
+    signal(SIGSEGV, SIG_DFL);                                 \
+    emu_log_error("SIGSEGV now SIG_DFL\n");                   \
+    emu_unprotect_mem();                                      \
+    dump_backtrace(gettid());
 
 #define SWITCH_COMMON                                                  \
     case I_INVLD: {                                                    \
@@ -101,25 +104,24 @@ T: Thumb mode
 /* update NZCV bits given a temp CPSR value (from MRS) */
 #define CPSR_UPDATE(temp) (CPU(cpsr) = (CPU(cpsr) & ~(0b1111 << 28)) | (temp & (0b1111 << 28)))
 
-#define MAX_MAPS 4096           /* number of memory map entries */
+#define MAX_MAPS 2048           /* number of memory map entries */
 #define MAX_TAINTMAPS 2         /* libs + stack (heap part of libs) */
-#define MAX_TAINTPAGES 4096     /* number of distinct tainted pages */
+#define MAX_TAINTPAGES 256      /* number of distinct tainted pages */
 #define TAINTMAP_LIB   0        /* taintmap index for libs */
 #define TAINTMAP_STACK 1        /* taintmap index for stack */
 
 typedef struct _map_t {
     uint32_t vm_start;
     uint32_t vm_end;
-    uint32_t pgoff;
+    uint64_t pgoff;
     uint32_t major, minor;
     char r, w, x, s;
     uint32_t ino;
-    char name[256];
+    char name[128];
     uint32_t pages;
 } map_t;
 
 #define N_REGS 16               /* r0-r15 */
-#define STACK_SIZE 8096
 typedef struct _taintmap_t {
     uint32_t *data;             /* mmap-ed data */
     uint32_t  start;            /* address range start */
@@ -127,52 +129,92 @@ typedef struct _taintmap_t {
     uint32_t  bytes;            /* (end - start) bytes */
 } taintmap_t;
 
-typedef struct _emu_t {
-    ucontext_t current;         /* present process emulated state */
-    ucontext_t previous;        /* used for diff-ing two contexts */
-    ucontext_t original;        /* process state when trap occured */
-    volatile uint8_t initialized; /* boolean */
-    uint8_t    branched;        /* branch taken? */
-    uint8_t    disasm_bytes;    /* bytes used in last disasm */
-    uint32_t  *regs;            /* easy access to ucontext regs */
-    uint16_t   nr_maps;
+/* GLOBAL emu state */
+typedef struct _emu_global_t {
+    int        initialized;       /* boolean */
+    uint16_t   nr_maps;           /* number of process maps available */
     map_t      maps[MAX_MAPS];
-    uint32_t   taintreg[N_REGS]; /* taint storage for regs */
     taintmap_t taintmaps[MAX_TAINTMAPS];   /* taint storage for memory */
     uint32_t   taintpages[MAX_TAINTPAGES]; /* unique taint pages */
     uint16_t   nr_taintpages;              /* nr of in use taint pages */
-    volatile bool enabled;                 /* is emulation currently running */
-    bool       standalone;       /* standalone or target based emu */
-    uint32_t   stack[STACK_SIZE];/* stack for standalone */
-    uint32_t   handled_instr;    /* number of ops seen so far */
-    pthread_mutex_t lock;        /* page fault handler sync */
-    double     time_start;       /* execution time measurements */
-    double     time_end;
-    FILE      *trace_file;       /* instruction trace file */
-    int32_t    trace_fd;         /* trace file descriptor */
-    uint8_t    skip;             /* special hack to skip certain tricky functions */
-    uint8_t    lock_acquired;    /* target program holding a lock */
-} emu_t;
+    int32_t    running;                    /* number of currently emulating threads */
+    bool       disabled;                   /* prevent further emulation */
+    bool       standalone;        /* standalone or target based emu */
+    uint32_t   target;            /* pid targetted for emulation */
+    uint32_t   stack[SIGSTKSZ];   /* stack for standalone */
+    int32_t    instr_total;       /* number of ops seen so far */
+    int32_t    trace_fd;          /* trace file descriptor */
+    int32_t    mem_fd;            /* memory access via /proc/self/mem */
+    int32_t    thread_count;      /* number of threads configured for emu (sigaltstacks) */
+} emu_global_t;
+
+/* Per-Thread emu state */
+typedef struct _emu_thread_t {
+    ucontext_t  current;          /* present process emulated state */
+    ucontext_t  previous;         /* used for diff-ing two contexts */
+    ucontext_t  original;         /* process state when trap occured */
+    darm_t      darm;             /* darm disassembler */
+    uint8_t     branched;         /* branch taken? */
+    uint8_t     disasm_bytes;     /* bytes used in last disasm */
+    uint32_t   *regs;             /* easy access to ucontext regs */
+    uint16_t    nr_maps;          /* number of process maps available */
+    uint32_t    taintreg[N_REGS]; /* taint storage for regs */
+    int32_t     instr_count;      /* number of ops seen in current trap handler */
+    double      time_start;       /* execution time measurements */
+    double      time_end;
+    int32_t     trace_fd;         /* trace file descriptor */
+    bool        inside_handler;   /* flag to avoid stdio within sig handler */
+    bool        stop;             /* emu stop requested */
+    uint8_t     skip;             /* special hack to skip certain tricky functions */
+    uint8_t     lock_acquired;    /* target program holding a lock */
+    int32_t     thread_count;     /* number of threads configured for emu (sigaltstacks) */
+} emu_thread_t;
+
+/* Internal state */
+// WARNING: state is not designed to be thread safe
+// currently expecting a single thread to be in emulation a time
+// this is enforced via a global mutex: emu_lock
+
+/* page fault handler sync */
+static pthread_mutex_t emu_lock   = PTHREAD_RECURSIVE_MUTEX_INITIALIZER;
+static pthread_mutex_t mmap_lock  = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t taint_lock = PTHREAD_MUTEX_INITIALIZER;
+
+emu_global_t emu_global = {
+    .trace_fd = STDOUT_FILENO, // stdout = 2
+    .target   = 0,
+    .disabled = 0
+};
 
 /* read/write register by number */
-#define RREGN(reg) emu_read_reg(reg)
-#define WREGN(reg) *emu_write_reg(reg)
+#define RREGN(reg) emu_read_reg(emu, reg)
+#define WREGN(reg) *emu_write_reg(emu, reg)
 /* read/write register by darm specifier (e.g. Rd, Rm, Rn, Rt) */
-#define RREG(reg) emu_read_reg(d->reg)
-#define WREG(reg) *emu_write_reg(d->reg)
+#define RREG(reg) emu_read_reg(emu, d->reg)
+#define WREG(reg) *emu_write_reg(emu, d->reg)
 
 /* read/write memory */
-#define WMEM(addr) *(uint32_t *)(addr)
-#define RMEM(addr) WMEM(addr)   /* identical pointer cast */
+#define WMEM_DIRECT(addr) *(uint32_t *)(addr)
+#define RMEM_DIRECT(addr) WMEM(addr)   /* identical pointer cast */
+
+/* /proc/self/mem interface to memory */
+#define WMEM8(addr,  data) mem_write8(addr,  data)
+#define WMEM16(addr, data) mem_write16(addr, data)
+#define WMEM32(addr, data) mem_write32(addr, data)
+
+#define RMEM8(addr)  mem_read8(addr)
+#define RMEM16(addr) mem_read16(addr)
+#define RMEM32(addr) mem_read32(addr)
 
 /* taint register by darm specifier */
-#define RTREG(reg) emu_get_taint_reg(d->reg)
-#define RTREGN(reg) emu_get_taint_reg(reg)
+#define RTREG(reg) emu_get_taint_reg(emu, d->reg)
+#define RTREGN(reg) emu_get_taint_reg(emu, reg)
 
-#define WTREG1(dest, a)    emu_set_taint_reg(d->dest, emu_get_taint_reg(d->a))
-#define WTREG2(dest, a, b) emu_set_taint_reg(d->dest, emu_get_taint_reg(d->a) & emu_get_taint_reg(d->b))
-#define WTREG(dest, tag)   emu_set_taint_reg(d->dest, tag)
-#define WTREGN(dest, tag)  emu_set_taint_reg(dest, tag)
+#define WTREG1(dest, a)    emu_set_taint_reg(emu, d->dest, emu_get_taint_reg(emu, d->a))
+#define WTREG2(dest, a, b) emu_set_taint_reg(emu, d->dest, emu_get_taint_reg(emu, d->a) & emu_get_taint_reg(emu, d->b))
+// #define WTREG3(dest, a, b, c) emu_set_taint_reg(d->dest, emu_get_taint_reg(d->a) & emu_get_taint_reg(d->b) & emu_get_taint_reg(d->c))
+#define WTREG(dest, tag)   emu_set_taint_reg(emu, d->dest, tag)
+#define WTREGN(dest, tag)  emu_set_taint_reg(emu, dest, tag)
 
 /* taint memory */
 #ifndef NO_TAINT
@@ -183,7 +225,9 @@ typedef struct _emu_t {
 #define WTMEM(addr, tag) (void)(NULL)
 #endif
 /* process two operands according to instr type */
-#define OP(a, b) emu_dataop(d, a, b)
+#define OP(a, b) emu_dataop(emu, a, b)
+/* shorthand for cleaner arguments */
+#define RSHIFT(val) emu_regshift(emu, val)
 
 /*
 emulating instr{S} requires saving and restoring CPSR
@@ -293,8 +337,11 @@ formats for S instructions:
 #define BitExtract(x, i, j)   ((((1 << j) - (1 << i) ) & x) >> i )
 #define SignExtend(x) ((int32_t)((int16_t)x))
 
+// NOTE: 4-byte aligned 0x1006 will produce 0x1004 and not 0x1008
+// this is be design: we want the word that contains input value
+// resulting in 4 bytes [0x1004:0x1007]
 #define Align(x,a)            __ALIGN_MASK(x,(typeof(x))(a)-1)
-#define __ALIGN_MASK(x,mask)  (((x)+(mask))&~(mask))
+#define __ALIGN_MASK(x,mask)  ((x)&~(mask))
 
 #define LSL(val, shift) (val << shift)
 #define LSR(val, shift) (val >> shift)
@@ -329,15 +376,6 @@ static const char *sigcontext_names[] = {"trap_no", "error_code", "oldmask",
 typedef enum _cpumode_t {
     M_ARM, M_THUMB
 } cpumode_t;
-
-/* Internal state */
-// WARNING: state is not designed to be thread safe
-// currently expecting a single thread to be in emulation a time
-// this is enforced via a global mutex in emu.lock
-
-static emu_t emu = { .lock = PTHREAD_ERRORCHECK_MUTEX_INITIALIZER };
-static darm_t __darm;
-static darm_t *darm = &__darm;  /* darm  disassembler */
 
 /*
  * Signal context structure - contains all info to do with the state
@@ -427,36 +465,63 @@ struct aux_sigframe {
 	unsigned long		end_magic;
 } __attribute__((__aligned__(8)));
 
+// WARNING: this must match pthread state from pthread_internal.h
+typedef struct pthread_internal_t
+{
+    struct pthread_internal_t*  next;
+    struct pthread_internal_t** pref;
+    pthread_attr_t              attr;
+    pid_t                       kernel_id;
+    pthread_cond_t              join_cond;
+    int                         join_count;
+    void*                       return_value;
+    int                         intern;
+    void*                       altstack;
+    size_t                      altstack_size;       /* includes guard size */
+    size_t                      altstack_guard_size;
+    int                         target;              /* emulation target */
+    __pthread_cleanup_t*        cleanup_stack;
+    void**                      tls;         /* thread-local storage area */
+} pthread_internal_t;
+
+/* stolen from bionic/libc/private/bionic_tls.h */
+#define __get_tls() \
+    ({ register unsigned int __val asm("r0");              \
+       asm ("mrc p15, 0, r0, c13, c0, 3" : "=r"(__val) );  \
+       (volatile void*)__val; })
+
+/* use the next free slot in bionic_tls to stash emu state*/
+#define TLS_SLOT_EMU_THREAD 5
+
 /* API */
 
 void emu_init();
-void emu_ucontext(ucontext_t *ucontext);
+void emu_ucontext(emu_thread_t *emu, ucontext_t *ucontext);
 void emu_start();
 void emu_stop();
-uint8_t emu_stop_trigger();
-void emu_singlestep(uint32_t pc);
-void emu_set_enabled(bool state);
+uint8_t emu_stop_trigger(emu_thread_t *emu);
+bool emu_singlestep(emu_thread_t *emu);
+void emu_set_running(bool state);
 
 uint8_t emu_regs_tainted();
 
 extern const char* emu_disasm_ref(uint32_t pc, uint8_t bits);
-const darm_t* emu_disasm(uint32_t pc);
-const darm_t* emu_disasm_internal(darm_t * d, uint32_t pc);
+uint8_t emu_disasm(emu_thread_t *emu, darm_t *d, uint32_t pc);
 
-void emu_type_arith_shift(const darm_t * d);
-void emu_type_arith_imm(const darm_t * d);
-void emu_type_branch_syscall(const darm_t * d);
-void emu_type_branch_misc(const darm_t * d);
-void emu_type_move_imm(const darm_t * d);
-void emu_type_cmp_imm(const darm_t * d);
-void emu_type_cmp_op(const darm_t * d);
-void emu_type_opless(const darm_t * d);
-void emu_type_dst_src(const darm_t * d);
+void emu_type_arith_shift(emu_thread_t *emu);
+void emu_type_arith_imm(emu_thread_t *emu);
+void emu_type_branch_syscall(emu_thread_t *emu);
+void emu_type_branch_misc(emu_thread_t *emu);
+void emu_type_move_imm(emu_thread_t *emu);
+void emu_type_cmp_imm(emu_thread_t *emu);
+void emu_type_cmp_op(emu_thread_t *emu);
+void emu_type_opless(emu_thread_t *emu);
+void emu_type_dst_src(emu_thread_t *emu);
 
-void darm_enc(const darm_t * d);
+void darm_enc(emu_thread_t *emu);
 
-inline uint32_t emu_dataop(const darm_t *d, const uint32_t a, const uint32_t b);
-inline uint32_t emu_regshift(const darm_t *d, uint32_t val);
+uint32_t emu_dataop(emu_thread_t *emu, const uint32_t a, const uint32_t b);
+uint32_t emu_regshift(emu_thread_t *emu, uint32_t val);
 
 /* Debugging / Internal only */
 
@@ -467,12 +532,23 @@ void emu_dump_diff();
 void emu_dump_cpsr();
 void armv7_dump(const darm_t *d);
 void dump_backtrace(pid_t tid);
-inline uint32_t emu_read_reg(darm_reg_t reg);
-inline uint32_t *emu_write_reg(darm_reg_t reg);
-inline uint8_t emu_thumb_mode();
+inline uint32_t emu_read_reg(emu_thread_t *emu, darm_reg_t reg);
+inline uint32_t *emu_write_reg(emu_thread_t *emu, darm_reg_t reg);
+inline uint8_t emu_thumb_mode(emu_thread_t *emu);
+
+/* Memory */
+void emu_init_proc_mem();
+
+uint8_t mem_read8(uint32_t addr);
+uint16_t mem_read16(uint32_t addr);
+uint32_t mem_read32(uint32_t addr);
+
+uint8_t mem_write8(uint32_t addr, uint8_t val);
+uint16_t mem_write16(uint32_t addr, uint16_t val);
+uint32_t mem_write32(uint32_t addr, uint32_t val);
 
 void emu_map_dump(map_t *m);
-void emu_map_parse();
+void emu_parse_maps();
 void emu_parse_cmdline(char *cmdline, size_t size);
 char* emu_parse_threadname();
 const char *get_signame(int sig);
@@ -481,13 +557,15 @@ const char *get_ssname(int code);
 
 map_t* emu_map_lookup(uint32_t addr);
 
-void emu_advance_pc();
+bool emu_advance_pc();
 uint32_t emu_dump_taintmaps();
 void emu_set_taint_mem(uint32_t addr, uint32_t tag);
 uint32_t emu_get_taint_mem(uint32_t addr);
-inline void emu_set_taint_reg(uint32_t reg, uint32_t tag);
-inline uint32_t emu_get_taint_reg(uint32_t reg);
-void mmap_init();
+void emu_set_taint_reg(emu_thread_t *emu, uint32_t reg, uint32_t tag);
+uint32_t emu_get_taint_reg(emu_thread_t *emu, uint32_t reg);
+void emu_clear_taintregs(emu_thread_t *emu);
+void emu_init_taintmaps(emu_global_t *emu_global);
+emu_thread_t* tls_get_emu_thread();
 
 inline uint32_t instr_mask(darm_instr_t instr);
 
@@ -503,7 +581,7 @@ int32_t getPageSize();
 uint32_t getAlignedPage(uint32_t addr);
 void emu_handler_segv(int sig, siginfo_t *si, void *ucontext);
 void mprotectInit();
-void mprotectPage(uint32_t addr, uint32_t flags);
+int8_t mprotectPage(uint32_t addr, uint32_t flags);
 
 void emu_protect_mem();
 void emu_unprotect_mem();
@@ -512,10 +590,10 @@ int emu_unmark_page(uint32_t addr);
 void emu_clear_taintpages();
 
 /* ARM manual util functions */
-void SelectInstrSet(cpumode_t mode);
-cpumode_t CurrentInstrSet();
-cpumode_t TargetInstrSet(uint32_t instr);
-void BranchWritePC(uint32_t addr);
-void BXWritePC(uint32_t addr);
+void SelectInstrSet(emu_thread_t *emu, cpumode_t mode);
+cpumode_t CurrentInstrSet(emu_thread_t *emu);
+cpumode_t TargetInstrSet(emu_thread_t *emu, uint32_t instr);
+void BranchWritePC(emu_thread_t *emu, uint32_t addr);
+void BXWritePC(emu_thread_t *emu, uint32_t addr);
 
 #endif  /* _INCLUDE_ANEMU_PRIVATE_H_ */
