@@ -2196,7 +2196,61 @@ void emu_set_taint_mem(uint32_t addr, uint32_t tag) {
 }
 
 inline void emu_set_taint_array(uint32_t addr, uint32_t tag, uint32_t length) {
-    emu_abort("unimplemented");
+    if (emu_disabled()) {
+        LOGD("%s: emu disabled\n", __func__);
+        return;
+    }
+    emu_log_info("%s: addr: %x tag: %x length: %d\n", __func__, addr, tag, length);
+    assert(addr != 0 && length > 0);
+
+    // Important: must initialize state first - this includes necessary logging and taintmaps
+    if (!emu_initialized()) emu_init(&emu_global);
+
+    uint32_t end = addr + length - 1;
+    emu_map_lookup(end);
+
+    /* TODO: optimize tainting to be per page when possible */
+    /* TODO: aquire lock once per whole array instead of every word */
+    mutex_lock(&taint_lock);
+    uint32_t x;
+    for (x = addr; x <= (end); x += 4) {
+        emu_set_taint_mem(x, tag);
+    }
+
+#ifndef PROFILE
+    // emu_dump_taintmaps();
+#endif
+    /* TODO: make previous for loop return a list of pages tainted this time */
+    /* this avoids protecting ALL pages ever seen so far */
+    emu_protect_mem();
+    mutex_unlock(&taint_lock);
+
+    emu_log_info("%s: complete.\n", __func__);
+}
+
+inline uint32_t emu_get_taint_array(uint32_t addr, uint32_t length) {
+    // TODO: aquire lock first before checking flag? extremely unlikely case
+    if (emu_disabled() || !emu_initialized()) return TAINT_CLEAR;
+
+    // can't use logging via fprintf since we are getting called from a __swrite()
+    // emu_log_info("%s: addr: %x length: %d\n", __func__, addr, length);
+    // assert(addr != 0 && length > 0);
+
+    int tag = TAINT_CLEAR;
+
+    // TODO: get taint tag from taintmap
+    uint32_t end = addr + length - 1;
+    emu_map_lookup(end);
+
+    /* TODO: optimize tainting to be per page when possible */
+
+    uint32_t ret = TAINT_CLEAR;
+    uint32_t x;
+    for (x = addr; x <= (end); x += 4) {
+        ret |= emu_get_taint_mem(x);
+    }
+
+    return tag;
 }
 
 inline int emu_mark_page(uint32_t addr) {

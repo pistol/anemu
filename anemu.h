@@ -47,6 +47,7 @@ uint32_t emu_function(void (*fun)());
 
 void emu_set_taint_mem(uint32_t addr, uint32_t tag);
 void emu_set_taint_array(uint32_t addr, uint32_t tag, uint32_t length);
+uint32_t emu_get_taint_array(uint32_t addr, uint32_t length);
 
 bool emu_running();
 uint8_t emu_disabled();
