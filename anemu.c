@@ -2487,6 +2487,169 @@ uint32_t emu_target() {
     return emu_global.target;
 }
 
+// copied over from libc/bionic/pthread.c
+static void *mkstack(size_t size, size_t guard_size)
+{
+    void * stack;
+
+    // NOTE: don't think we need a lock for mmap?
+    pthread_mutex_lock(&mmap_lock);
+
+    stack = mmap(NULL, size,
+                 PROT_READ | PROT_WRITE,
+                 MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE,
+                 -1, 0);
+
+    if(stack == MAP_FAILED) {
+        stack = NULL;
+        goto done;
+    }
+
+    if(mprotect(stack, guard_size, PROT_NONE)){
+        munmap(stack, size);
+        stack = NULL;
+        goto done;
+    }
+
+done:
+    pthread_mutex_unlock(&mmap_lock);
+    return stack;
+}
+
+int32_t emu_thread_count_up() {
+    return android_atomic_inc(&emu_global.thread_count);
+}
+
+int32_t emu_thread_count_down() {
+    return android_atomic_dec(&emu_global.thread_count);
+}
+
+void emu_hook_thread_entry(void *arg) {
+    pthread_internal_t *thread = (pthread_internal_t *)arg;
+    thread->target = emu_target();
+    if (thread->target) {
+        // TODO: atomic increment a emu.thread_count and decrement it in __pthread_internal_free()
+        // which would provide a live thread count equal to total running threads for target pid
+        // can then match it against /proc/self/task
+        size_t guard_size = getPageSize(); /* PAGE_SIZE */
+        size_t altstack_size = guard_size + 8 * SIGSTKSZ; /* ensures useable altsack is SIGSTKSZ */
+
+        if (!thread->altstack) {
+            thread->altstack = mkstack(altstack_size, guard_size);
+            if (thread->altstack == NULL) {
+                // kill thread/process
+                emu_abort("mkstack failed alstack_size: %d guard_size: %d\n", altstack_size, guard_size);
+            }
+            thread->altstack_size = altstack_size;
+            thread->altstack_guard_size = guard_size;
+            // emu_log_debug("altstack alloc: %p\n", thread->altstack);
+        } else {
+            emu_abort("altstack already exists: %p\n", thread->altstack);
+        }
+        // allocated PAGE_SIZE for guard + SIGSTKSZ thread->altstack
+        // handler must use only the SIGSTKSZ portion
+        size_t useable_size = altstack_size - guard_size;
+        uint32_t altstack_base = (uint32_t)thread->altstack + guard_size;
+        // emu_init_handler(SIGTRAP, emu_handler_trap, (void *)altstack_base, useable_size);
+        emu_thread_count_up();
+        emu_init_handler(SIGSEGV, emu_handler_segv, (void *)altstack_base, useable_size);
+
+        // allocate emu_thread_t
+        // emu_thread_t *emu = mmap(...)
+        // tls_set_emu_thread(emu);
+    }
+}
+
+void emu_hook_pthread_internal_free(void *arg) {
+    pthread_internal_t *thread = (pthread_internal_t *)arg;
+    if (thread->altstack) {
+        assert(thread->target);
+        emu_log_debug("altstack free: %p\n", thread->altstack);
+        munmap(thread->altstack, thread->altstack_size);
+        // check error
+        emu_thread_t *emu = tls_get_emu_thread();
+        if (emu) {
+            emu_log_debug("emu free: %p", emu);
+            munmap(emu, sizeof(emu_thread_t));
+            // check error
+        }
+        emu_thread_count_down();
+    }
+}
+
+void emu_hook_bionic_clone_entry() {
+    dump_backtrace(gettid());
+    emu_thread_count_up();
+
+    emu_abort("not implemented yet");
+}
+
+void emu_hook_exit_thread(int ret) {
+    emu_log_debug("exit_thread: %d %s\n", ret, ret ? "EXIT_FAILURE" : "EXIT_SUCCESS");
+    emu_thread_count_down();
+}
+
+void emu_hook_bionic_atfork_run_child(void *arg) {
+    UNUSED pthread_internal_t *thread = (pthread_internal_t *)arg;
+
+    // emu_log_debug("fork:\n");
+    char name[16];
+    int ret = prctl(PR_GET_NAME, (unsigned long) name, 0, 0, 0);
+    if (ret != 0) {
+        emu_log_debug("fork prctl name: %s\n", name);
+    }
+    // NOTE: if target check is done after work, we'll be with a new pid so can't ever be target?
+    // move hook to right before the kernel adjusts id __pthread_settid(pthread_self(), gettid());
+    if (emu_target()) gdb_wait();
+}
+
+void emu_hook_Zygote_forkAndSpecializeCommon(void *arg) {
+    pid_t pid = (pid_t)arg;
+    assert(!emu_global.target);
+    emu_global.target = pid;
+    // emu_log_debug("emu.target addr: %p val: %d\n", &emu.target, emu.target);
+
+    char name[16];
+    int ret = prctl(PR_GET_NAME, (unsigned long) name, 0, 0, 0);
+    if (ret != 0) {
+        emu_log_debug("prctl name: %s\n", name);
+    }
+
+    // reuse handler setup code
+    emu_hook_thread_entry((void *)pthread_self());
+}
+
+/*
+// thread kill (send signal to a thread)
+int tgkill(int tgid, int tid, int sig) {
+    int ret;
+    emu_log_debug("tgkill tgid: %d tid: %d sig: %d\n", tgid, tid, sig);
+    ret = syscall(__NR_tgkill, tgid, tid, sig);
+    if (ret != 0) {
+        switch(ret) {
+        case EINVAL: emu_abort("EINVAL: An invalid thread ID, thread group ID, or signal was specified."); break;
+        case EPERM:  emu_abort("EPERM  Permission denied."); break;
+        case ESRCH:  emu_abort("ESRCH  No process with the specified thread ID (and thread group ID) exists.");
+        default:     emu_abort("Unknown errno %d", ret);
+        }
+    }
+    return ret;
+}
+*/
+
+emu_thread_t* tls_get_emu_thread() {
+    void**  tls = (void**)__get_tls();
+    return tls[TLS_SLOT_EMU_THREAD];
+}
+
+void emu_init_proc_mem() {
+    emu_global.mem_fd = open("/proc/self/mem", O_RDWR);
+
+    if (!emu_global.mem_fd) {
+        emu_abort("Can't open /proc/self/mem\n");
+    }
+}
+
 /* READ */
 uint8_t mem_read8(uint32_t addr) {
     assert(emu_global.mem_fd);

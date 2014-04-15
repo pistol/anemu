@@ -31,6 +31,17 @@ emu_init_handler(int sig,
 void emu_handler_trap(int sig, siginfo_t *si, void *uc);
 void emu_handler_segv(int sig, siginfo_t *si, void *uc);
 
+/* Hooks */
+void emu_hook_thread_entry(void *arg);
+void emu_hook_pthread_internal_free(void *arg);
+void emu_hook_bionic_clone_entry();
+void emu_hook_bionic_atfork_run_child(void *arg);
+void emu_hook_exit_thread(int ret);
+void emu_hook_Zygote_forkAndSpecializeCommon(void *arg);
+
+/* check if current pid / app is targeted for emulation */
+uint32_t emu_target();
+
 /* emulate starting at a given address (e.g. function) */
 uint32_t emu_function(void (*fun)());
 
