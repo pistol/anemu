@@ -27,14 +27,17 @@
 
 // TODO: use LOGE, LOGW, LOGI, LOGD
 #ifndef PROFILE
-#define emu_log_error(...) { fprintf(emu.trace_file, __VA_ARGS__); fprintf(stderr, __VA_ARGS__); fflush(NULL); }
-#define emu_log_warn(...)  { fprintf(emu.trace_file, __VA_ARGS__); fflush(emu.trace_file); }
-#define emu_log_info(...)  { fprintf(emu.trace_file, __VA_ARGS__); fflush(emu.trace_file); }
-#define emu_log_debug(...) { fprintf(emu.trace_file, __VA_ARGS__); fflush(emu.trace_file); }
+// #define emu_log_trace(...) { if (emu.trace_file) { lprintf(emu.trace_file, __VA_ARGS__); fflush(emu.trace_file); }}
+#define emu_log_trace emu_log_info
+#define emu_log_error(...)  { LOGE(__VA_ARGS__); __log_print(ANDROID_LOG_ERROR,  LOG_TAG, __VA_ARGS__); }
+#define emu_log_warn(...)   { LOGW(__VA_ARGS__); __log_print(ANDROID_LOG_WARN,   LOG_TAG, __VA_ARGS__); }
+#define emu_log_info(...)   { LOGI(__VA_ARGS__); __log_print(ANDROID_LOG_INFO,   LOG_TAG, __VA_ARGS__); }
+#define emu_log_debug(...)  { LOGD(__VA_ARGS__); __log_print(ANDROID_LOG_DEBUG,  LOG_TAG, __VA_ARGS__); }
 #else
-#define emu_log_error(...) { fprintf(emu.trace_file, __VA_ARGS__); fprintf(stderr, __VA_ARGS__); fflush(NULL); }
-#define emu_log_warn(...)  (void)(NULL)
-#define emu_log_info(...)  (void)(NULL)
+#define emu_log_trace(...) (void)(NULL)
+#define emu_log_error LOGE
+#define emu_log_warn  LOGW
+#define emu_log_info  LOGI
 #define emu_log_debug(...) (void)(NULL)
 #endif
 
@@ -45,7 +48,7 @@
 #include <darm.h>
 
 /* TODO: guard based on NDEBUG or DEBUG */
-#define assert(x) if (!(x)) { emu_abort("ASSERTION (%s) FAILED in %s line %d\n", #x, __FILE__, __LINE__); }
+#define assert(x) if (!(x)) { emu_abort("ASSERTION (%s) FAILED file: %s line: %d\n", #x, __FILE__, __LINE__); }
 
 #define UNUSED __attribute__((unused))
 

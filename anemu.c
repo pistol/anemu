@@ -10,6 +10,7 @@
 #include <time.h>
 #include <string.h>             /* memset */
 #include <sys/prctl.h>          /* thread name */
+#include <sys/uio.h>            /* writev */
 #include <fcntl.h>              /* open, close */
 #include <dlfcn.h>              /* dladdr */
 #include <corkscrew/demangle.h> /* demangle C++ */
@@ -2776,6 +2777,55 @@ uint32_t mem_write32(uint32_t addr, uint32_t val) {
     }
     return val;
 }
+
+/* copied from system/core/liblog/logprint.c */
+char filterPriToChar(android_LogPriority pri)
+{
+    switch (pri) {
+        case ANDROID_LOG_VERBOSE:       return 'V';
+        case ANDROID_LOG_DEBUG:         return 'D';
+        case ANDROID_LOG_INFO:          return 'I';
+        case ANDROID_LOG_WARN:          return 'W';
+        case ANDROID_LOG_ERROR:         return 'E';
+        case ANDROID_LOG_FATAL:         return 'F';
+        case ANDROID_LOG_SILENT:        return 'S';
+
+        case ANDROID_LOG_DEFAULT:
+        case ANDROID_LOG_UNKNOWN:
+        default:                        return '?';
+    }
+}
+
+#define LOG_BUF_SIZE 256
+#define LOG_HEADER_SIZE 24
+int __log_print(int prio, const char *tag, const char *fmt, ...) {
+    va_list ap;
+    char buf[LOG_BUF_SIZE];
+
+    va_start(ap, fmt);
+    vsnprintf(buf, LOG_BUF_SIZE, fmt, ap);
+    va_end(ap);
+
+    char msg[LOG_HEADER_SIZE];
+    snprintf(msg, LOG_HEADER_SIZE, "%d %d %c ", getpid(), gettid(), filterPriToChar(prio));
+
+    int fd = emu_global.trace_fd;
+
+    const int iovcnt = 2;
+    struct iovec vec[iovcnt];
+
+    vec[0].iov_base   = (void *) msg;
+    vec[0].iov_len    = strlen(msg);
+    vec[1].iov_base   = (void *) buf;
+    vec[1].iov_len    = strlen(buf);
+
+    ssize_t ret;
+
+    do {
+        ret = writev(fd, vec, iovcnt);
+    } while (ret < 0 && errno == EINTR);
+
+    assert(ret == (ssize_t)(vec[0].iov_len + vec[1].iov_len));
 
     return ret;
 }
