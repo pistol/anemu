@@ -285,6 +285,9 @@ inline void emu_type_pusr(emu_thread_t *emu) {
         WTREG1(Rd, Rm);
         break;
     }
+    case I_SXTH: {
+        uint32_t rotated = ROR(RREG(Rm), d->rotate);
+        WREG(Rd) = SignExtend(rotated & instr_mask(d->instr));
         WTREG1(Rd, Rm);
         break;
     }
@@ -644,6 +647,28 @@ inline void emu_type_move_imm(emu_thread_t *emu) {
         SWITCH_COMMON;
     }
     WTREG(Rd, TAINT_CLEAR);
+}
+
+inline void emu_type_misc(emu_thread_t *emu) {
+    const darm_t *d = &emu->darm;
+
+    switch(d->instr) {
+    case I_MVN: {
+        if (d->S == B_SET) {
+            ASM_RR(MVN, Rd, Rm);
+            break;
+        } else {
+            EMU(WREG(Rd) = ~RREG(Rm));
+            break;
+        }
+    }
+    case I_CLZ: {
+        WREG(Rd) = LeadingZerosCount(RREG(Rm));
+        break;
+    }
+        SWITCH_COMMON;
+    }
+    WTREG1(Rd, Rm);
 }
 
 inline void emu_type_cmp_op(emu_thread_t *emu) {
@@ -1382,6 +1407,10 @@ inline bool emu_singlestep(emu_thread_t *emu) {
     }
     case T_ARM_MUL: {
         emu_type_mul(emu);
+        break;
+    }
+    case T_ARM_MISC: {
+        emu_type_misc(emu);
         break;
     }
         // HACK: temporarily make Thumb16 special cases forward to A32 handlers
@@ -2410,6 +2439,7 @@ instr_mask(darm_instr_t instr) {
     case I_LDRSH:
     case I_LDRH:
     case I_UXTH:
+    case I_SXTH:
     case I_STRH: { return 0xffff; }
     case I_MOVW: { return 0xffff0000; }
     default:     { return 0xffffffff; }
