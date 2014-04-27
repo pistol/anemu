@@ -35,10 +35,11 @@ inline uint8_t emu_regs_tainted(emu_thread_t *emu) {
     tainted = N_REGS;
     for (i = 0; i < N_REGS; i++) {
         if (RTREGN(i) != TAINT_CLEAR) {
-            if (i == SP ||
+            if (i == IP ||
+                i == SP ||
                 i == LR ||
                 i == PC) {
-                emu_log_info("taint: WARNING special r%d tainted!\n", i);
+                emu_abort("taint: WARNING special r%d tainted!\n", i);
             }
             emu_log_debug("taint: r%d val: %x tag: %x\n", i, RREGN(i), RTREGN(i));
         } else {
