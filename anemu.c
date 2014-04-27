@@ -2918,6 +2918,38 @@ int emu_free(void *addr, size_t size) {
     emu_log_debug("%s: %x - %x length: %5d\n", __func__, (intptr_t)addr, (intptr_t)addr + size, size);
     return ret;
 }
+
+static
+ssize_t emu_memcpy(void *dst, const void *src, size_t n) {
+    assert(emu_global->mem_fd);
+    assert(n > 0);
+
+    emu_log_debug("%s: dst: %p src: %p n: %d\n", __func__, dst, src, n);
+
+    // pwrite() writes up to count bytes from the buffer starting at buf to the
+    // file descriptor fd at offset offset. The file offset is not changed.
+    ssize_t ret = pwrite(emu_global->mem_fd, src, n, (off_t)dst);
+    if (ret != -1 && (size_t)ret != n) {
+        emu_abort("pwrite");
+    }
+    return ret;
+}
+
+// taint-aware memcpy, defaults to vanilla memcpy when no taint
+void emu_memcpy_safe(void *dst, const void *src, size_t n) {
+    if (!emu_running()) {
+        uint32_t taint_dst = emu_get_taint_array((uint32_t)dst, n);
+        uint32_t taint_src = emu_get_taint_array((uint32_t)src, n);
+        if (taint_dst || taint_src) {
+            (void)emu_memcpy(dst, src, n);
+            emu_set_taint_array((uint32_t)dst, (uint32_t)src, n);
+        } else {
+            (void)memcpy(dst, src, n);
+        }
+    } else {
+        (void)memcpy(dst, src, n);
+    }
+}
 /* copied from system/core/liblog/logprint.c */
 char filterPriToChar(android_LogPriority pri)
 {

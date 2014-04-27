@@ -55,6 +55,8 @@ uint32_t emu_get_taint_pages();
 int32_t emu_get_trace_fd();
 int emu_initialized();
 
+void emu_memcpy_safe(void *dest, const void *src, size_t n);
+
 /* Debugging */
 void gdb_wait();
 
