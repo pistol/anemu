@@ -569,8 +569,6 @@ map_t* emu_map_lookup(uint32_t addr);
 
 bool emu_advance_pc(emu_thread_t *emu);
 uint32_t emu_dump_taintmaps();
-void emu_set_taint_mem(uint32_t addr, uint32_t tag);
-uint32_t emu_get_taint_mem(uint32_t addr);
 void emu_set_taint_reg(emu_thread_t *emu, darm_reg_t reg, uint32_t tag);
 uint32_t emu_get_taint_reg(emu_thread_t *emu, darm_reg_t reg);
 void emu_clear_taintregs(emu_thread_t *emu);

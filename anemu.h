@@ -53,7 +53,7 @@ void emu_set_standalone(bool status);
 /* emulate starting at a given address (e.g. function) */
 uint32_t emu_function(void (*fun)());
 
-void emu_get_taint_mem(uint32_t addr);
+uint32_t emu_get_taint_mem(uint32_t addr);
 void emu_set_taint_mem(uint32_t addr, uint32_t tag);
 void emu_set_taint_array(uint32_t addr, uint32_t tag, uint32_t length);
 uint32_t emu_get_taint_array(uint32_t addr, uint32_t length);

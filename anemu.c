@@ -856,7 +856,6 @@ inline void emu_type_memory(emu_thread_t *emu) {
             data = RMEM32(addr);
             break;
         case I_LDRB:
-            data = *(uint8_t  *)addr;
             data = RMEM8(addr);
             break;
         case I_LDRSB:
@@ -1498,7 +1497,7 @@ void emu_start(emu_thread_t *emu) {
 /* int setcontext (const ucontext_t *ucp) { return 0; } */
 
 void emu_stop(emu_thread_t *emu) {
-    emu_log_info("stopping emulation\n");
+    emu_log_debug("stopping emulation\n");
 
     CPU(pc) |= emu_thumb_mode(emu) ? 1 : 0; /* LSB set for Thumb */
 
@@ -1762,16 +1761,16 @@ inline uint32_t emu_read_reg(emu_thread_t *emu, darm_reg_t reg) {
 
 inline void dbg_dump_ucontext(ucontext_t *uc) {
     mcontext_t *r = &uc->uc_mcontext;
-    emu_log_info("dump gp regs:\n");
-    emu_log_info("fault addr %8x\n",
+    emu_log_debug("dump gp regs:\n");
+    emu_log_debug("fault addr %8x\n",
                  (uint32_t)r->fault_address);
-    emu_log_info("r0: %8x  r1: %8x  r2: %8x  r3: %8x\n",
+    emu_log_debug("r0: %8x  r1: %8x  r2: %8x  r3: %8x\n",
                  (uint32_t)r->arm_r0, (uint32_t)r->arm_r1, (uint32_t)r->arm_r2,  (uint32_t)r->arm_r3);
-    emu_log_info("r4: %8x  r5: %8x  r6: %8x  r7: %8x\n",
+    emu_log_debug("r4: %8x  r5: %8x  r6: %8x  r7: %8x\n",
                  (uint32_t)r->arm_r4, (uint32_t)r->arm_r5, (uint32_t)r->arm_r6,  (uint32_t)r->arm_r7);
-    emu_log_info("r8: %8x  r9: %8x  sl: %8x  fp: %8x\n",
+    emu_log_debug("r8: %8x  r9: %8x  sl: %8x  fp: %8x\n",
                  (uint32_t)r->arm_r8, (uint32_t)r->arm_r9, (uint32_t)r->arm_r10, (uint32_t)r->arm_fp);
-    emu_log_info("ip: %8x  sp: %8x  lr: %8x  pc: %8x  cpsr: %08x\n",
+    emu_log_debug("ip: %8x  sp: %8x  lr: %8x  pc: %8x  cpsr: %08x\n",
                  (uint32_t)r->arm_ip, (uint32_t)r->arm_sp, (uint32_t)r->arm_lr,  (uint32_t)r->arm_pc, (uint32_t)r->arm_cpsr);
 }
 
@@ -2012,7 +2011,9 @@ map_t* emu_map_lookup(uint32_t addr) {
             return m;
         }
     }
-    emu_abort("unable to locate addr: %x\n", addr);
+    // NOTE: since emu only parses maps at init and memory can later change
+    // failure to find an addr may or may not be a bug
+    emu_log_error("unable to locate addr: %x\n", addr);
     return NULL;
 }
 
@@ -2239,8 +2240,6 @@ emu_get_taint_mem(uint32_t addr) {
 
 // assuming lock is already held when called from emu_set_taint_array
 void emu_set_taint_mem(uint32_t addr, uint32_t tag) {
-    // emu_log_debug("%s: addr: %x tag:%x\n", __func__, addr, tag);
-
     assert(addr > 0);
 
     addr = Align(addr, 4);      /* word align */
@@ -2253,8 +2252,6 @@ void emu_set_taint_mem(uint32_t addr, uint32_t tag) {
     // sanity check offset is valid
     uint32_t    offset     = (addr - taintmap->start) >> 2;
 
-    // emu_log_debug("addr: %x offset: %x tag: %x", addr, offset, tag);
-
     /* incrementally update tainted page list */
     if (taintmap->data[offset] != TAINT_CLEAR && tag == TAINT_CLEAR) {
         emu_log_debug("taint: un-tainting mem: %x\n", addr);
@@ -2263,6 +2260,7 @@ void emu_set_taint_mem(uint32_t addr, uint32_t tag) {
         emu_log_debug("taint: tainting mem: %x tag: %x\n", addr, tag);
         emu_mark_page(addr);
     }
+    emu_log_debug("taint: updating offset: %x tag: %x\n", offset, tag);
     taintmap->data[offset] = tag;  /* word (32-bit) based tag storage */
 }
 
@@ -2394,6 +2392,7 @@ emu_get_taintpages() {
     return emu_global->nr_taintpages;
 }
 
+// caller must hold taint_lock
 inline void
 emu_protect_mem() {
 #ifdef NO_MPROTECT
@@ -2561,7 +2560,7 @@ void dump_backtrace(pid_t tid)
 
 // mutex wrappers with error checking
 inline int mutex_lock(pthread_mutex_t *mutex) {
-    emu_log_info("mutex   lock try\n");
+    emu_log_debug("mutex   lock try\n");
     int ret = pthread_mutex_lock(mutex);
     if (ret != 0) {
         switch(ret) {
@@ -2576,12 +2575,12 @@ inline int mutex_lock(pthread_mutex_t *mutex) {
             break;
         }
     }
-    emu_log_info("mutex   lock success\n");
+    emu_log_debug("mutex   lock success\n");
     return ret;
 }
 
 inline int mutex_unlock(pthread_mutex_t *mutex) {
-    emu_log_info("mutex unlock try\n");
+    emu_log_debug("mutex unlock try\n");
     int ret = pthread_mutex_unlock(mutex);
     if (ret != 0) {
         switch(ret) {
@@ -2596,7 +2595,7 @@ inline int mutex_unlock(pthread_mutex_t *mutex) {
             break;
         }
     }
-    emu_log_info("mutex unlock success\n");
+    emu_log_debug("mutex unlock success\n");
     return ret;
 }
 
@@ -2610,8 +2609,8 @@ void gdb_wait() {
         emu_log_debug("already attached!\n");
         return;
     }
-    emu_log_debug(LOG_BANNER_SIG);
-    emu_log_debug("waiting for gdb to attach pid: %d tid: %d ...\n", getpid(), gettid());
+    emu_log_error(LOG_BANNER_SIG);
+    emu_log_error("waiting for gdb to attach pid: %d tid: %d ...\n", getpid(), gettid());
     volatile int c = 0;
     while(!attached && c == 0) {
         *(int volatile *)&c;
@@ -2664,13 +2663,16 @@ int32_t emu_thread_count_down() {
 
 void emu_hook_thread_entry(void *arg) {
     pthread_internal_t *thread = (pthread_internal_t *)arg;
+    assert(thread == pthread_self());
     thread->target = emu_target();
     if (thread->target) {
-        // TODO: atomic increment a emu.thread_count and decrement it in __pthread_internal_free()
+        // atomic increment a emu->thread_count and decrement it in __pthread_internal_free()
         // which would provide a live thread count equal to total running threads for target pid
         // can then match it against /proc/self/task
+        emu_thread_count_up();
+
         size_t guard_size = getPageSize(); /* PAGE_SIZE */
-        size_t altstack_size = guard_size + 8 * SIGSTKSZ; /* ensures useable altsack is SIGSTKSZ */
+        size_t altstack_size = guard_size + 1 * SIGSTKSZ; /* ensures useable altstack is SIGSTKSZ */
 
         if (!thread->altstack) {
             thread->altstack = mkstack(altstack_size, guard_size);
@@ -2688,7 +2690,7 @@ void emu_hook_thread_entry(void *arg) {
         // handler must use only the SIGSTKSZ portion
         size_t useable_size = altstack_size - guard_size;
         uint32_t altstack_base = (uint32_t)thread->altstack + guard_size;
-        emu_thread_count_up();
+
         emu_init_handler(SIGSEGV, emu_handler_segv, (void *)altstack_base, useable_size);
         if (emu_global->standalone) {
             // NOTE! for standalone emu, we use START and STOP markers
@@ -2752,7 +2754,6 @@ void emu_hook_bionic_atfork_run_child(void *arg) {
 
 void emu_hook_Zygote_forkAndSpecializeCommon(void *arg) {
     pid_t pid = (pid_t)arg;
-    // emu_log_debug("emu.target addr: %p val: %d\n", &emu.target, emu.target);
     assert(!emu_global->target);
     emu_global->target = pid;
 
