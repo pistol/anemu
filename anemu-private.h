@@ -153,6 +153,7 @@ typedef struct _emu_global_t {
 
 /* Per-Thread emu state */
 typedef struct _emu_thread_t {
+    pid_t       tid;              /* system tid */
     ucontext_t  current;          /* present process emulated state */
     ucontext_t  previous;         /* used for diff-ing two contexts */
     ucontext_t  original;         /* process state when trap occured */
@@ -166,11 +167,10 @@ typedef struct _emu_thread_t {
     double      time_start;       /* execution time measurements */
     double      time_end;
     int32_t     trace_fd;         /* trace file descriptor */
-    bool        inside_handler;   /* flag to avoid stdio within sig handler */
+    bool        running;          /* flag to avoid stdio within sig handler */
     bool        stop;             /* emu stop requested */
     uint8_t     skip;             /* special hack to skip certain tricky functions */
     uint8_t     lock_acquired;    /* target program holding a lock */
-    int32_t     thread_count;     /* number of threads configured for emu (sigaltstacks) */
 } emu_thread_t;
 
 /* Internal state */
@@ -576,7 +576,8 @@ void emu_set_taint_reg(emu_thread_t *emu, darm_reg_t reg, uint32_t tag);
 uint32_t emu_get_taint_reg(emu_thread_t *emu, darm_reg_t reg);
 void emu_clear_taintregs(emu_thread_t *emu);
 void emu_init_taintmaps(emu_global_t *emu_global);
-emu_thread_t* tls_get_emu_thread();
+emu_thread_t* emu_tls_get();
+void emu_tls_set(emu_thread_t *emu);
 
 inline uint32_t instr_mask(darm_instr_t instr);
 

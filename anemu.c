@@ -2038,8 +2038,11 @@ getAlignedPage(uint32_t addr) {
 
 void
 emu_handler_segv(int sig, siginfo_t *si, void *ucontext) {
-    emu_thread_t __emu;
-    emu_thread_t *emu = &__emu; /* hack to preserve pointer based macros */
+    emu_thread_t *emu = emu_tls_get();
+    assert(emu);
+    if (emu->running && !emu_global->standalone) {
+        emu_abort("re-trap inside emu!\n");
+    }
     ucontext_t *uc = (ucontext_t *)ucontext;
     emu_siginfo(sig, si, uc);
 
@@ -2420,8 +2423,14 @@ emu_unprotect_mem() {
     }
 }
 
-inline bool emu_running() {
-    return emu_global.running;
+inline
+bool emu_running() {
+    if (emu_global->target) {
+        emu_thread_t *emu = emu_tls_get();
+        assert(emu);
+        return emu->running;
+    }
+    return 0;
 }
 
 int
@@ -2668,9 +2677,12 @@ void emu_hook_thread_entry(void *arg) {
         emu_thread_count_up();
         emu_init_handler(SIGSEGV, emu_handler_segv, (void *)altstack_base, useable_size);
 
-        // allocate emu_thread_t
-        // emu_thread_t *emu = mmap(...)
-        // tls_set_emu_thread(emu);
+        // FIXME: delay this until trap time? not all threads will emu
+        emu_log_debug("init TLS emu thread ...\n");
+        emu_thread_t *emu = emu_alloc(sizeof(emu_thread_t));
+        emu->tid = gettid();
+        assert(emu->tid == thread->kernel_id);
+        emu_tls_set(emu);
     }
 }
 
@@ -2679,13 +2691,13 @@ void emu_hook_pthread_internal_free(void *arg) {
     if (thread->altstack) {
         assert(thread->target);
         emu_log_debug("altstack free: %p\n", thread->altstack);
-        munmap(thread->altstack, thread->altstack_size);
+        emu_free(thread->altstack, thread->altstack_size);
         // check error
-        emu_thread_t *emu = tls_get_emu_thread();
+        emu_thread_t *emu = emu_tls_get();
         if (emu) {
             emu_log_debug("emu free: %p", emu);
-            munmap(emu, sizeof(emu_thread_t));
-            // check error
+            emu_free(emu, sizeof(emu_thread_t));
+            emu_tls_set(NULL);
         }
         emu_thread_count_down();
     }
@@ -2916,11 +2928,18 @@ int tgkill(int tgid, int tid, int sig) {
 }
 */
 
-emu_thread_t* tls_get_emu_thread() {
+#if 1
+inline
+emu_thread_t* emu_tls_get() {
     void**  tls = (void**)__get_tls();
     return tls[TLS_SLOT_EMU_THREAD];
 }
 
+inline
+void emu_tls_set(emu_thread_t *emu) {
+    void**  tls = (void**)__get_tls();
+    tls[TLS_SLOT_EMU_THREAD] = emu;
+}
 void emu_init_proc_mem() {
     emu_global->mem_fd = open("/proc/self/mem", O_RDWR);
 
