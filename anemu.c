@@ -264,24 +264,27 @@ inline void emu_type_arith_imm(emu_thread_t *emu) {
 
 inline void emu_type_pusr(emu_thread_t *emu) {
     const darm_t *d = &emu->darm;
+    assert(d->S != B_SET);
 
     switch(d->instr) {
     case I_UXTB: {
         uint32_t rotated = ROR(RREG(Rm), d->rotate);
-        WREG(Rd) = rotated & 0xffff;
+        WREG(Rd) = rotated & instr_mask(d->instr);
         WTREG1(Rd, Rm);
         break;
     }
     case I_UXTH: {
-        // assert(d->rotate == B_UNSET);
         uint32_t rotated = ROR(RREG(Rm), d->rotate);
-        WREG(Rd) = rotated & 0xffffffff;
+        WREG(Rd) = rotated & instr_mask(d->instr);
         WTREG1(Rd, Rm);
         break;
     }
     case I_SXTB: {
         uint32_t rotated = ROR(RREG(Rm), d->rotate);
-        WREG(Rd) = SignExtend(rotated & 0xff);
+        WREG(Rd) = SignExtend(rotated & instr_mask(d->instr));
+        WTREG1(Rd, Rm);
+        break;
+    }
         WTREG1(Rd, Rm);
         break;
     }
@@ -625,11 +628,13 @@ inline void emu_type_move_imm(emu_thread_t *emu) {
         break;
     }
     case I_MOVT: {
-        EMU(WREG(Rd) = (RREG(Rd) & 0x0000ffff) | (d->imm << 16));
+        assert(d->S != B_SET);
+        EMU(WREG(Rd) = (RREG(Rd) & instr_mask(d->instr)) | (d->imm << 16));
         break;
     }
     case I_MOVW: {
-        EMU(WREG(Rd) = (RREG(Rd) & 0xffff0000) | (d->imm));
+        assert(d->S != B_SET);
+        EMU(WREG(Rd) = (RREG(Rd) & instr_mask(d->instr)) | (d->imm));
         break;
     }
     case I_MVN: {
@@ -2398,10 +2403,15 @@ instr_mask(darm_instr_t instr) {
     switch(instr) {
     case I_LDRSB:
     case I_LDRB:
+    case I_UXTB:
+    case I_SXTB:
     case I_STRB: { return 0xff; }
+    case I_MOVT:
     case I_LDRSH:
     case I_LDRH:
+    case I_UXTH:
     case I_STRH: { return 0xffff; }
+    case I_MOVW: { return 0xffff0000; }
     default:     { return 0xffffffff; }
     }
 }
