@@ -2305,8 +2305,6 @@ inline uint32_t emu_get_taint_array(uint32_t addr, uint32_t length) {
     // emu_log_info("%s: addr: %x length: %d\n", __func__, addr, length);
     // assert(addr != 0 && length > 0);
 
-    int tag = TAINT_CLEAR;
-
     // TODO: get taint tag from taintmap
     uint32_t end = addr + length - 1;
     emu_map_lookup(end);
@@ -2319,7 +2317,7 @@ inline uint32_t emu_get_taint_array(uint32_t addr, uint32_t length) {
         ret |= emu_get_taint_mem(x);
     }
 
-    return tag;
+    return ret;
 }
 
 inline int emu_mark_page(uint32_t addr) {
