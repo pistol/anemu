@@ -811,7 +811,7 @@ inline void emu_type_memory(emu_thread_t *emu) {
         if (d->instr == I_LDR &&
             CurrentInstrSet(emu) == M_ARM &&
             addr != Align(addr, 4)) { /* unaligned addr */
-            emu_abort("unaligned address");
+            emu_log_warn("unaligned address");
         }
 
         emu_log_debug("RMEM(%x): %x\n", addr, RMEM32(addr));
@@ -886,7 +886,7 @@ inline void emu_type_memory(emu_thread_t *emu) {
         if (d->instr == I_STR &&
             CurrentInstrSet(emu) == M_ARM &&
             addr != Align(addr, 4)) { /* unaligned addr */
-            emu_abort("unaligned address");
+            emu_log_warn("unaligned address");
         }
         emu_log_debug("RMEM before:  %x\n", RMEM32(addr));
         /* depending on instr, 1, 2 or 4 bytes of RREG(Rt) will be used and stored to mem */
