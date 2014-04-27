@@ -2045,21 +2045,13 @@ emu_init_taintmaps(emu_global_t *emu_global) {
 
     emu_log_debug("mmap lib   range: %x - %x length: %x\n", start, end, bytes);
 
-    /* TODO: use word-level storage instead of byte-level */
-    /* mmap size = bytes / 4 */
-
     taintmap_t *tm;
 
     tm = &emu_global->taintmaps[TAINTMAP_LIB];
-    tm->data  = mmap(NULL, bytes, PROT_READ|PROT_WRITE, MAP_ANONYMOUS|MAP_PRIVATE, -1, 0);
+    tm->data  = emu_alloc(bytes);
     tm->start = start;
     tm->end   = end;
     tm->bytes = bytes;
-
-    emu_log_debug("mmap lib   returned: %p\n", tm->data);
-    if(tm->data == MAP_FAILED) {
-        emu_abort("mmap lib failed");
-    }
 
     /* stack taintmap */
 
@@ -2070,15 +2062,10 @@ emu_init_taintmaps(emu_global_t *emu_global) {
     emu_log_debug("mmap stack range: %x - %x length: %x\n", start, end, bytes);
 
     tm = &emu_global->taintmaps[TAINTMAP_STACK];
-    tm->data  = mmap(NULL, bytes, PROT_READ|PROT_WRITE, MAP_ANONYMOUS|MAP_PRIVATE, -1, 0);
+    tm->data  = emu_alloc(bytes);
     tm->start = start;
     tm->end   = end;
     tm->bytes = bytes;
-
-    emu_log_debug("mmap stack returned: %p\n", tm->data);
-    if (tm->data  == MAP_FAILED) {
-        emu_abort("mmap stack failed");
-    }
 
     emu_log_debug("taintmaps initialized\n");
 }
