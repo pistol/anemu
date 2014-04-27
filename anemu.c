@@ -2543,30 +2543,20 @@ uint32_t emu_target() {
 }
 
 // copied over from libc/bionic/pthread.c
-static void *mkstack(size_t size, size_t guard_size)
-{
-    void * stack;
+static
+void *mkstack(size_t size, size_t guard_size) {
+    void *stack;
 
     // NOTE: don't think we need a lock for mmap?
     pthread_mutex_lock(&mmap_lock);
 
-    stack = mmap(NULL, size,
-                 PROT_READ | PROT_WRITE,
-                 MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE,
-                 -1, 0);
-
-    if(stack == MAP_FAILED) {
-        stack = NULL;
-        goto done;
-    }
+    stack = emu_alloc(size);
 
     if(mprotect(stack, guard_size, PROT_NONE)){
-        munmap(stack, size);
+        emu_free(stack, size);
         stack = NULL;
-        goto done;
     }
 
-done:
     pthread_mutex_unlock(&mmap_lock);
     return stack;
 }
@@ -2778,6 +2768,29 @@ uint32_t mem_write32(uint32_t addr, uint32_t val) {
     return val;
 }
 
+void *emu_alloc(size_t size) {
+    assert(size > 0);
+    void *ret = mmap(NULL, size,
+                     PROT_READ | PROT_WRITE,
+                     MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE,
+                     -1, 0);
+    if (ret == MAP_FAILED) {
+        emu_abort("mmap");
+    }
+
+    emu_log_debug("%s: %x - %x length: %5d\n", __func__, (intptr_t)ret, (intptr_t)ret + size, size);
+    return ret;
+}
+
+int emu_free(void *addr, size_t size) {
+    assert(addr && size > 0);
+    int ret = munmap(addr, size);
+    if (ret) {
+        emu_abort("munmap");
+    }
+    emu_log_debug("%s: %x - %x length: %5d\n", __func__, (intptr_t)addr, (intptr_t)addr + size, size);
+    return ret;
+}
 /* copied from system/core/liblog/logprint.c */
 char filterPriToChar(android_LogPriority pri)
 {
