@@ -2206,7 +2206,7 @@ emu_dump_taintmaps() {
                     range_start = tm->start + range_start * sizeof(uint32_t);
                     range_end   = tm->start + range_end   * sizeof(uint32_t);
                     emu_log_debug("taint range %d: %s start: %x end: %x length: %d tag: %x\n",
-                                  range,
+                                  ranges,
                                   (idx == TAINTMAP_LIB) ? "lib" : "stack",
                                   range_start, range_end, range_end - range_start, range_tag
                                   );
