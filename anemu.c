@@ -17,6 +17,7 @@
 #include <corkscrew/backtrace.h>
 #include <cutils/atomic.h>
 #include <cutils/properties.h>  /* adb setprop, getprop */
+#include <sys/xattr.h>          /* fsetxattr, fgetxattr */
 
 #if HAVE_SETRLIMIT
 # include <sys/types.h>
@@ -1218,9 +1219,9 @@ inline bool emu_advance_pc(emu_thread_t *emu) {
     }
 #endif
 
-    if (emu_regs_tainted() == 0) {
         emu_protect_mem();
         emu_stop();             /* will not return */
+    if (emu_regs_tainted(emu) == 0) {
         emu_log_debug("taint: no tainted regs remaining, enable protection and leave emu\n");
     }
     emu_log_debug(LOG_BANNER_INSTR);
@@ -1443,7 +1444,9 @@ uint8_t emu_disabled() {
 }
 
 // NOTE: caller assumed to hold lock
-void emu_init(emu_global_t *emu_global) {
+/* void emu_init(emu_global_t *emu_global) { */
+static
+void emu_init() {
     if (emu_initialized()) return;
 
     LOGD("initializing emu state ...\n");
@@ -2264,7 +2267,7 @@ inline void emu_set_taint_array(uint32_t addr, uint32_t tag, uint32_t length) {
     assert(addr != 0 && length > 0);
 
     // Important: must initialize state first - this includes necessary logging and taintmaps
-    if (!emu_initialized()) emu_init(&emu_global);
+    if (!emu_initialized()) emu_init();
 
     uint32_t end = addr + length - 1;
     emu_map_lookup(end);
@@ -3074,6 +3077,7 @@ char filterPriToChar(android_LogPriority pri)
 
 #define LOG_BUF_SIZE 256
 #define LOG_HEADER_SIZE 24
+static
 int __log_print(int prio, const char *tag, const char *fmt, ...) {
     va_list ap;
     char buf[LOG_BUF_SIZE];

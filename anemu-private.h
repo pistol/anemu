@@ -178,8 +178,9 @@ typedef struct _emu_thread_t {
 // currently expecting a single thread to be in emulation a time
 // this is enforced via a global mutex: emu_lock
 
-/* page fault handler sync */
-static pthread_mutex_t emu_lock   = PTHREAD_RECURSIVE_MUTEX_INITIALIZER;
+/* Synchronization */
+// mutex options: PTHREAD_MUTEX_INITIALIZER or PTHREAD_RECURSIVE_MUTEX_INITIALIZER
+static pthread_mutex_t emu_lock   = PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t mmap_lock  = PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t taint_lock = PTHREAD_MUTEX_INITIALIZER;
 
@@ -501,15 +502,15 @@ typedef struct pthread_internal_t
 
 /* API */
 
-void emu_init();
+static void emu_init();
 void emu_ucontext(emu_thread_t *emu, ucontext_t *ucontext);
-void emu_start();
-void emu_stop();
+void emu_start(emu_thread_t *emu);
+void emu_stop(emu_thread_t *emu);
 uint8_t emu_stop_trigger(emu_thread_t *emu);
 bool emu_singlestep(emu_thread_t *emu);
 void emu_set_running(bool state);
 
-uint8_t emu_regs_tainted();
+uint8_t emu_regs_tainted(emu_thread_t *emu);
 
 extern const char* emu_disasm_ref(uint32_t pc, uint8_t bits);
 uint8_t emu_disasm(emu_thread_t *emu, darm_t *d, uint32_t pc);
@@ -533,10 +534,9 @@ uint32_t emu_regshift(emu_thread_t *emu, uint32_t val);
 
 void dbg_dump_ucontext(ucontext_t *uc);
 void dbg_dump_ucontext_vfp(ucontext_t *uc);
-void emu_dump();
-void emu_dump_diff();
-void emu_dump_cpsr();
-void armv7_dump(const darm_t *d);
+void emu_dump(emu_thread_t *emu);
+void emu_dump_diff(emu_thread_t *emu);
+void emu_dump_cpsr(emu_thread_t *emu);
 void dump_backtrace(pid_t tid);
 inline uint32_t emu_read_reg(emu_thread_t *emu, darm_reg_t reg);
 inline uint32_t *emu_write_reg(emu_thread_t *emu, darm_reg_t reg);
@@ -553,8 +553,13 @@ uint8_t mem_write8(uint32_t addr, uint8_t val);
 uint16_t mem_write16(uint32_t addr, uint16_t val);
 uint32_t mem_write32(uint32_t addr, uint32_t val);
 
+void *emu_alloc(size_t size);
+int emu_free(void *addr, size_t size);
+static ssize_t emu_memcpy(void *dest, const void *src, size_t n);
+static void *mkstack(size_t size, size_t guard_size);
+
 void emu_map_dump(map_t *m);
-void emu_parse_maps();
+void emu_parse_maps(emu_global_t *emu_global);
 void emu_parse_cmdline(char *cmdline, size_t size);
 char* emu_parse_threadname();
 const char *get_signame(int sig);
@@ -563,12 +568,12 @@ const char *get_ssname(int code);
 
 map_t* emu_map_lookup(uint32_t addr);
 
-bool emu_advance_pc();
+bool emu_advance_pc(emu_thread_t *emu);
 uint32_t emu_dump_taintmaps();
 void emu_set_taint_mem(uint32_t addr, uint32_t tag);
 uint32_t emu_get_taint_mem(uint32_t addr);
-void emu_set_taint_reg(emu_thread_t *emu, uint32_t reg, uint32_t tag);
-uint32_t emu_get_taint_reg(emu_thread_t *emu, uint32_t reg);
+void emu_set_taint_reg(emu_thread_t *emu, darm_reg_t reg, uint32_t tag);
+uint32_t emu_get_taint_reg(emu_thread_t *emu, darm_reg_t reg);
 void emu_clear_taintregs(emu_thread_t *emu);
 void emu_init_taintmaps(emu_global_t *emu_global);
 emu_thread_t* tls_get_emu_thread();
@@ -601,5 +606,8 @@ cpumode_t CurrentInstrSet(emu_thread_t *emu);
 cpumode_t TargetInstrSet(emu_thread_t *emu, uint32_t instr);
 void BranchWritePC(emu_thread_t *emu, uint32_t addr);
 void BXWritePC(emu_thread_t *emu, uint32_t addr);
+
+/* Logging */
+static int __log_print(int prio, const char *tag, const char *fmt, ...);
 
 #endif  /* _INCLUDE_ANEMU_PRIVATE_H_ */
