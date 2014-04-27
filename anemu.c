@@ -120,8 +120,8 @@ void emu_handler_trap(int sig, siginfo_t *si, void *ucontext) {
     assert(emu_initialized());
 
     emu_ucontext(&emu, uc);
-    emu_start();
-    emu_stop();
+    emu_start(&emu);
+    emu_stop(&emu);
 }
 
 inline void emu_ucontext(emu_thread_t *emu, ucontext_t *uc) {
@@ -1613,10 +1613,17 @@ emu_init_handler(int sig,
 
 /* Standalone on-demand emulation */
 uint32_t emu_function(void (*fun)()) {
-    emu_set_standalone(true);
+    /* SIGSTKSZ = 8192 */
+    void *stack = mkstack(getPageSize() + SIGSTKSZ, getPageSize());
+    uint32_t stack_top = (uint32_t)stack + getPageSize() + SIGSTKSZ;
 
-    emu_thread_t __emu;
-    emu_thread_t *emu = &__emu; /* hack to preserve pointer based macros */
+    emu_hook_thread_entry((void *)pthread_self());
+    emu_thread_t *emu = emu_tls_get();
+    assert(emu);
+    emu_set_standalone(true);
+    // should already be set prior to calling
+    emu_set_target(getpid());
+
     uint32_t pc = (uint32_t)*fun;
     emu_map_lookup(pc);
 
@@ -1625,7 +1632,7 @@ uint32_t emu_function(void (*fun)()) {
     CPU(r6) = CPU(r7) = CPU(r8) = CPU(r9) = CPU(r10) = 0;
     CPU(fp) = CPU(ip) = 0;
     CPU(lr) = MARKER_STOP_VAL;
-    CPU(sp) = (uint32_t)&emu_global.stack + SIGSTKSZ; /* SIGSTKSZ = 8192 */
+    CPU(sp) = stack_top;
     CPU(pc) = pc;
     CPU(cpsr) = 0b10000;         /* User Mode */
 
@@ -2618,6 +2625,16 @@ inline
 uint32_t emu_target() {
     return emu_global->target;
 }
+
+inline
+void emu_set_target(pid_t pid) {
+    emu_global->target = pid;
+}
+
+inline
+void emu_set_standalone(bool state) {
+    emu_init();
+    emu_global->standalone = state;
 }
 
 // copied over from libc/bionic/pthread.c
@@ -2673,9 +2690,15 @@ void emu_hook_thread_entry(void *arg) {
         // handler must use only the SIGSTKSZ portion
         size_t useable_size = altstack_size - guard_size;
         uint32_t altstack_base = (uint32_t)thread->altstack + guard_size;
-        // emu_init_handler(SIGTRAP, emu_handler_trap, (void *)altstack_base, useable_size);
         emu_thread_count_up();
         emu_init_handler(SIGSEGV, emu_handler_segv, (void *)altstack_base, useable_size);
+        if (emu_global->standalone) {
+            // NOTE! for standalone emu, we use START and STOP markers
+            // we purposely want the same handler for SIGTRAP as SIGSEGV to simplify matters
+            emu_init_handler(SIGTRAP, emu_handler_segv, (void *)altstack_base, useable_size);
+        } else {
+            emu_init_handler(SIGTRAP, emu_handler_trap, (void *)altstack_base, useable_size);
+        }
 
         // FIXME: delay this until trap time? not all threads will emu
         emu_log_debug("init TLS emu thread ...\n");

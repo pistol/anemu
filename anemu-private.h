@@ -144,7 +144,6 @@ typedef struct _emu_global_t {
     bool       disabled;                   /* prevent further emulation */
     bool       standalone;        /* standalone or target based emu */
     uint32_t   target;            /* pid targetted for emulation */
-    uint32_t   stack[SIGSTKSZ];   /* stack for standalone */
     int32_t    instr_total;       /* number of ops seen so far */
     int32_t    trace_fd;          /* trace file descriptor */
     int32_t    mem_fd;            /* memory access via /proc/self/mem */

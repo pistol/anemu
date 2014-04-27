@@ -47,6 +47,8 @@ int emu_trampoline_write(int fd, void *buf, size_t count);
 
 /* check if current pid / app is targeted for emulation */
 uint32_t emu_target();
+void emu_set_target(pid_t pid);
+void emu_set_standalone(bool status);
 
 /* emulate starting at a given address (e.g. function) */
 uint32_t emu_function(void (*fun)());
