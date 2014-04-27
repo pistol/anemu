@@ -79,7 +79,7 @@ void emu_siginfo(int sig, siginfo_t *si, ucontext_t *uc) {
     }
     emu_log_debug("sigaltstack sp: %p size: %d flags: %s (%d)\n", oss.ss_sp, oss.ss_size, get_ssname(oss.ss_flags), oss.ss_flags);
 
-    emu_log_debug("emu threads: %d\n", emu_global.thread_count);
+    emu_log_debug("emu threads: %d\n", emu_global->thread_count);
 
     // we only expect two signals in emulation
     assert(sig == SIGTRAP || sig == SIGSEGV);
@@ -1200,10 +1200,10 @@ inline bool emu_advance_pc(emu_thread_t *emu) {
     emu->branched = 0;
     emu->instr_count++;
 
-    android_atomic_inc(&emu_global.instr_total);
+    android_atomic_inc(&emu_global->instr_total);
 
 #ifndef PROFILE
-    emu_log_debug("handled instructions: %d\n", emu_global.instr_total);
+    emu_log_debug("handled instructions: %d\n", emu_global->instr_total);
     emu_dump_diff(emu);
     dbg_dump_ucontext(&emu->current);
 
@@ -1237,12 +1237,12 @@ inline bool emu_advance_pc(emu_thread_t *emu) {
     int32_t stop_handler = (int32_t)atoi(prop);
     emu_log_debug("stop_handler value: %d\n", stop_handler);
 
-    if (stop_total && emu_global.instr_total >= stop_total) {
-        emu_log_info("SPECIAL: permanently turning off emu after %d instructions.\n", emu_global.instr_total);
+    if (stop_total && emu_global->instr_total >= stop_total) {
+        emu_log_info("SPECIAL: permanently turning off emu after %d instructions.\n", emu_global->instr_total);
         emu_log_debug("disabling emu\n");
         emu_unprotect_mem();
         emu->stop = 1;
-        emu_global.disabled = 1;
+        emu_global->disabled = 1;
     } else if (stop_handler && emu->instr_count >= stop_handler) { /* NOTE: we are using a one time count */
         emu_log_info("SPECIAL: stopping current trap  emu after %d instructions.\n", emu->instr_count);
         emu->stop = 1;
@@ -1439,7 +1439,7 @@ inline bool emu_singlestep(emu_thread_t *emu) {
 }
 
 uint8_t emu_disabled() {
-    return emu_global.disabled || !emu_global.target;
+    return emu_global->disabled || !emu_global->target;
 }
 
 // NOTE: caller assumed to hold lock
@@ -1518,9 +1518,9 @@ void emu_stop(emu_thread_t *emu) {
     dbg_dump_ucontext(&emu->current);
     emu_log_debug(LOG_BANNER_SIG);
     emu->stop = 0;
-    emu_log_info("emulation stopped.\n");
+    emu_log_info("emulation stopped. total instr: %d\n", emu_global->instr_total);
     /* if we are not in standalone, we need to restore execution context to latest values */
-    if (!emu_global.standalone) {
+    if (!emu_global->standalone) {
         setcontext((const ucontext_t *)&emu->current); /* never returns */
     }
 }
@@ -1565,7 +1565,7 @@ emu_init_handler(int sig,
                  void (*handler)(int, siginfo_t *, void *),
                  void *stack,
                  size_t stack_size) {
-    emu_log_debug("[+] registering %s (%d) handler sigaltstack sp: %p size: %d  threads: %d ...\n", get_signame(sig), sig, stack, stack_size, emu_global.thread_count);
+    emu_log_debug("[+] registering %s (%d) handler sigaltstack sp: %p size: %d  threads: %d ...\n", get_signame(sig), sig, stack, stack_size, emu_global->thread_count);
     assert(sig == SIGTRAP || sig == SIGSEGV);
     assert(stack != NULL && stack_size >= MINSIGSTKSZ);
 
@@ -1610,7 +1610,7 @@ emu_init_handler(int sig,
 
 /* Standalone on-demand emulation */
 uint32_t emu_function(void (*fun)()) {
-    emu_global.standalone = true;
+    emu_set_standalone(true);
 
     emu_thread_t __emu;
     emu_thread_t *emu = &__emu; /* hack to preserve pointer based macros */
@@ -1988,12 +1988,12 @@ map_t* emu_map_lookup(uint32_t addr) {
     unsigned int i;
     map_t *m;
 
-    if (emu_global.nr_maps == 0) {
-        emu_parse_maps(&emu_global);
+    if (emu_global->nr_maps == 0) {
+        emu_parse_maps(emu_global);
     }
 
-    for (i = 0; i < emu_global.nr_maps; i++) {
-        m = &emu_global.maps[i];
+    for (i = 0; i < emu_global->nr_maps; i++) {
+        m = &emu_global->maps[i];
         // stricly addr < m->vm_end, because end and start are equal:
         // 5a91f000-5a920000 r--s bb000 103:2 25 /system/app/DownloadProvider.apk [1 pages]
         // 5a920000-5a921000 r--s  7000 103:2 27 /system/app/DrmProvider.apk [1 pages]
@@ -2145,9 +2145,9 @@ emu_get_taintmap(uint32_t addr) {
     taintmap_t *tm;
     addr = Align(addr, 4);      /* word align */
 
-    uint32_t stack_start = emu_global.maps[emu_global.nr_maps - 2].vm_start;
+    uint32_t stack_start = emu_global->maps[emu_global->nr_maps - 2].vm_start;
     uint8_t  idx         = (addr > stack_start) ? TAINTMAP_STACK : TAINTMAP_LIB;
-    tm = &emu_global.taintmaps[idx];
+    tm = &emu_global->taintmaps[idx];
 
     if (tm->data == NULL || tm->start == 0) {
         emu_abort("uninitialized taintmap");
@@ -2165,7 +2165,7 @@ emu_dump_taintmaps() {
     taintmap_t *tm;
     uint32_t ranges = 0;
     for (idx = TAINTMAP_LIB; idx < MAX_TAINTMAPS; idx++) {
-        tm = &emu_global.taintmaps[idx];
+        tm = &emu_global->taintmaps[idx];
         if (tm->data == NULL) {
             /* FIXME: this should only occur for the 3rd (heap, idx 2) unused map */
             emu_log_debug("unallocated data for taintmap %d\n", idx);
@@ -2323,7 +2323,7 @@ inline int emu_mark_page(uint32_t addr) {
     for (idx = 0; idx < MAX_TAINTPAGES; idx++) {
         /* 0        - un-marked slot */
         /* non-zero - marked plage */
-        if (emu_global.taintpages[idx] == page) {
+        if (emu_global->taintpages[idx] == page) {
             found = 1;
             return found;
         }
@@ -2332,10 +2332,10 @@ inline int emu_mark_page(uint32_t addr) {
     /* 2. if page not found, add it */
     if (!found) {
         for (idx = 0; idx < MAX_TAINTPAGES; idx++) {
-            if (emu_global.taintpages[idx] == 0) {
-                emu_global.taintpages[idx] = page;
+            if (emu_global->taintpages[idx] == 0) {
+                emu_global->taintpages[idx] = page;
                 added = 1;
-                emu_global.nr_taintpages++;
+                emu_global->nr_taintpages++;
                 emu_log_debug("marking addr: %x page: %x\n", addr, page);
                 break;
             }
@@ -2352,16 +2352,16 @@ inline int emu_unmark_page(uint32_t addr) {
     uint32_t idx;
     uint8_t found = 0;
 
-    assert(emu_global.nr_taintpages > 0);
+    // assert(emu_global->nr_taintpages > 0);
 
     /* 1. look if page has been marked previously marked */
     for (idx = 0; idx < MAX_TAINTPAGES; idx++) {
         /* 0        - un-marked slot */
         /* non-zero - marked plage */
-        if (emu_global.taintpages[idx] == page) {
+        if (emu_global->taintpages[idx] == page) {
             found = 1;
-            emu_global.taintpages[idx] = 0;
-            emu_global.nr_taintpages--;
+            emu_global->taintpages[idx] = 0;
+            emu_global->nr_taintpages--;
             break;
         }
     }
@@ -2373,14 +2373,14 @@ emu_clear_taintpages() {
     emu_log_debug("clearing taintpages...\n");
     uint32_t idx;
     for (idx = 0; idx < MAX_TAINTPAGES; idx++) {
-        emu_global.taintpages[idx] = 0;
+        emu_global->taintpages[idx] = 0;
     }
-    emu_global.nr_taintpages = 0;
+    emu_global->nr_taintpages = 0;
 }
 
 inline uint32_t
 emu_get_taintpages() {
-    return emu_global.nr_taintpages;
+    return emu_global->nr_taintpages;
 }
 
 inline void
@@ -2394,7 +2394,7 @@ emu_protect_mem() {
     /* protect all pages in unique list */
     static const uint32_t flags = PROT_NONE;
     for (idx = 0; idx < MAX_TAINTPAGES; idx++) {
-        uint32_t page = emu_global.taintpages[idx];
+        uint32_t page = emu_global->taintpages[idx];
         if (page != 0) {
             mprotectPage(page, flags);
         }
@@ -2410,7 +2410,7 @@ emu_unprotect_mem() {
     for (idx = 0; idx < MAX_TAINTPAGES; idx++) {
         /* 0        - un-marked slot */
         /* non-zero - marked plage */
-        uint32_t page = emu_global.taintpages[idx];
+        uint32_t page = emu_global->taintpages[idx];
         if (page != 0) {
             mprotectPage(page, flags);
         }
@@ -2423,12 +2423,12 @@ inline bool emu_running() {
 
 int
 emu_initialized() {
+    return emu_global->initialized;
 }
 
 inline int32_t
 emu_get_trace_fd() {
-    return emu.trace_fd;
-    return emu_global.trace_fd;
+    return emu_global->trace_fd;
 }
 
 inline uint32_t
@@ -2604,7 +2604,8 @@ void gdb_wait() {
 
 inline
 uint32_t emu_target() {
-    return emu_global.target;
+    return emu_global->target;
+}
 }
 
 // copied over from libc/bionic/pthread.c
@@ -2627,11 +2628,11 @@ void *mkstack(size_t size, size_t guard_size) {
 }
 
 int32_t emu_thread_count_up() {
-    return android_atomic_inc(&emu_global.thread_count);
+    return android_atomic_inc(&emu_global->thread_count);
 }
 
 int32_t emu_thread_count_down() {
-    return android_atomic_dec(&emu_global.thread_count);
+    return android_atomic_dec(&emu_global->thread_count);
 }
 
 void emu_hook_thread_entry(void *arg) {
@@ -2715,9 +2716,9 @@ void emu_hook_bionic_atfork_run_child(void *arg) {
 
 void emu_hook_Zygote_forkAndSpecializeCommon(void *arg) {
     pid_t pid = (pid_t)arg;
-    assert(!emu_global.target);
-    emu_global.target = pid;
     // emu_log_debug("emu.target addr: %p val: %d\n", &emu.target, emu.target);
+    assert(!emu_global->target);
+    emu_global->target = pid;
 
     char name[16];
     int ret = prctl(PR_GET_NAME, (unsigned long) name, 0, 0, 0);
@@ -2792,6 +2793,108 @@ int32_t emu_set_taint_file(int fd, uint32_t tag)
 
     return ret;
 }
+
+/* syscalls used by trampolines */
+extern ssize_t __read(int, void *, size_t);
+extern ssize_t __write(int, void *, size_t);
+
+ssize_t check_read(int fd, void *buf, size_t count) {
+    ssize_t ret = __read(fd, buf, count);
+    if (ret == -1) {
+        if (errno != ENOENT) {
+            emu_log_error("read(%d, %p, %d) failed with ret: %ld and errno: %d\n", fd, buf, count, ret, errno);
+        }
+        // this should never happen outside emu
+        assert(errno != EFAULT);
+    }
+    return ret;
+}
+
+ssize_t check_write(int fd, void *buf, size_t count) {
+    ssize_t ret = __write(fd, buf, count);
+    if (ret == -1) {
+        emu_log_error("write(%d, %p, %d) failed with ret: %ld and errno: %d\n", fd, buf, count, ret, errno);
+        // this should never happen outside emu
+        assert(errno != EFAULT);
+    }
+    return ret;
+}
+
+int emu_trampoline_read(int fd, void *buf, size_t count) {
+    ssize_t ret;
+    // TODO: add TLS flag to avoid checking taint for emu internal calls
+    if (unlikely(emu_target())) {
+        uint32_t taint_file = emu_get_taint_file(fd);
+        uint32_t taint_buf  = emu_get_taint_array((uint32_t)buf, count);
+
+        if (!taint_file && !taint_buf ) { goto no_taint; }
+
+        if (taint_buf) {
+            // need temp buffer to avoid EFAULT
+            emu_log_debug("read(%d, %p, %d) tainted buf - sneaking data...\n", fd, buf, count);
+            void *tmp = emu_alloc(count);
+            ret = check_read(fd, tmp, count);
+            if (ret) {
+                emu_memcpy(buf, tmp, ret);
+            }
+            emu_free(tmp, count);
+        } else {
+            // can perform read directly
+            ret = check_read(fd, buf, count);
+        }
+        if (ret && taint_file) {
+            emu_log_debug("read(%d, %p, %d) tainted ret: %ld\n", fd, buf, count, ret);
+            emu_set_taint_array((uint32_t)buf, taint_file, ret);
+        }
+        return ret;
+    }
+
+no_taint:
+    /* common case (no taint) */
+    ret = check_read(fd, buf, count);
+    return ret;
+}
+
+int emu_trampoline_write(int fd, void *buf, size_t count) {
+    ssize_t ret;
+    if (unlikely(emu_target())) {
+        // if (fd == emu_get_trace_fd()) continue;
+        uint32_t taint_file = emu_get_taint_file(fd);
+        uint32_t taint_buf  = emu_get_taint_array((uint32_t)buf, count);
+
+        if (!taint_file && !taint_buf ) { goto no_taint; }
+
+        if (taint_file && !taint_buf) {
+            // let write go through - this must be Dalvik setting taint
+            emu_log_debug("write(%d, %p, %d) taint from Dalvik...\n", fd, buf, count);
+            // goto no_taint;
+        } else if (!taint_file && taint_buf) {
+            emu_log_debug("write(%d, %p, %d) tainted - sneaking data...\n", fd, buf, count);
+            // TODO taint
+            gdb_wait();
+
+            void *tmp = emu_alloc(count);
+            emu_memcpy(tmp, buf, count);
+            ret = check_write(fd, tmp, count);
+            emu_free(tmp, count);
+            return ret;
+        }
+    }
+
+ no_taint:
+    /* common case (no taint) */
+    ret = __write(fd, buf, count);
+    if (ret == -1) {
+        if (errno != 2) {
+            emu_log_error("write(%d, %p, %d) failed with ret: %ld and errno: %d\n", fd, buf, count, ret, errno);
+            // dump_backtrace(gettid());
+        }
+        // this should never happen outside emu
+        assert(errno != EFAULT);
+    }
+    return ret;
+}
+
 /*
 // thread kill (send signal to a thread)
 int tgkill(int tgid, int tid, int sig) {
@@ -2816,19 +2919,19 @@ emu_thread_t* tls_get_emu_thread() {
 }
 
 void emu_init_proc_mem() {
-    emu_global.mem_fd = open("/proc/self/mem", O_RDWR);
+    emu_global->mem_fd = open("/proc/self/mem", O_RDWR);
 
-    if (!emu_global.mem_fd) {
+    if (!emu_global->mem_fd) {
         emu_abort("Can't open /proc/self/mem\n");
     }
 }
 
 /* READ */
 uint8_t mem_read8(uint32_t addr) {
-    assert(emu_global.mem_fd);
+    assert(emu_global->mem_fd);
     uint8_t val = 0;
     static const int8_t size = 1;
-    int8_t b = pread(emu_global.mem_fd, &val, size, addr);
+    int8_t b = pread(emu_global->mem_fd, &val, size, addr);
     if (b != size) {
         emu_abort("pread");
     }
@@ -2836,10 +2939,10 @@ uint8_t mem_read8(uint32_t addr) {
 }
 
 uint16_t mem_read16(uint32_t addr) {
-    assert(emu_global.mem_fd);
+    assert(emu_global->mem_fd);
     uint16_t val = 0;
     static const int8_t size = 2;
-    int8_t b = pread(emu_global.mem_fd, &val, size, addr);
+    int8_t b = pread(emu_global->mem_fd, &val, size, addr);
     if (b != size) {
         emu_abort("pread");
     }
@@ -2847,10 +2950,10 @@ uint16_t mem_read16(uint32_t addr) {
 }
 
 uint32_t mem_read32(uint32_t addr) {
-    assert(emu_global.mem_fd);
+    assert(emu_global->mem_fd);
     uint32_t val = 0;
     static const int8_t size = 4;
-    int8_t b = pread(emu_global.mem_fd, &val, size, addr);
+    int8_t b = pread(emu_global->mem_fd, &val, size, addr);
     if (b != size) {
         emu_abort("pread");
     }
@@ -2859,10 +2962,10 @@ uint32_t mem_read32(uint32_t addr) {
 
 /* WRITE */
 uint8_t mem_write8(uint32_t addr, uint8_t val) {
-    assert(emu_global.mem_fd);
+    assert(emu_global->mem_fd);
     int8_t b;
     do {
-        b = pwrite(emu_global.mem_fd, &val, sizeof(val), addr);
+        b = pwrite(emu_global->mem_fd, &val, sizeof(val), addr);
         emu_log_debug("pwrite8 ret: %d\n", b);
         if (b != sizeof(val)) {
             switch(b) {
@@ -2879,8 +2982,8 @@ uint8_t mem_write8(uint32_t addr, uint8_t val) {
 }
 
 uint16_t mem_write16(uint32_t addr, uint16_t val) {
-    assert(emu_global.mem_fd);
-    int8_t b = pwrite(emu_global.mem_fd, &val, sizeof(val), addr);
+    assert(emu_global->mem_fd);
+    int8_t b = pwrite(emu_global->mem_fd, &val, sizeof(val), addr);
     if (b != sizeof(val)) {
         emu_abort("pwrite");
     }
@@ -2888,8 +2991,8 @@ uint16_t mem_write16(uint32_t addr, uint16_t val) {
 }
 
 uint32_t mem_write32(uint32_t addr, uint32_t val) {
-    assert(emu_global.mem_fd);
-    int8_t b = pwrite(emu_global.mem_fd, &val, sizeof(val), addr);
+    assert(emu_global->mem_fd);
+    int8_t b = pwrite(emu_global->mem_fd, &val, sizeof(val), addr);
     if (b != sizeof(val)) {
         emu_abort("pwrite");
     }
@@ -2982,7 +3085,7 @@ int __log_print(int prio, const char *tag, const char *fmt, ...) {
     char msg[LOG_HEADER_SIZE];
     snprintf(msg, LOG_HEADER_SIZE, "%d %d %c ", getpid(), gettid(), filterPriToChar(prio));
 
-    int fd = emu_global.trace_fd;
+    int fd = emu_global->trace_fd;
 
     const int iovcnt = 2;
     struct iovec vec[iovcnt];

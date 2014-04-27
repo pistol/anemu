@@ -183,11 +183,13 @@ static pthread_mutex_t emu_lock   = PTHREAD_RECURSIVE_MUTEX_INITIALIZER;
 static pthread_mutex_t mmap_lock  = PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t taint_lock = PTHREAD_MUTEX_INITIALIZER;
 
-emu_global_t emu_global = {
+static emu_global_t __emu_global = {
     .trace_fd = STDOUT_FILENO, // stdout = 2
     .target   = 0,
     .disabled = 0
 };
+
+static emu_global_t *emu_global = &__emu_global;
 
 /* read/write register by number */
 #define RREGN(reg) emu_read_reg(emu, reg)

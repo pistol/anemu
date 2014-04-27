@@ -21,6 +21,8 @@ extern "C" {  // only need to export C interface if
 #define EMU_MARKER_START asm volatile("bkpt 0x100")
 #define EMU_MARKER_STOP  asm volatile("bkpt 0x200")
 
+#define unlikely(x) __builtin_expect(!!(x), 0)
+
 /* Public API */
 void
 emu_init_handler(int sig,
@@ -38,6 +40,10 @@ void emu_hook_bionic_clone_entry();
 void emu_hook_bionic_atfork_run_child(void *arg);
 void emu_hook_exit_thread(int ret);
 void emu_hook_Zygote_forkAndSpecializeCommon(void *arg);
+
+/* Trampolines */
+int emu_trampoline_read(int fd, void *buf, size_t count);
+int emu_trampoline_write(int fd, void *buf, size_t count);
 
 /* check if current pid / app is targeted for emulation */
 uint32_t emu_target();
