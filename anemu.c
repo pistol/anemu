@@ -1484,6 +1484,7 @@ void emu_init() {
 void emu_start(emu_thread_t *emu) {
     emu_log_info("starting emulation ...\n\n");
 
+    emu->running = 1;
     // wipe register taint
     emu_clear_taintregs(emu);
 
@@ -1512,15 +1513,13 @@ void emu_stop(emu_thread_t *emu) {
            emu.instr_total,
            (delta * 1e6) / emu.instr_total);
     */
-
-    // emu->running = 0;
-    emu->inside_handler = 0;
     if (emu_regs_tainted(emu)) {
         emu_log_warn("WARNING: stopping emu with tainted regs!\n");
     }
     dbg_dump_ucontext(&emu->current);
     emu_log_debug(LOG_BANNER_SIG);
     emu->stop = 0;
+    emu->running = 0;
     emu_log_info("emulation stopped. total instr: %d\n", emu_global->instr_total);
     /* if we are not in standalone, we need to restore execution context to latest values */
     if (!emu_global->standalone) {
@@ -2067,13 +2066,12 @@ emu_handler_segv(int sig, siginfo_t *si, void *ucontext) {
 
     uint32_t addr_fault = uc->uc_mcontext.fault_address;
     if (emu_get_taint_mem(addr_fault) == TAINT_CLEAR) {
-        /* false positive, single-step instruction and re-enable protection */
+        /* false positive, single-step instruction */
         emu_log_info("[-] taint false positive\n");
 
         // wipe register taint
         emu_clear_taintregs(emu);
-        // emu.running = 1;
-        // emu_set_running(1);
+        emu->running = 1;
 
         emu_singlestep(emu);
     } else {
