@@ -1046,6 +1046,38 @@ inline void emu_type_mul(emu_thread_t *emu) {
         WTREG3(Rd, Rn, Rm, Ra);
         break;
     }
+    case I_SMLAL: {
+        int64_t acc = ((int64_t)RREG(RdHi)) << 32 | RREG(RdLo);
+        int64_t res = (uint64_t)RREG(Rn) * (int64_t)RREG(Rm) + acc;
+        WREG(RdLo) = (int32_t)(res & instr_mask(d->instr));
+        WREG(RdHi) = (int32_t)(res >> 32);
+        WTREG4(RdLo, Rn, Rm, RdLo, RdHi);
+        WTREG1(RdHi, RdLo);
+        break;
+    }
+    case I_UMLAL: {
+        uint64_t acc = ((uint64_t)RREG(RdHi)) << 32 | RREG(RdLo);
+        uint64_t res = (uint32_t)RREG(Rn) * (uint32_t)RREG(Rm) + acc;
+        WREG(RdLo) = (uint32_t)(res & instr_mask(d->instr));
+        WREG(RdHi) = (uint32_t)(res >> 32);
+        WTREG4(RdLo, Rn, Rm, RdLo, RdHi);
+        WTREG1(RdHi, RdLo);
+        break;
+    }
+    case I_SMULL: {
+        int64_t res = (int32_t)RREG(Rn) * (int32_t)RREG(Rm);
+        WREG(RdLo) = (int32_t)(res & instr_mask(d->instr));
+        WREG(RdHi) = (int32_t)(res >> 32);
+        WTREG2(RdLo, Rn, Rm);
+        WTREG1(RdHi, RdLo);
+        break;
+    }
+    case I_UMULL: {
+        uint64_t res = (uint32_t)RREG(Rn) * (uint32_t)RREG(Rm);
+        WREG(RdLo) = (uint32_t)(res & instr_mask(d->instr));
+        WREG(RdHi) = (uint32_t)(res >> 32);
+        WTREG2(RdHi, Rn, Rm);
+        WTREG1(RdHi, RdLo);
         break;
     }
         SWITCH_COMMON;
