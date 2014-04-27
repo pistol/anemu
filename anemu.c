@@ -2162,6 +2162,7 @@ emu_dump_taintmaps() {
     emu_log_debug("dumping taintmaps...\n");
     uint32_t idx, offset;
     taintmap_t *tm;
+    uint32_t ranges = 0;
     for (idx = TAINTMAP_LIB; idx < MAX_TAINTMAPS; idx++) {
         tm = &emu_global.taintmaps[idx];
         if (tm->data == NULL) {
@@ -2185,15 +2186,17 @@ emu_dump_taintmaps() {
                 // end range if we were inside a range
                 if (range_inside) {
                     assert(offset > 0);
-                    range_end = offset - 1;
+                    range_end = offset;
+                    ranges++;
 
                     // convert ranges offset to original word addresses
                     range_start = tm->start + range_start * sizeof(uint32_t);
                     range_end   = tm->start + range_end   * sizeof(uint32_t);
-                    emu_log_info("taint range: %s start: %x end: %x length: %d tag: %x\n",
-                                 (idx == TAINTMAP_LIB) ? "lib" : "stack",
-                                 range_start, range_end, range_end - range_start + 1, range_tag
-                                 );
+                    emu_log_debug("taint range %d: %s start: %x end: %x length: %d tag: %x\n",
+                                  range,
+                                  (idx == TAINTMAP_LIB) ? "lib" : "stack",
+                                  range_start, range_end, range_end - range_start, range_tag
+                                  );
 
                     range_tag = TAINT_CLEAR;
                     range_inside = range_start = range_end = 0;
@@ -2201,7 +2204,7 @@ emu_dump_taintmaps() {
             }
         }
     }
-    return 0;
+    return ranges;
 }
 
 inline uint32_t
