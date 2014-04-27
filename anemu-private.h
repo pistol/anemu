@@ -192,11 +192,11 @@ static emu_global_t __emu_global = {
 static emu_global_t *emu_global = &__emu_global;
 
 /* read/write register by number */
-#define RREGN(reg) emu_read_reg(emu, reg)
+#define RREGN(reg)  emu_read_reg(emu, reg)
 #define WREGN(reg) *emu_write_reg(emu, reg)
 /* read/write register by darm specifier (e.g. Rd, Rm, Rn, Rt) */
-#define RREG(reg) emu_read_reg(emu, d->reg)
-#define WREG(reg) *emu_write_reg(emu, d->reg)
+#define RREG(reg)   emu_read_reg(emu, d->reg)
+#define WREG(reg)  *emu_write_reg(emu, d->reg)
 
 /* read/write memory */
 #define WMEM_DIRECT(addr) *(uint32_t *)(addr)
@@ -212,14 +212,15 @@ static emu_global_t *emu_global = &__emu_global;
 #define RMEM32(addr) mem_read32(addr)
 
 /* taint register by darm specifier */
-#define RTREG(reg) emu_get_taint_reg(emu, d->reg)
-#define RTREGN(reg) emu_get_taint_reg(emu, reg)
+#define RTREG(reg)       emu_get_taint_reg(emu, d->reg)
+#define WTREG(reg, tag)  emu_set_taint_reg(emu, d->reg, tag)
+#define RTREGN(reg)      emu_get_taint_reg(emu, reg)
+#define WTREGN(reg, tag) emu_set_taint_reg(emu, reg, tag)
 
-#define WTREG1(dest, a)    emu_set_taint_reg(emu, d->dest, emu_get_taint_reg(emu, d->a))
-#define WTREG2(dest, a, b) emu_set_taint_reg(emu, d->dest, emu_get_taint_reg(emu, d->a) & emu_get_taint_reg(emu, d->b))
-// #define WTREG3(dest, a, b, c) emu_set_taint_reg(d->dest, emu_get_taint_reg(d->a) & emu_get_taint_reg(d->b) & emu_get_taint_reg(d->c))
-#define WTREG(dest, tag)   emu_set_taint_reg(emu, d->dest, tag)
-#define WTREGN(dest, tag)  emu_set_taint_reg(emu, dest, tag)
+#define WTREG1(dest, a)          WTREG(dest, RTREG(a))
+#define WTREG2(dest, a, b)       WTREG(dest, RTREG(a) | RTREG(b))
+#define WTREG3(dest, a, b, c)    WTREG(dest, RTREG(a) | RTREG(b) | RTREG(c))
+#define WTREG4(dest, a, b, c, d) WTREG(dest, RTREG(a) | RTREG(b) | RTREG(c) | RTREG(d))
 
 /* taint memory */
 #ifndef NO_TAINT
