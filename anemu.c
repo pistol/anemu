@@ -1043,7 +1043,9 @@ inline void emu_type_mul(emu_thread_t *emu) {
     }
     case I_MLA: {
         EMU(WREG(Rd) = RREG(Rn) * RREG(Rm) + RREG(Ra));
-        WTREG2(Rd, Rn, Rm);
+        WTREG3(Rd, Rn, Rm, Ra);
+        break;
+    }
         break;
     }
         SWITCH_COMMON;
