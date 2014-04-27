@@ -2216,10 +2216,10 @@ emu_get_taint_mem(uint32_t addr) {
         emu_abort("uninitialized taintmap");
     }
 
-    uint32_t    offset   = (addr - taintmap->start) >> 2;
-    if (offset < taintmap->start && offset > taintmap->end) {
-        emu_abort("out of bounds offset");
+    if (addr < taintmap->start || addr > taintmap->end) {
+        emu_abort("out of bounds addr %x\n", addr);
     }
+    uint32_t    offset   = (addr - taintmap->start) >> 2;
     uint32_t    tag      = taintmap->data[offset]; /* word (32-bit) based tag storage */
     // emu_log_debug("addr: %x offset: %x tag: %x", addr, offset, tag);
     return tag;
@@ -2234,14 +2234,14 @@ void emu_set_taint_mem(uint32_t addr, uint32_t tag) {
     addr = Align(addr, 4);      /* word align */
     taintmap_t *taintmap   = emu_get_taintmap(addr);
 
+    if (addr < taintmap->start || addr > taintmap->end) {
+        emu_abort("out of bounds addr %x\n", addr);
+    }
+
     // sanity check offset is valid
     uint32_t    offset     = (addr - taintmap->start) >> 2;
 
     // emu_log_debug("addr: %x offset: %x tag: %x", addr, offset, tag);
-
-    if (offset < taintmap->start && offset > taintmap->end) {
-        emu_abort("out of bounds offset");
-    }
 
     /* incrementally update tainted page list */
     if (taintmap->data[offset] != TAINT_CLEAR && tag == TAINT_CLEAR) {
