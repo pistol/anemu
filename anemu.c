@@ -2728,6 +2728,69 @@ void emu_hook_Zygote_forkAndSpecializeCommon(void *arg) {
     emu_hook_thread_entry((void *)pthread_self());
 }
 
+uint32_t emu_get_taint_file(int fd) {
+#ifdef DEBUG_FILE_TAINT
+    int skip = 1;
+    char path[1024];
+    char result[1024];
+
+    sprintf(path, "/proc/self/fd/%d", fd);
+    memset(result, 0, sizeof(result));
+    readlink(path, result, sizeof(result)-1);
+    // TODO: ignore /proc reads (strcmp)
+    if (strstr(result, "/proc/") == NULL) { /* does NOT contain special case */
+        skip = 0;
+#endif
+        int xbuf;
+        int xtag = TAINT_CLEAR;
+        int xret;
+#define TAINT_XATTR_NAME "user.taint"
+        xret = fgetxattr(fd, TAINT_XATTR_NAME, &xbuf, sizeof(xbuf));
+
+        if (xret > 0) {
+            xtag = xbuf;
+            emu_log_debug("%s : read(%d) taint tag: 0x%x\n", __func__, fd, xtag);
+        } else {
+#define ENOATTR ENODATA
+            if (errno == ENOATTR) {
+                // emu_log_error("fgetxattr(%s): no taint tag\n", result);
+            } else if (errno == ERANGE) {
+                emu_log_debug("TaintLog: fgetxattr(%d) contents to large\n", fd);
+            } else if (errno == ENOTSUP) {
+                /* XATTRs are not supported. No need to spam the logs */
+            } else if (errno == EPERM) {
+                /* Strange interaction with /dev/log/main. Suppress the log */
+            } else {
+                emu_log_error("TaintLog: fgetxattr(%d): unknown error code %d\n", fd, errno);
+            }
+        }
+#ifdef DEBUG_FILE_TAINT
+    }
+#endif
+
+    return xtag;
+}
+
+int32_t emu_set_taint_file(int fd, uint32_t tag)
+{
+    int32_t ret;
+
+    ret = fsetxattr(fd, TAINT_XATTR_NAME, &tag, sizeof(tag), 0);
+
+    if (ret < 0) {
+        if (errno == ENOSPC || errno == EDQUOT) {
+            emu_log_error("TaintLog: fsetxattr(%d): not enough room to set xattr", fd);
+        } else if (errno == ENOTSUP) {
+            /* XATTRs are not supported. No need to spam the logs */
+        } else if (errno == EPERM) {
+            /* Strange interaction with /dev/log/main. Suppress the log */
+        } else {
+            emu_log_error("TaintLog: fsetxattr(%d): unknown error code %d", fd, errno);
+        }
+    }
+
+    return ret;
+}
 /*
 // thread kill (send signal to a thread)
 int tgkill(int tgid, int tid, int sig) {
