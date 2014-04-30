@@ -227,6 +227,7 @@ inline void emu_type_arith_imm(emu_thread_t *emu) {
 
             SWITCH_COMMON;
         }
+        WTREG1(Rd, Rn);
     } else {
         switch(d->instr) {
         case I_ADD:
