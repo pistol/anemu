@@ -357,15 +357,19 @@ formats for S instructions:
 #define ISB(option) asm volatile ("isb " #option : : : "memory")
 #define DSB(option) asm volatile ("dsb " #option : : : "memory")
 #define DMB(option) asm volatile ("dmb " #option : : : "memory")
-// SVC special case
-// argument: r7 register (sys call number)
-// return:   r0 register
-#define SVC(option) asm volatile("mov r7, %[sys]\n"/* syscall number */ \
-                                 "svc " #option "\n"                    \
-                                 "mov %[ret], r0\n"                     \
-                                 : [ret] "=r" (WREGN(0))  /* output */  \
-                                 : [sys] "r"  (RREGN(7))  /* input */   \
-                                 : "r0", "r7"                           \
+// SVC (syscall)
+// arguments: r0-r6
+// syscall #: r7
+// return:  : r0
+// NOTE: CPSR offset is the same as (PC+1) in emu regs
+#define SVC()       asm volatile("ldr ip, %[emu]\n"     /* base regs */ \
+                                 "ldm ip, {r0-r7}\n"                    \
+                                 "svc 0\n"                              \
+                                 "movs %[ret], r0\n"                    \
+                                 "mrs %[cpsr], cpsr\n"                  \
+                                 : [ret] "=r" (WREGN(0)), [cpsr] "=r" (emu->regs[PC+1])   /* output */ \
+                                 : [emu] "m"  (emu->regs) /* input */      \
+                                 : "cc", "r0", "r1", "r2", "r3", "r4", "r5", "r6", "r7", "ip" /* clobbers */ \
                                  );
 
 #define PLD(regname) asm volatile("pld [%[reg]]" :: [reg] "r" (d->regname));

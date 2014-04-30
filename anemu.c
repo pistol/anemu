@@ -587,11 +587,8 @@ inline void emu_type_branch_syscall(emu_thread_t *emu) {
     }
     case I_SVC: {
         /* "svc #0" is the only "svc" instruction in libc.so */
-        if (d->imm == 0) {
-            SVC(0);
-        } else {
-            emu_abort("unexpected SVC imm %x\n", d->imm);
-        }
+        assert(d->imm == 0);
+        SVC();
         break;
     }
         SWITCH_COMMON;
