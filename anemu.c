@@ -1000,7 +1000,7 @@ inline void emu_type_memory(emu_thread_t *emu) {
                 addr          += 4;
             }
         } else  {
-            WMEM32(addr, RREG(Rt));
+            WREG(Rt) = RMEM32(addr);
         }
         if (BitCheck(d->reglist, PC)) {
             BXWritePC(emu, RMEM32(addr));
