@@ -970,12 +970,10 @@ inline void emu_type_memory(emu_thread_t *emu) {
         } else {
             WMEM32(addr, RREG(Rt));
         }
-        if (d->W == B_SET) {    /* writeback */
-            if (d->Rn == SP) {
-                EMU(WREG(Rn) = RREG(Rn) - 4 * regcount);
-            } else {
-                EMU(WREG(Rn) = RREG(Rn) + 4 * regcount);
-            }
+        if (d->instr == I_PUSH) {
+            EMU(WREG(Rn) = RREG(Rn) - 4 * regcount);
+        } else if (d->W == B_SET) { /* writeback */
+            EMU(WREG(Rn) = RREG(Rn) + 4 * regcount);
         }
         break;
     }
@@ -1005,14 +1003,13 @@ inline void emu_type_memory(emu_thread_t *emu) {
         if (BitCheck(d->reglist, PC)) {
             BXWritePC(emu, RMEM32(addr));
         }
-        if (d->W == B_SET) {    /* writeback */
+        if (d->W == B_SET || d->instr == I_POP) { /* writeback */
             if (BitCheck(d->reglist, d->Rn) == 0) {
                 EMU(WREG(Rn) = RREG(Rn) + 4 * regcount);
             } else {
                 emu_abort("unknown Rn %d %x", d->Rn, RREG(Rn));
             }
         }
-
         break;
     }
         SWITCH_COMMON;
