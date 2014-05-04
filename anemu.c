@@ -635,6 +635,7 @@ inline void emu_type_move_imm(emu_thread_t *emu) {
         } else {
             EMU(WREG(Rd) = d->imm);
         }
+        WTREG(Rd, TAINT_CLEAR);
         break;
     }
     case I_MOVT: {
@@ -649,12 +650,13 @@ inline void emu_type_move_imm(emu_thread_t *emu) {
         break;
     }
     case I_MVN: {
+        assert(d->S != B_SET);
         EMU(WREG(Rd) = ~d->imm);
+        WTREG(Rd, TAINT_CLEAR);
         break;
     }
         SWITCH_COMMON;
     }
-    WTREG(Rd, TAINT_CLEAR);
 }
 
 inline void emu_type_misc(emu_thread_t *emu) {
