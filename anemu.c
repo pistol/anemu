@@ -686,50 +686,27 @@ inline void emu_type_cmp_op(emu_thread_t *emu) {
 
     uint32_t shifted = RSHIFT(RREG(Rm));
     switch(d->instr) {
-    case I_CMP: {
-        ASM_RS_CMP(CMP, Rn, shifted);
-        break;
-    }
-    case I_TEQ: {
-        ASM_RS_CMP(TEQ, Rn, shifted);
-        break;
-    }
-    case I_TST: {
-        ASM_RS_CMP(TST, Rn, shifted);
-        break;
-    }
+        CASE_RS_CMP(CMP, Rn, shifted);
+        CASE_RS_CMP(TEQ, Rn, shifted);
+        CASE_RS_CMP(TST, Rn, shifted);
         SWITCH_COMMON;
     }
 }
 
 inline void emu_type_cmp_imm(emu_thread_t *emu) {
     const darm_t *d = &emu->darm;
-    /* EMU_ENTRY; */
 
     switch(d->instr) {
-    case I_CMP: {
-        ASM_RI_CMP(CMP, Rn, imm);
-        break;
-    }
-    case I_CMN: {
-        ASM_RI_CMP(CMN, Rn, imm);
-        break;
-    }
-    case I_TST: {
-        ASM_RI_CMP(TST, Rn, imm);
-        break;
-    }
-    case I_TEQ: {
-        ASM_RI_CMP(TEQ, Rn, imm);
-        break;
-    }
+        CASE_RI_CMP(CMP, Rn, imm);
+        CASE_RI_CMP(CMN, Rn, imm);
+        CASE_RI_CMP(TST, Rn, imm);
+        CASE_RI_CMP(TEQ, Rn, imm);
         SWITCH_COMMON;
     }
 }
 
 inline void emu_type_opless(emu_thread_t *emu) {
     const darm_t *d = &emu->darm;
-    /* EMU_ENTRY; */
 
     switch(d->instr) {
     case I_NOP: {
@@ -755,10 +732,10 @@ inline void emu_type_dst_src(emu_thread_t *emu) {
         if (d->S == B_SET) {
             emu_log_debug("S flag, we're Screwed!\n");
             switch(d->instr) {
-                CASE_RImm(ASR, Rd, imm);
-                CASE_RImm(LSL, Rd, imm);
-                CASE_RImm(LSR, Rd, imm);
-                CASE_RImm(MOV, Rd, imm);
+                CASE_RRI(ASR, Rd, Rm, shift);
+                CASE_RRI(LSL, Rd, Rm, shift);
+                CASE_RRI(LSR, Rd, Rm, shift);
+                CASE_RR (MOV, Rd, Rm);
             case I_NOP: {
                 /* nothing to do */
                 break;
