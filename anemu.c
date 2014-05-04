@@ -3119,9 +3119,10 @@ void emu_memcpy_safe(void *dst, const void *src, size_t n) {
     if (!emu_running()) {
         uint32_t taint_dst = emu_get_taint_array((uint32_t)dst, n);
         uint32_t taint_src = emu_get_taint_array((uint32_t)src, n);
-        if (taint_dst || taint_src) {
+        uint32_t tag = taint_dst | taint_src;
+        if (tag) {
             (void)emu_memcpy(dst, src, n);
-            emu_set_taint_array((uint32_t)dst, (uint32_t)src, n);
+            emu_set_taint_array((uint32_t)dst, tag, n);
         } else {
             (void)memcpy(dst, src, n);
         }
