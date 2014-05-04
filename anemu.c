@@ -159,31 +159,37 @@ inline uint8_t emu_eval_cond(emu_thread_t *emu) {
     }
 }
 
+// info:
+// Arithmetic instructions which take a shift for the second source
+//
+// encodings:
+// ins{S}<c> <Rd>,<Rn>,<Rm>{,<shift>}
+// ins{S}<c> <Rd>,<Rn>,<Rm>,<type> <Rs>
+//
+// affects:
+// ADC, ADD, AND, BIC, EOR, ORR, RSB, RSC, SBC, SUB
 inline void emu_type_arith_shift(emu_thread_t *emu) {
     const darm_t *d = &emu->darm;
-
+    assert(d->Rd != R_INVLD && d->Rn != R_INVLD && d->Rm != R_INVLD);
     emu_log_debug("Rs: %d shift_type: %d shift: %d\n", d->Rs, d->shift_type, d->shift);
     assert((d->Rs != R_INVLD) || (d->shift_type != S_INVLD) || (d->shift == 0));
 
+    // ins{S}<c> <Rd>,<Rn>,<Rm>,<type> <Rs>
+    // ins{S}<c> <Rd>,<Rn>,<Rm>{,<shift>}
+    uint32_t imsh = RSHIFT(RREG(Rm));
+    emu_log_debug("RSHIFT imm: %x\n", imsh);
     if (d->S == B_SET) {
-        emu_log_debug("S flag, we're Screwed!\n");
-
-        uint32_t imm = RSHIFT(RREG(Rm));
         switch(d->instr) {
-            CASE_RRR(ADD, Rd, Rn, imm);
-            CASE_RRR(ADC, Rd, Rn, imm);
-            CASE_RRR(AND, Rd, Rn, imm);
-            CASE_RRR(ASR, Rd, Rn, imm);
-            CASE_RRR(BIC, Rd, Rn, imm);
-            CASE_RRR(EOR, Rd, Rn, imm);
-            CASE_RRR(LSL, Rd, Rn, imm);
-            CASE_RRR(LSR, Rd, Rn, imm);
-            CASE_RRR(ORR, Rd, Rn, imm);
-            CASE_RRR(ROR, Rd, Rn, imm);
-            CASE_RRR(RSB, Rd, Rn, imm);
-            CASE_RRR(RSC, Rd, Rn, imm);
-            CASE_RRR(SBC, Rd, Rn, imm);
-            CASE_RRR(SUB, Rd, Rn, imm);
+            CASE_RRS(ADC, Rd, Rn, imsh);
+            CASE_RRS(ADD, Rd, Rn, imsh);
+            CASE_RRS(AND, Rd, Rn, imsh);
+            CASE_RRS(BIC, Rd, Rn, imsh);
+            CASE_RRS(EOR, Rd, Rn, imsh);
+            CASE_RRS(ORR, Rd, Rn, imsh);
+            CASE_RRS(RSB, Rd, Rn, imsh);
+            CASE_RRS(RSC, Rd, Rn, imsh);
+            CASE_RRS(SBC, Rd, Rn, imsh);
+            CASE_RRS(SUB, Rd, Rn, imsh);
 
             SWITCH_COMMON;
         }
@@ -194,32 +200,31 @@ inline void emu_type_arith_shift(emu_thread_t *emu) {
             /* shift type 0 is LSL */
             EMU(WREG(Rd) = LSL(RREG(Rn), RREG(Rm)));
         } else {
-            uint32_t sreg = RSHIFT(RREG(Rm));
-            emu_log_debug("sreg = %x\n", sreg);
-            /* FIXME: BIC has no Rs or shift */
-            EMU(WREG(Rd) = OP(RREG(Rn), sreg));
+            EMU(WREG(Rd) = OP(RREG(Rn), imsh));
         }
     }
     WTREG2(Rd, Rn, Rm);
 }
 
+// info:
+// Arithmetic instructions which take an immediate as second source
+//
+// encodings:
+// ins{S}<c> <Rd>,<Rn>,#<const>
+//
+// affects:
+// ADC, ADD, AND, BIC, EOR, ORR, RSB, RSC, SBC, SUB
 inline void emu_type_arith_imm(emu_thread_t *emu) {
     const darm_t *d = &emu->darm;
 
     if (d->S == B_SET) {
-        emu_log_debug("S flag, we're Screwed!\n");
-
         switch(d->instr) {
-            CASE_RRI(ADD, Rd, Rn, imm);
             CASE_RRI(ADC, Rd, Rn, imm);
+            CASE_RRI(ADD, Rd, Rn, imm);
             CASE_RRI(AND, Rd, Rn, imm);
-            CASE_RRI(ASR, Rd, Rn, imm);
             CASE_RRI(BIC, Rd, Rn, imm);
             CASE_RRI(EOR, Rd, Rn, imm);
-            CASE_RRI(LSL, Rd, Rn, imm);
-            CASE_RRI(LSR, Rd, Rn, imm);
             CASE_RRI(ORR, Rd, Rn, imm);
-            CASE_RRI(ROR, Rd, Rn, imm);
             CASE_RRI(RSB, Rd, Rn, imm);
             CASE_RRI(RSC, Rd, Rn, imm);
             CASE_RRI(SBC, Rd, Rn, imm);
@@ -230,16 +235,12 @@ inline void emu_type_arith_imm(emu_thread_t *emu) {
         WTREG1(Rd, Rn);
     } else {
         switch(d->instr) {
-        case I_ADD:
         case I_ADC:
+        case I_ADD:
         case I_AND:
-        case I_ASR:
         case I_BIC:
         case I_EOR:
-        case I_LSL:
-        case I_LSR:
         case I_ORR:
-        case I_ROR:
         case I_RSB:
         case I_RSC:
         case I_SBC:
