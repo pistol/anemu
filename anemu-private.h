@@ -261,80 +261,68 @@ formats for S instructions:
 
 /* IS: imm / shift */
 #define ASM_RI(instr, R1, IS)                                           \
-    uint32_t temp;                                                      \
     asm volatile (#instr "s %[reg1], %[imm]\n"             /* updates flags */ \
                   "mrs %[cpsr], cpsr\n"                    /* save new cpsr */ \
-                  : [reg1] "=r" (WREG(R1)), [cpsr] "=r" (temp)    /* output */ \
+                  : [reg1] "=r" (WREG(R1)), [cpsr] "=r" (CPU(cpsr)) /* output */ \
                   : [imm] "r"   (d->IS)         /* input */             \
                   : "cc"                        /* clobbers condition codes */ \
-                  );                                                    \
-    CPSR_UPDATE(temp);
+                  );
 
 #define ASM_RR(instr, R1, R2)                                           \
-    uint32_t temp;                                                      \
     asm volatile (#instr "s %[reg1], %[reg2]\n"            /* updates flags */ \
                   "mrs %[cpsr], cpsr\n"                    /* save new cpsr */ \
-                  : [reg1] "=r" (WREG(R1)), [cpsr] "=r" (temp)    /* output */ \
+                  : [reg1] "=r" (WREG(R1)), [cpsr] "=r" (CPU(cpsr)) /* output */ \
                   : [reg2] "r"  (RREG(R2))      /* input */             \
                   : "cc"                        /* clobbers condition codes */ \
-                  );                                                    \
-    CPSR_UPDATE(temp);
+                  );
 
 #define ASM_RImm(instr, R1, R2)                                         \
-    uint32_t temp;                                                      \
     asm volatile (#instr "s %[reg1], %[reg2]\n"            /* updates flags */ \
                   "mrs %[cpsr], cpsr\n"                    /* save new cpsr */ \
-                  : [reg1] "=r" (WREG(R1)), [cpsr] "=r" (temp)    /* output */ \
+                  : [reg1] "=r" (WREG(R1)), [cpsr] "=r" (CPU(cpsr) /* output */ \
                   : [reg2] "r"  (R2)            /* input */             \
                   : "cc"                        /* clobbers condition codes */ \
-                  );                                                    \
-    CPSR_UPDATE(temp);
+                  );
 
 #define ASM_RRR(instr, R1, R2, R3)                                      \
-    uint32_t temp;                                                      \
     asm volatile (#instr "s  %[reg1], %[reg2], %[reg3]\n"  /* updates flags */ \
                   "mrs %[cpsr], cpsr\n"                    /* save new cpsr */ \
-                  : [reg1] "=r" (WREG(R1)), [cpsr] "=r" (temp)    /* output */ \
-                  : [reg2] "r"  (RREG(R2)), [reg3] "r" (R3)       /* input */ \
+                  : [reg1] "=r" (WREG(R1)), [cpsr] "=r" (CPU(cpsr)) /* output */ \
+                  : [reg2] "r"  (RREG(R2)), [reg3] "r" (RREG(R3))  /* input */ \
                   : "cc"                        /* clobbers condition codes */ \
-                  );                                                    \
-    CPSR_UPDATE(temp);
+                  );
 
 #define ASM_RRI(instr, R1, R2, IS)                                      \
-    uint32_t temp;                                                      \
-    asm volatile (#instr "s %[reg1], %[reg2], %[imm]\n"    /* updates flags */ \
+    asm volatile ("msr cpsr, %[cpsr]\n"                                 \
+                  #instr "s %[reg1], %[reg2], %[imm]\n"    /* updates flags */ \
                   "mrs %[cpsr], cpsr\n"                    /* save new cpsr */ \
-                  : [reg1] "=r" (WREG(R1)), [cpsr] "=r" (temp)    /* output */ \
+                  : [reg1] "=r" (WREG(R1)), [cpsr] "+r" (CPU(cpsr)) /* output */ \
                   : [reg2] "r"  (RREG(R2)), [imm]  "r"  (d->IS)    /* input */ \
                   : "cc"                        /* clobbers condition codes */ \
-                  );                                                    \
-    CPSR_UPDATE(temp);
+                  );
 
 #define ASM_RI_CMP(instr, R1, IS)                                       \
-    uint32_t temp;                                                      \
-    asm volatile (#instr "s %[reg1], %[imm]\n"             /* updates flags */ \
+    asm volatile (#instr " %[reg1], %[imm]\n"              /* updates flags */ \
                   "mrs %[cpsr], cpsr\n"                    /* save new cpsr */ \
-                  : [cpsr] "=r" (temp)                     /* output */ \
+                  : [cpsr] "=r" (CPU(cpsr))                /* output */ \
                   : [reg1] "r"  (RREG(R1)), [imm] "r"  (d->IS)     /* input */ \
                   : "cc"                        /* clobbers condition codes */ \
                   );                                                    \
-    CPSR_UPDATE(temp);
 
 #define ASM_RS_CMP(instr, R1, S)                                        \
-    uint32_t temp;                                                      \
-    asm volatile (#instr "s %[reg1], %[imm]\n"             /* updates flags */ \
+    asm volatile (#instr " %[reg1], %[imm]\n"              /* updates flags */ \
                   "mrs %[cpsr], cpsr\n"                    /* save new cpsr */ \
-                  : [cpsr] "=r" (temp)                     /* output */ \
-                  : [reg1] "r"  (RREG(R1)), [imm] "r"  (S) /* input */ \
+                  : [cpsr] "=r" (CPU(cpsr))                /* output */ \
+                  : [reg1] "r"  (RREG(R1)), [imm] "r"  (S) /* input */  \
                   : "cc"                        /* clobbers condition codes */ \
-                  );                                                    \
-    CPSR_UPDATE(temp);
+                  );
 
 /* switch case helper for ASM */
 #define CASE_RR( instr, R1, R2)      case I_##instr: { ASM_RR (instr, R1, R2);      break; }
 #define CASE_RRI(instr, R1, R2, imm) case I_##instr: { ASM_RRI(instr, R1, R2, imm); break; }
 #define CASE_RRR(instr, R1, R2, R3)  case I_##instr: { ASM_RRR(instr, R1, R2, R3);  break; }
-#define CASE_RImm(instr, R1, R2)     case I_##instr: { ASM_RImm(instr, R1, R2);     break; }
+#define CASE_RI_CMP(instr, R1, S)    case I_##instr: { ASM_RI_CMP(instr, R1, S);    break; }
+#define CASE_RS_CMP(instr, R1, S)    case I_##instr: { ASM_RS_CMP(instr, R1, S);    break; }
 
 #define BitCount(x)           __builtin_popcount(x)
 #define TrailingZerosCount(x) __builtin_ctz(x)
