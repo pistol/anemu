@@ -2455,13 +2455,12 @@ instr_mask(darm_instr_t instr) {
     case I_UXTAB:
     case I_SXTB:
     case I_STRB: { return 0xff; }
-    case I_MOVT:
     case I_LDRSH:
     case I_LDRH:
     case I_UXTH:
     case I_SXTH:
-    case I_STRH: { return 0xffff; }
-    case I_MOVW: { return 0xffff0000; }
+    case I_STRH: { return 0x0000ffff; }
+    case I_MOVT: { return 0xffff0000; }
     default:     { return 0xffffffff; }
     }
 }
