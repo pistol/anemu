@@ -639,12 +639,13 @@ inline void emu_type_move_imm(emu_thread_t *emu) {
     }
     case I_MOVT: {
         assert(d->S != B_SET);
-        EMU(WREG(Rd) = (RREG(Rd) & instr_mask(d->instr)) | (d->imm << 16));
+        EMU(WREG(Rd) = (RREG(Rd) & ~instr_mask(d->instr)) | (d->imm << 16));
         break;
     }
     case I_MOVW: {
         assert(d->S != B_SET);
-        EMU(WREG(Rd) = (RREG(Rd) & instr_mask(d->instr)) | (d->imm));
+        EMU(WREG(Rd) = d->imm);
+        WTREG(Rd, TAINT_CLEAR);
         break;
     }
     case I_MVN: {
