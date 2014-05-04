@@ -3001,75 +3001,109 @@ uint32_t mem_write32(uint32_t addr, uint32_t val) {
 }
 #else
 /* READ */
+inline
 uint8_t mem_read8(uint32_t addr) {
-    assert(emu_global->mem_fd);
     uint8_t val = 0;
-    static const int8_t size = 1;
-    int8_t b = pread(emu_global->mem_fd, &val, size, addr);
-    if (b != size) {
-        emu_abort("pread");
-    }
+    int32_t fd = emu_global->mem_fd;
+    assert(fd);
+    ssize_t bytes;
+#ifdef EMU_MEM_PREAD
+    bytes = pread(fd, &val, sizeof(val), addr);
+#else
+    off_t off;
+    off = lseek(fd, addr, SEEK_SET);
+    assert(off == (off_t)addr);
+    bytes = read(fd, &val, sizeof(val));
+#endif
+    assert(bytes == sizeof(val));
     return val;
 }
 
+inline
 uint16_t mem_read16(uint32_t addr) {
-    assert(emu_global->mem_fd);
     uint16_t val = 0;
-    static const int8_t size = 2;
-    int8_t b = pread(emu_global->mem_fd, &val, size, addr);
-    if (b != size) {
-        emu_abort("pread");
-    }
+    int32_t fd = emu_global->mem_fd;
+    assert(fd);
+    ssize_t bytes;
+#ifdef EMU_MEM_PREAD
+    bytes = pread(fd, &val, sizeof(val), addr);
+#else
+    off_t off;
+    off = lseek(fd, addr, SEEK_SET);
+    assert(off == (off_t)addr);
+    bytes = read(fd, &val, sizeof(val));
+#endif
+    assert(bytes == sizeof(val));
     return val;
 }
 
+inline
 uint32_t mem_read32(uint32_t addr) {
-    assert(emu_global->mem_fd);
     uint32_t val = 0;
-    static const int8_t size = 4;
-    int8_t b = pread(emu_global->mem_fd, &val, size, addr);
-    if (b != size) {
-        emu_abort("pread");
-    }
+    int32_t fd = emu_global->mem_fd;
+    assert(fd);
+    ssize_t bytes;
+#ifdef EMU_MEM_PREAD
+    bytes = pread(fd, &val, sizeof(val), addr);
+#else
+    off_t off;
+    off = lseek(fd, addr, SEEK_SET);
+    assert(off == (off_t)addr);
+    bytes = read(fd, &val, sizeof(val));
+#endif
+    assert(bytes == sizeof(val));
     return val;
 }
 
 /* WRITE */
+inline
 uint8_t mem_write8(uint32_t addr, uint8_t val) {
-    assert(emu_global->mem_fd);
-    int8_t b;
-    do {
-        b = pwrite(emu_global->mem_fd, &val, sizeof(val), addr);
-        emu_log_debug("pwrite8 ret: %d\n", b);
-        if (b != sizeof(val)) {
-            switch(b) {
-            case EAGAIN: emu_log_debug("EAGAIN\n");
-            case EBADF: emu_log_debug("EBADF\n");
-            case EIO: emu_log_debug("EIO\n");
-            case EINTR: emu_log_debug("EINTR\n");
-            default: emu_log_debug("unknown errno: %d", errno);
-        }
-        }
-    } while(errno == EIO);
-
+    int32_t fd = emu_global->mem_fd;
+    assert(fd);
+    ssize_t bytes;
+#ifdef EMU_MEM_PREAD
+    bytes = pwrite(fd, &val, sizeof(val), addr);
+#else
+    off_t off;
+    off = lseek(fd, addr, SEEK_SET);
+    assert(off == (off_t)addr);
+    bytes = write(fd, &val, sizeof(val));
+#endif
+    assert(bytes == sizeof(val));
     return val;
 }
 
+inline
 uint16_t mem_write16(uint32_t addr, uint16_t val) {
-    assert(emu_global->mem_fd);
-    int8_t b = pwrite(emu_global->mem_fd, &val, sizeof(val), addr);
-    if (b != sizeof(val)) {
-        emu_abort("pwrite");
-    }
+    int32_t fd = emu_global->mem_fd;
+    assert(fd);
+    ssize_t bytes;
+#ifdef EMU_MEM_PREAD
+    bytes = pwrite(fd, &val, sizeof(val), addr);
+#else
+    off_t off;
+    off = lseek(fd, addr, SEEK_SET);
+    assert(off == (off_t)addr);
+    bytes = write(fd, &val, sizeof(val));
+#endif
+    assert(bytes == sizeof(val));
     return val;
 }
 
+inline
 uint32_t mem_write32(uint32_t addr, uint32_t val) {
-    assert(emu_global->mem_fd);
-    int8_t b = pwrite(emu_global->mem_fd, &val, sizeof(val), addr);
-    if (b != sizeof(val)) {
-        emu_abort("pwrite");
-    }
+    int32_t fd = emu_global->mem_fd;
+    assert(fd);
+    ssize_t bytes;
+#ifdef EMU_MEM_PREAD
+    bytes = pwrite(fd, &val, sizeof(val), addr);
+#else
+    off_t off;
+    off = lseek(fd, addr, SEEK_SET);
+    assert(off == (off_t)addr);
+    bytes = write(fd, &val, sizeof(val));
+#endif
+    assert(bytes == sizeof(val));
     return val;
 }
 #endif  /* NO_TAINT */
