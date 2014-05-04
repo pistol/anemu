@@ -2226,10 +2226,6 @@ emu_get_taint_mem(uint32_t addr) {
     addr = Align(addr, 4);      /* word align */
     taintmap_t *taintmap = emu_get_taintmap(addr);
 
-    if (taintmap->data == NULL || taintmap->start == 0) {
-        emu_abort("uninitialized taintmap");
-    }
-
     if (addr < taintmap->start || addr > taintmap->end) {
         emu_abort("out of bounds addr %x\n", addr);
     }
