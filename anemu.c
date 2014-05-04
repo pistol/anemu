@@ -276,6 +276,12 @@ inline void emu_type_pusr(emu_thread_t *emu) {
         WTREG1(Rd, Rm);
         break;
     }
+    case I_UXTAB: {
+        uint32_t rotated = ROR(RREG(Rm), d->rotate);
+        WREG(Rd) = RREG(Rn) + (rotated & instr_mask(d->instr));
+        WTREG2(Rd, Rn, Rm);
+        break;
+    }
     case I_UXTH: {
         uint32_t rotated = ROR(RREG(Rm), d->rotate);
         WREG(Rd) = rotated & instr_mask(d->instr);
@@ -2446,6 +2452,7 @@ instr_mask(darm_instr_t instr) {
     case I_LDRSB:
     case I_LDRB:
     case I_UXTB:
+    case I_UXTAB:
     case I_SXTB:
     case I_STRB: { return 0xff; }
     case I_MOVT:
