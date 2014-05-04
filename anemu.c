@@ -2969,6 +2969,37 @@ void emu_init_proc_mem() {
     }
 }
 
+#ifdef NO_TAINT
+inline
+uint8_t mem_read8(uint32_t addr) {
+    return *(uint8_t*)addr;
+}
+
+inline
+uint16_t mem_read16(uint32_t addr) {
+    return *(uint16_t*)addr;
+}
+
+inline
+uint32_t mem_read32(uint32_t addr) {
+    return *(uint32_t*)addr;
+}
+
+inline
+uint8_t mem_write8(uint32_t addr, uint8_t val) {
+    return *(uint8_t*)addr = val;
+}
+
+inline
+uint16_t mem_write16(uint32_t addr, uint16_t val) {
+    return *(uint16_t*)addr = val;
+}
+
+inline
+uint32_t mem_write32(uint32_t addr, uint32_t val) {
+    return *(uint32_t*)addr = val;
+}
+#else
 /* READ */
 uint8_t mem_read8(uint32_t addr) {
     assert(emu_global->mem_fd);
@@ -3041,6 +3072,7 @@ uint32_t mem_write32(uint32_t addr, uint32_t val) {
     }
     return val;
 }
+#endif  /* NO_TAINT */
 
 void *emu_alloc(size_t size) {
     assert(size > 0);
