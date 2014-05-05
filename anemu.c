@@ -1029,21 +1029,23 @@ inline void emu_type_bits(emu_thread_t *emu) {
     case I_BFI: {
         uint32_t lsb = d->lsb;
         uint32_t msb = lsb + d->width - 1;
-        if (msb >= lsb) {
-            /* R[d]<msb:lsb> = R[n]<(msb-lsb):0>; */
-            /* 1. clear out        R[d]<msb:lsb>  = 0 */
-            uint32_t val = RREG(Rd);
-            val &= ~((1<<(msb + 1)) - (1<<lsb));
-            emu_log_debug("Rd clear out   : %x\n", val);
-            /* 2. extract Rn bits  bits = R[n]<(msb-lsb):0> */
-            uint32_t bits = RREG(Rn);
-            bits &= ((1<<(d->width)) - 1); /* width = msb - lsb + 1 */
-            emu_log_debug("Rn extract bits: %x\n", bits);
-            /* 3. set Rd bits      R[d]<msb:lsb> |= bits */
-            val |= bits << lsb;
-            emu_log_debug("Rd set bits    : %x\n", val);
-            WREG(Rd) = val;
+        assert(msb >= lsb);
         }
+        /* R[d]<msb:lsb> = R[n]<(msb-lsb):0>; */
+        /* 1. clear out        R[d]<msb:lsb>  = 0 */
+        uint32_t val = RREG(Rd);
+        val &= ~((1<<(msb + 1)) - (1<<lsb));
+        emu_log_debug("Rd clear out   : %x\n", val);
+        /* 2. extract Rn bits  bits = R[n]<(msb-lsb):0> */
+        uint32_t bits = RREG(Rn);
+        bits &= ((1<<(d->width)) - 1); /* width = msb - lsb + 1 */
+        emu_log_debug("Rn extract bits: %x\n", bits);
+        /* 3. set Rd bits      R[d]<msb:lsb> |= bits */
+        val |= bits << lsb;
+        emu_log_debug("Rd set bits    : %x\n", val);
+        WREG(Rd) = val;
+        /* TODO: update taint */
+        WTREG1(Rd, Rn);
         break;
     }
     case I_UBFX: {
