@@ -332,7 +332,8 @@ formats for S instructions:
 #define TrailingZerosCount(x) __builtin_ctz(x)
 #define LeadingZerosCount(x)  __builtin_clz(x)
 #define BitCheck(x, pos)      ((x) & (1 << (pos)))
-#define BitExtract(x, i, j)   ((((1 << j) - (1 << i) ) & x) >> i )
+// lsb, msb
+#define BitExtract(x, i, j)   ((((1 << (j+1)) - (1 << i) ) & x) >> i )
 #define SignExtend(x) ((int32_t)((int16_t)x))
 
 // NOTE: 4-byte aligned 0x1006 will produce 0x1004 and not 0x1008
