@@ -1650,8 +1650,13 @@ inline uint8_t emu_disasm(emu_thread_t *emu, darm_t *d, uint32_t pc) {
     uint32_t addr  = pc | emu_thumb_mode(emu); /* LSB set for Thumb / Thumb2 */
     uint8_t  ret   = darm_disasm(d, w, w2, addr);
     emu_log_debug("emu_disasm : w: %x w2: %x addr: %x T: %d ret: %d\n", w, w2, addr, emu_thumb_mode(emu), ret);
-    if (ret) {
+    emu->disasm_bytes = ret * 2 /* bytes */;
+    if (!ret) {
+        emu_abort("darm : %x %x %x <invalid instruction>\n", pc, w, w2);
+    }
+
 #ifdef TRACE
+    if (emu_debug()) {
         darm_str_t str;
         darm_str2(d, &str, 1); /* lowercase str */
         map_t *m = emu_map_lookup(pc);
@@ -1669,12 +1674,15 @@ inline uint8_t emu_disasm(emu_thread_t *emu, darm_t *d, uint32_t pc) {
             symbol_name = demangled ? demangled : info.dli_sname;
             function_offset = (uintptr_t)info.dli_saddr - (uintptr_t)info.dli_fbase;
 
+            uint32_t vm_start = m ? m->vm_start : 0;
+            char    *vm_name  = m ? m->name : "unknown";
+
             emu_log_trace("TRACE %6d %8x %08x %-32s %-32s %8x %s\n",
                           emu->instr_count + 1, /* we update the count in emu_advance_pc() */
-                          pc - m->vm_start,
+                          pc - vm_start,
                           d->w,
                           str.total,
-                          m->name,
+                          vm_name,
                           function_offset,
                           symbol_name
                           );
@@ -1700,17 +1708,14 @@ inline uint8_t emu_disasm(emu_thread_t *emu, darm_t *d, uint32_t pc) {
         } else {
             emu_abort("dladdr failed");
         }
-#endif
-        emu->disasm_bytes = ret * 2 /* bytes */;
         emu_log_debug("bytes: %d\n", emu->disasm_bytes);
 
 #ifndef PROFILE
         darm_dump(d, STDOUT_FILENO); /* dump internal darm_t state */
         // darm_dump(d, emu.trace_fd);  /* dump internal darm_t state */
 #endif
-    } else {
-        emu_abort("darm : %x %x %x <invalid instruction>\n", pc, w, w2);
     }
+#endif  /* TRACE */
     return emu->disasm_bytes;
 }
 
