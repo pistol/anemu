@@ -799,8 +799,8 @@ inline void emu_type_dst_src(emu_thread_t *emu) {
 }
 
 inline void emu_type_memory(emu_thread_t *emu) {
-    /* EMU_ENTRY; */
     const darm_t *d = &emu->darm;
+    assert(d->S != B_SET);
 
     switch(d->instr) {
     case I_LDR:
@@ -889,17 +889,25 @@ inline void emu_type_memory(emu_thread_t *emu) {
     case I_STRB:
     case I_STRH:
     case I_STRD: {
-        uint32_t offset_addr = d->U == B_SET ?
-            (RREG(Rn) + d->imm) :
-            (RREG(Rn) - d->imm);
+        if (d->imm && d->Rm != R_INVLD) {
+            emu_abort("expected either imm or Rm but not both!\n");
+        }
+        uint32_t offset;
+        if (d->imm) {
+            offset = d->imm;
+        } else if (d->Rm != R_INVLD) {
+            offset = RSHIFT(RREG(Rm));
+        } else {
+            offset = 0;
+        }
 
-        uint32_t addr = d->P == B_SET ?
+        uint32_t offset_addr = d->U == B_SET ?
+            (RREG(Rn) + offset) :
+            (RREG(Rn) - offset);
+
+        uint32_t addr = d->P == B_SET ? /* pre-index */
             offset_addr :
             RREG(Rn);
-
-        if ((d->W == B_SET) || (d->P == B_UNSET)) { /* write-back */
-            EMU(WREG(Rn) = offset_addr);
-        }
 
 #ifndef PROFILE
         map_t *m = emu_map_lookup(addr);
@@ -930,6 +938,10 @@ inline void emu_type_memory(emu_thread_t *emu) {
             WTMEM(addr + 4, RTREGN(d->Rt + 1));
             break;
         default: emu_abort("unexpected op");
+        }
+
+        if ((d->W == B_SET) || (d->P == B_UNSET)) { /* write-back */
+            EMU(WREG(Rn) = offset_addr);
         }
 
         emu_log_debug("RMEM after:   %x\n", RMEM32(addr));
