@@ -717,20 +717,22 @@ inline void emu_type_opless(emu_thread_t *emu) {
     }
 }
 
+// ins{S}<c> <Rd>,<Rm>
+// ins{S}<c> <Rd>,<Rm>,#<imm>
+// ins{S}<c> <Rd>,<Rn>,<Rm>
+// affects:
+// ASR, LDREXD, LSL, LSR, MOV, ROR, RRX, STREXD
 inline void emu_type_dst_src(emu_thread_t *emu) {
     const darm_t *d = &emu->darm;
-    /* EMU_ENTRY; */
-
-    if (d->instr != I_MOV && d->Rm == R_INVLD) assert(d->shift != 0);
-    assert(d->Rm != R_INVLD);
+    assert(d->Rd != R_INVLD && d->Rm != R_INVLD);
 
     // ins{S}<c> <Rd>,<Rm>
     // ins{S}<c> <Rd>,<Rm>,#<imm>
-    if (d->Rn == R_INVLD && d->Rm != R_INVLD) {
-        uint32_t imm = RSHIFT(RREG(Rm));
-        // RdImm
+    if (d->Rn == R_INVLD) {
         if (d->S == B_SET) {
             emu_log_debug("S flag, we're Screwed!\n");
+            assert(d->imm == 0);
+            if (d->instr != I_MOV) assert(d->shift != 0);
             switch(d->instr) {
                 CASE_RRI(ASR, Rd, Rm, shift);
                 CASE_RRI(LSL, Rd, Rm, shift);
@@ -748,7 +750,9 @@ inline void emu_type_dst_src(emu_thread_t *emu) {
             case I_LSL:
             case I_LSR:
             case I_MOV: {
-                WREG(Rd) = imm;
+                WREG(Rd) = RSHIFT(RREG(Rm));
+                break;
+            }
                 break;
             }
             case I_NOP: {
@@ -762,14 +766,16 @@ inline void emu_type_dst_src(emu_thread_t *emu) {
         WTREG1(Rd, Rm);
     }
     // ins{S}<c> <Rd>,<Rn>,<Rm>
-    else if (d->Rn != R_INVLD && d->Rm != R_INVLD) {
+    else {
         //RdRnRm
+        assert(d->imm == 0);
+        assert(d->shift == 0);
         if (d->S == B_SET) {
             emu_log_debug("S flag, we're Screwed!\n");
             switch(d->instr) {
-                CASE_RRR(ASR, Rd, Rn, d->Rm);
-                CASE_RRR(LSL, Rd, Rn, d->Rm);
-                CASE_RRR(LSR, Rd, Rn, d->Rm);
+                CASE_RRR(ASR, Rd, Rn, Rm);
+                CASE_RRR(LSL, Rd, Rn, Rm);
+                CASE_RRR(LSR, Rd, Rn, Rm);
             case I_NOP: {
                 /* nothing to do */
                 break;
@@ -787,8 +793,6 @@ inline void emu_type_dst_src(emu_thread_t *emu) {
         }
         /* FIXME: what about NOP? */
         WTREG2(Rd, Rn, Rm);
-    } else {
-        emu_abort("unexpected format");
     }
 }
 
