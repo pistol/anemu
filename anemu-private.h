@@ -296,6 +296,15 @@ formats for S instructions:
                   : "cc"                        /* clobbers condition codes */ \
                   );
 
+#define ASM_RRS(instr, R1, R2, IS)                                      \
+    asm volatile ("msr cpsr, %[cpsr]\n"                                 \
+                  #instr "s %[reg1], %[reg2], %[imm]\n"    /* updates flags */ \
+                  "mrs %[cpsr], cpsr\n"                    /* save new cpsr */ \
+                  : [reg1] "=r" (WREG(R1)), [cpsr] "+r" (CPU(cpsr)) /* output */ \
+                  : [reg2] "r"  (RREG(R2)), [imm]  "r"  (IS)       /* input */ \
+                  : "cc"                        /* clobbers condition codes */ \
+                  );
+
 #define ASM_RRI(instr, R1, R2, IS)                                      \
     asm volatile ("msr cpsr, %[cpsr]\n"                                 \
                   #instr "s %[reg1], %[reg2], %[imm]\n"    /* updates flags */ \
@@ -325,6 +334,7 @@ formats for S instructions:
 #define CASE_RR( instr, R1, R2)      case I_##instr: { ASM_RR (instr, R1, R2);      break; }
 #define CASE_RRI(instr, R1, R2, imm) case I_##instr: { ASM_RRI(instr, R1, R2, imm); break; }
 #define CASE_RRR(instr, R1, R2, R3)  case I_##instr: { ASM_RRR(instr, R1, R2, R3);  break; }
+#define CASE_RRS(instr, R1, R2, S)   case I_##instr: { ASM_RRS(instr, R1, R2, S);   break; }
 #define CASE_RI_CMP(instr, R1, S)    case I_##instr: { ASM_RI_CMP(instr, R1, S);    break; }
 #define CASE_RS_CMP(instr, R1, S)    case I_##instr: { ASM_RS_CMP(instr, R1, S);    break; }
 
