@@ -753,6 +753,8 @@ inline void emu_type_dst_src(emu_thread_t *emu) {
                 WREG(Rd) = RSHIFT(RREG(Rm));
                 break;
             }
+            case I_RRX: {
+                WREG(Rd) = LSR(RREG(Rm), 1) | (CPSR_C << 31);
                 break;
             }
             case I_NOP: {
