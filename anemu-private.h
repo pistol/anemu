@@ -148,6 +148,10 @@ typedef struct _emu_global_t {
     int32_t    trace_fd;          /* trace file descriptor */
     int32_t    mem_fd;            /* memory access via /proc/self/mem */
     int32_t    thread_count;      /* number of threads configured for emu (sigaltstacks) */
+    int32_t    debug;             /* dynamic debug statements */
+    int32_t    stop_total;
+    int32_t    stop_handler;
+    int32_t    debug_offset;
 } emu_global_t;
 
 /* Per-Thread emu state */
@@ -565,6 +569,7 @@ void emu_set_taint_reg(emu_thread_t *emu, darm_reg_t reg, uint32_t tag);
 uint32_t emu_get_taint_reg(emu_thread_t *emu, darm_reg_t reg);
 void emu_clear_taintregs(emu_thread_t *emu);
 void emu_init_taintmaps(emu_global_t *emu_global);
+void emu_init_properties();
 emu_thread_t* emu_tls_get();
 void emu_tls_set(emu_thread_t *emu);
 

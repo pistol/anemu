@@ -1226,24 +1226,17 @@ inline bool emu_advance_pc(emu_thread_t *emu) {
     emu_log_debug(LOG_BANNER_INSTR);
 #endif
 
-    /* number of total instructions to emulate */
-    /* read stop value via emu.stop property */
-    char prop[PROPERTY_VALUE_MAX]; // max is 92
-    property_get("debug.emu.stop_total", prop, "0");
-    int32_t stop_total = (int32_t)atoi(prop);
-    emu_log_debug("stop_total value: %d\n", stop_total);
+    if (emu_global->stop_total && emu_global->instr_total >= emu_global->stop_total - emu_global->debug_offset) {
+        emu_global->debug = 1;
+    }
 
-    property_get("debug.emu.stop_handler", prop, "0");
-    int32_t stop_handler = (int32_t)atoi(prop);
-    emu_log_debug("stop_handler value: %d\n", stop_handler);
-
-    if (stop_total && emu_global->instr_total >= stop_total) {
+    if (emu_global->stop_total && emu_global->instr_total >= emu_global->stop_total) {
         emu_log_info("SPECIAL: permanently turning off emu after %d instructions.\n", emu_global->instr_total);
         emu_log_debug("disabling emu\n");
         emu_unprotect_mem();
         emu->stop = 1;
         emu_global->disabled = 1;
-    } else if (stop_handler && emu->instr_count >= stop_handler) { /* NOTE: we are using a one time count */
+    } else if (emu_global->stop_handler && emu->instr_count >= emu_global->stop_handler) { /* NOTE: we are using a one time count */
         emu_log_info("SPECIAL: stopping current trap  emu after %d instructions.\n", emu->instr_count);
         emu->stop = 1;
     } else if (emu->stop) {
@@ -1448,6 +1441,8 @@ static
 void emu_init() {
     if (emu_initialized()) return;
 
+    emu_global->debug = 1;
+
     LOGD("initializing emu state ...\n");
 
 #ifdef TRACE
@@ -1473,6 +1468,9 @@ void emu_init() {
 
     /* memory access via /proc/self/mem */
     emu_init_proc_mem();
+
+    emu_log_info("[+] init properties\n");
+    emu_init_properties();
 
     // __atomic_swap(1, &emu.initialized);
     emu_global->initialized = 1;
@@ -2962,6 +2960,26 @@ void emu_init_proc_mem() {
     if (!emu_global->mem_fd) {
         emu_abort("Can't open /proc/self/mem\n");
     }
+}
+
+void emu_init_properties() {
+    /* number of total instructions to emulate */
+    char prop[PROPERTY_VALUE_MAX]; // max is 92
+    property_get("debug.emu.stop_total", prop, "0");
+    emu_global->stop_total = (int32_t)atoi(prop);
+    emu_log_debug("stop_total value: %d\n", emu_global->stop_total);
+
+    property_get("debug.emu.stop_handler", prop, "0");
+    emu_global->stop_handler = (int32_t)atoi(prop);
+    emu_log_debug("stop_handler value: %d\n", emu_global->stop_handler);
+
+    property_get("debug.emu.debug_offset", prop, "100");
+    emu_global->debug_offset = (int32_t)atoi(prop);
+    emu_log_debug("debug_offset value: %d\n", emu_global->debug_offset);
+
+    property_get("debug.emu.debug", prop, "0");
+    emu_global->debug = (int32_t)atoi(prop);
+    emu_log_debug("debug value: %d\n", emu_global->debug);
 }
 
 #ifdef NO_TAINT
