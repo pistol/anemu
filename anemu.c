@@ -2080,39 +2080,86 @@ mprotectPage(uint32_t addr, uint32_t flags) {
 }
 
 void
+/*
+ * Memory Layout
+ *
+ * 10000000 - 18000000 : Taint Tags (Stack)
+ * 20000000 - 40000000 : Text + Data + BSS
+ * 40000000 - 70000000 : Memory Mapping Region
+ * 70000000 - be800000 : Taint Tags (Everything except Stack)
+ * be800000 - bf000000 : Stack (RLIMIT_STACK = 8192 KB)
+ * ffff0000 - ffff1000 : Vectors
+ *
+ */
 emu_init_taintmaps(emu_global_t *emu_global) {
-    uint32_t start, end, bytes;
+    uint32_t start, end;
+    size_t bytes, taintpages;
+    void *addr, *data;
+    taintpage_t *pages;
 
     /* lib taintmap */
+    bytes = 0x4E800000;
+    addr = (void *)0x70000000;
+    data = mmap(addr, bytes,
+                PROT_READ | PROT_WRITE,
+                MAP_FIXED | MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE,
+                -1, 0);
+    if (data == MAP_FAILED) {
+        emu_abort("mmap");
+    }
+
+    // TODO: merge emu_alloc into previous mmap call
+    taintpages = ((bytes >> PAGE_SHIFT) + 1) * sizeof(taintpage_t);
+    pages = emu_alloc(taintpages);
 
     start = emu_global->maps[0].vm_start;
-    end   = emu_global->maps[emu_global->nr_maps - 3].vm_end;
-    bytes = end - start;
-
-    emu_log_debug("mmap lib   range: %x - %x length: %x\n", start, end, bytes);
+    end   = start + bytes;
+    assert(end >= emu_global->maps[emu_global->nr_maps - 3].vm_end);
 
     taintmap_t *tm;
-
     tm = &emu_global->taintmaps[TAINTMAP_LIB];
-    tm->data  = emu_alloc(bytes);
+    tm->data  = data;
     tm->start = start;
     tm->end   = end;
     tm->bytes = bytes;
 
     /* stack taintmap */
 
-    start = emu_global->maps[emu_global->nr_maps - 2].vm_start;
+    // check max stack size
+    struct rlimit lim;
+    int ret = getrlimit(RLIMIT_STACK, &lim);
+    if (ret != 0) {
+        emu_abort("getrlimit\n");
+    }
+    emu_log_debug("RLIMIT_STACK: %x / %d\n", (int)lim.rlim_cur, (int)lim.rlim_max);
+    emu_global->stack_max = (int)lim.rlim_cur;
+
+    bytes = emu_global->stack_max;
+    addr = (void *)0x10000000;
+    data  = mmap(addr, bytes,
+                PROT_READ | PROT_WRITE,
+                MAP_FIXED | MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE,
+                -1, 0);
+    if (data == MAP_FAILED) {
+        emu_abort("mmap");
+    }
+
+    taintpages = ((bytes >> PAGE_SHIFT) + 1) * sizeof(taintpage_t);
+    pages = emu_alloc(taintpages);
+
     end   = emu_global->maps[emu_global->nr_maps - 2].vm_end;
-    bytes = end - start;
+    start = end - bytes;
+    assert(start <= emu_global->maps[emu_global->nr_maps - 2].vm_start);
+    emu_global->stack_base = end - emu_global->stack_max;
 
     emu_log_debug("mmap stack range: %x - %x length: %x\n", start, end, bytes);
 
     tm = &emu_global->taintmaps[TAINTMAP_STACK];
-    tm->data  = emu_alloc(bytes);
+    tm->data  = data;
     tm->start = start;
     tm->end   = end;
     tm->bytes = bytes;
-
+    tm->pages = pages;
     emu_log_debug("taintmaps initialized\n");
 }
 
