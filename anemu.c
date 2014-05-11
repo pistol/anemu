@@ -3020,111 +3020,86 @@ uint32_t mem_write32(uint32_t addr, uint32_t val) {
     return *(uint32_t*)addr = val;
 }
 #else
+
+#define MEM_OP(type) {                                 \
+    int32_t fd = emu_global->mem_fd;                   \
+    assert(fd);                                        \
+    ssize_t bytes;                                     \
+    if (!stack_addr(addr)) {                           \
+        bytes = p##type(fd, &val, sizeof(val), addr);  \
+    } else {                                           \
+        off_t off;                                     \
+        off = lseek(fd, addr, SEEK_SET);               \
+        assert(off == (off_t)addr);                    \
+        bytes = __##type(fd, &val, sizeof(val));       \
+    }                                                  \
+    assert(bytes == sizeof(val));                      \
+    return val;                                        \
+}
+
 /* READ */
 inline
 uint8_t mem_read8(uint32_t addr) {
+#ifndef NO_TAINT
     uint8_t val = 0;
-    int32_t fd = emu_global->mem_fd;
-    assert(fd);
-    ssize_t bytes;
-#ifdef EMU_MEM_PREAD
-    bytes = pread(fd, &val, sizeof(val), addr);
-#else
-    off_t off;
-    off = lseek(fd, addr, SEEK_SET);
-    assert(off == (off_t)addr);
-    bytes = read(fd, &val, sizeof(val));
+    if (emu_get_taintpage(addr)) {
+        MEM_OP(read);
+    }
 #endif
-    assert(bytes == sizeof(val));
-    return val;
+    return *(uint8_t*)addr;
 }
 
 inline
 uint16_t mem_read16(uint32_t addr) {
+#ifndef NO_TAINT
     uint16_t val = 0;
-    int32_t fd = emu_global->mem_fd;
-    assert(fd);
-    ssize_t bytes;
-#ifdef EMU_MEM_PREAD
-    bytes = pread(fd, &val, sizeof(val), addr);
-#else
-    off_t off;
-    off = lseek(fd, addr, SEEK_SET);
-    assert(off == (off_t)addr);
-    bytes = read(fd, &val, sizeof(val));
+    if (emu_get_taintpage(addr)) {
+        MEM_OP(read);
+    }
 #endif
-    assert(bytes == sizeof(val));
-    return val;
+    return *(uint16_t*)addr;
 }
 
 inline
 uint32_t mem_read32(uint32_t addr) {
+#ifndef NO_TAINT
     uint32_t val = 0;
-    int32_t fd = emu_global->mem_fd;
-    assert(fd);
-    ssize_t bytes;
-#ifdef EMU_MEM_PREAD
-    bytes = pread(fd, &val, sizeof(val), addr);
-#else
-    off_t off;
-    off = lseek(fd, addr, SEEK_SET);
-    assert(off == (off_t)addr);
-    bytes = read(fd, &val, sizeof(val));
+    if (emu_get_taintpage(addr)) {
+        MEM_OP(read);
+    }
 #endif
-    assert(bytes == sizeof(val));
-    return val;
+    return *(uint32_t*)addr;
 }
 
 /* WRITE */
 inline
 uint8_t mem_write8(uint32_t addr, uint8_t val) {
-    int32_t fd = emu_global->mem_fd;
-    assert(fd);
-    ssize_t bytes;
-#ifdef EMU_MEM_PREAD
-    bytes = pwrite(fd, &val, sizeof(val), addr);
-#else
-    off_t off;
-    off = lseek(fd, addr, SEEK_SET);
-    assert(off == (off_t)addr);
-    bytes = write(fd, &val, sizeof(val));
+#ifndef NO_TAINT
+    if (emu_get_taintpage(addr)) {
+        MEM_OP(write);
+    }
 #endif
-    assert(bytes == sizeof(val));
-    return val;
+    return *(uint8_t*)addr = val;
 }
 
 inline
 uint16_t mem_write16(uint32_t addr, uint16_t val) {
-    int32_t fd = emu_global->mem_fd;
-    assert(fd);
-    ssize_t bytes;
-#ifdef EMU_MEM_PREAD
-    bytes = pwrite(fd, &val, sizeof(val), addr);
-#else
-    off_t off;
-    off = lseek(fd, addr, SEEK_SET);
-    assert(off == (off_t)addr);
-    bytes = write(fd, &val, sizeof(val));
+#ifndef NO_TAINT
+    if (emu_get_taintpage(addr)) {
+        MEM_OP(write);
+    }
 #endif
-    assert(bytes == sizeof(val));
-    return val;
+    return *(uint16_t*)addr = val;
 }
 
 inline
 uint32_t mem_write32(uint32_t addr, uint32_t val) {
-    int32_t fd = emu_global->mem_fd;
-    assert(fd);
-    ssize_t bytes;
-#ifdef EMU_MEM_PREAD
-    bytes = pwrite(fd, &val, sizeof(val), addr);
-#else
-    off_t off;
-    off = lseek(fd, addr, SEEK_SET);
-    assert(off == (off_t)addr);
-    bytes = write(fd, &val, sizeof(val));
+#ifndef NO_TAINT
+    if (emu_get_taintpage(addr)) {
+        MEM_OP(write);
+    }
 #endif
-    assert(bytes == sizeof(val));
-    return val;
+    return *(uint32_t*)addr = val;
 }
 #endif  /* NO_TAINT */
 
