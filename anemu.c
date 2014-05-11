@@ -287,6 +287,36 @@ inline void emu_type_pusr(emu_thread_t *emu) {
     }
 }
 
+#if 1
+inline void emu_type_sync(emu_thread_t *emu) {
+    const darm_t *d = &emu->darm;
+
+    switch(d->instr) {
+    case I_LDREX: {
+        mutex_lock(&emu_lock);
+        emu_log_debug("LDREX before:\n");
+        emu_log_debug("Rt: %x Rn: %x MEM Rn: %x\n", RREG(Rt), RREG(Rn), RMEM32(RREG(Rn)));
+        WREG(Rt) = RMEM32(RREG(Rn));
+        emu->lock_acquired = 1;
+        break;
+    }
+    case I_STREX: {
+        assert(emu->lock_acquired);
+        emu_log_debug("STREX before:\n");
+        emu_log_debug("Rd: %x Rt: %x MEM Rn: %x\n", RREG(Rd), RREG(Rt), RMEM32(RREG(Rn)));
+
+        emu->lock_acquired = 0;
+        assert(d->imm == 0);
+        WMEM32(RREG(Rn), RREG(Rt));
+        WREG(Rd) = 0;           /* 0: success, 1: fail */
+        mutex_unlock(&emu_lock);
+        break;
+    }
+        SWITCH_COMMON;
+    }
+}
+
+#else
 inline void emu_type_sync(emu_thread_t *emu) {
     const darm_t *d = &emu->darm;
 
@@ -463,6 +493,7 @@ inline void emu_type_sync(emu_thread_t *emu) {
         SWITCH_COMMON;
     }
 }
+#endif
 
 inline void emu_type_mvcr(emu_thread_t *emu) {
     const darm_t *d = &emu->darm;
