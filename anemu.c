@@ -545,7 +545,7 @@ inline void BranchWritePC(emu_thread_t *emu, uint32_t addr) {
     emu_log_debug("RREGN(PC): %x\n", RREGN(PC));
     emu_log_debug("addr: %x\n", addr);
 #ifndef PROFILE
-    emu_map_lookup(addr);
+    if (emu_debug()) emu_map_lookup(addr);
 #endif
     /* TODO: emu.disasm_bytes == 4 instead to account for Thumb2 32? */
     if (CurrentInstrSet(emu) == M_ARM) {
@@ -558,7 +558,7 @@ inline void BranchWritePC(emu_thread_t *emu, uint32_t addr) {
 inline void BXWritePC(emu_thread_t *emu, uint32_t addr) {
     emu_log_debug("RREGN(PC): %x addr: %x\n", RREGN(PC), addr);
 #ifndef PROFILE
-    emu_map_lookup(addr);
+    if (emu_debug()) emu_map_lookup(addr);
 #endif
     if (addr & 1) {
         SelectInstrSet(emu, M_THUMB);
@@ -1212,19 +1212,10 @@ inline bool emu_advance_pc(emu_thread_t *emu) {
 
 #ifndef PROFILE
     emu_log_debug("handled instructions: %d\n", emu_global->instr_total);
-    emu_dump_diff(emu);
-    dbg_dump_ucontext(&emu->current);
-
-#if 0
-    if (!emu->lock_acquired) {
-        /* DEBUG: for consistency, we directly call to check the internal state of malloc */
-        /* This is for avoiding any memory corruption done by improper EMU of malloc code */
-        emu_log_debug("checking malloc state...\n");
-        emu_unprotect_mem();
-        check_malloc();
-        emu_protect_mem();
+    if (emu_debug()) {
+        emu_dump_diff(emu);
+        dbg_dump_ucontext(&emu->current);
     }
-#endif
 
         emu_protect_mem();
         emu_stop();             /* will not return */
@@ -1244,6 +1235,7 @@ inline bool emu_advance_pc(emu_thread_t *emu) {
         emu_unprotect_mem();
         emu->stop = 1;
         emu_global->disabled = 1;
+        if (emu_debug()) emu_dump_taintmaps();
     } else if (emu_global->stop_handler && emu->instr_count >= emu_global->stop_handler) { /* NOTE: we are using a one time count */
         emu_log_info("SPECIAL: stopping current trap  emu after %d instructions.\n", emu->instr_count);
         emu->stop = 1;
@@ -1251,6 +1243,7 @@ inline bool emu_advance_pc(emu_thread_t *emu) {
         // emu_stop_trigger() raised flag
     }
 
+    if (emu_debug()) emu_dump_taintpages();
     return !emu->stop;
 }
 
@@ -1472,11 +1465,15 @@ void emu_stop(emu_thread_t *emu) {
            emu.instr_total,
            (delta * 1e6) / emu.instr_total);
     */
+#ifndef NO_TAINT
     if (emu_regs_tainted(emu)) {
         emu_log_warn("WARNING: stopping emu with tainted regs!\n");
     }
-    dbg_dump_ucontext(&emu->current);
-    emu_log_debug(LOG_BANNER_SIG);
+#endif
+    if (emu_debug()) {
+        emu_dump(emu);
+        emu_dump_taintmaps();
+    }
     emu->stop = 0;
     emu->running = 0;
     emu_log_info("emulation stopped. total instr: %d\n", emu_global->instr_total);
@@ -1976,7 +1973,9 @@ map_t* emu_map_lookup(uint32_t addr) {
     }
     // NOTE: since emu only parses maps at init and memory can later change
     // failure to find an addr may or may not be a bug
-    emu_log_error("unable to locate addr: %x\n", addr);
+#ifndef PROFILE
+    if (emu_debug()) emu_log_error("unable to locate addr: %x\n", addr);
+#endif
     return NULL;
 }
 
@@ -1995,7 +1994,10 @@ emu_handler_segv(int sig, siginfo_t *si, void *ucontext) {
         emu_abort("re-trap inside emu!\n");
     }
     ucontext_t *uc = (ucontext_t *)ucontext;
-    emu_siginfo(sig, si, uc);
+    if (emu_debug()) {
+        emu_siginfo(sig, si, uc);
+        emu_dump_taintmaps();
+    }
 
     // emu must have been already initialized
     // by previously called set_taint_array which then mprotected memory
@@ -2423,6 +2425,12 @@ bool emu_running() {
 }
 
 int
+
+inline
+bool emu_debug() {
+    return emu_global->debug;
+}
+
 emu_initialized() {
     return emu_global->initialized;
 }

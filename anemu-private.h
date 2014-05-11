@@ -584,7 +584,7 @@ void emu_init_properties();
 void emu_init_tracefile();
 emu_thread_t* emu_tls_get();
 void emu_tls_set(emu_thread_t *emu);
-
+bool emu_debug();
 inline uint32_t instr_mask(darm_instr_t instr);
 
 inline double time_ms();
