@@ -324,7 +324,7 @@ inline void emu_type_sync(emu_thread_t *emu) {
         if (d2.instr == I_MOV &&
             d3.instr == I_TEQ &&
             d4.instr == I_STREX) {
-            emu_log_info("Detecting lock aquire (LDREX/STREX) __bionic_cmpxchg! Executing atomically.\n");
+            emu_log_debug("Detecting lock aquire (LDREX/STREX) __bionic_cmpxchg! Executing atomically.\n");
 
             uint32_t mem_Rn = 0;
 
@@ -365,7 +365,7 @@ inline void emu_type_sync(emu_thread_t *emu) {
         /* android_atomic_add() */
         else if (d2.instr == I_ADD &&
                  d3.instr == I_STREX) {
-            emu_log_info("Detecting lock aquire (LDREX/STREX) android_atomic_add! Executing atomically.\n");
+            emu_log_debug("Detecting lock aquire (LDREX/STREX) android_atomic_add! Executing atomically.\n");
 
             asm volatile ("ldrex %[Rt], [%[Rn]]\n"
                           "add %[Rd2], %[Rt], #1\n"
@@ -401,7 +401,7 @@ inline void emu_type_sync(emu_thread_t *emu) {
         /* __bionic_atomic_dec() */
         else if (d2.instr == I_SUB &&
                  d3.instr == I_STREX) {
-            emu_log_info("Detecting lock aquire (LDREX/STREX) __bionic_atomic_dec! Executing atomically.\n");
+            emu_log_debug("Detecting lock aquire (LDREX/STREX) __bionic_atomic_dec! Executing atomically.\n");
 
             asm volatile ("ldrex %[Rt], [%[Rn]]\n"
                           "sub %[Rd2], %[Rt], #1\n"
@@ -436,7 +436,7 @@ inline void emu_type_sync(emu_thread_t *emu) {
         /* int32_t __bionic_swap(int32_t new_value, volatile int32_t* ptr) */
         /* TODO: how about calling the functions directly? */
         else if (d2.instr == I_STREX) {
-            emu_log_info("Detecting lock aquire (LDREX/STREX) __bionic_swap! Executing atomically.\n");
+            emu_log_debug("Detecting lock aquire (LDREX/STREX) __bionic_swap! Executing atomically.\n");
 
             asm volatile ("ldrex %[Rt], [%[Rn]]\n"
                           "strex %[Rd2], %[Rt2], [%[Rn]]"
