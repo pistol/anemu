@@ -1275,41 +1275,6 @@ inline bool emu_singlestep(emu_thread_t *emu) {
     // emu_disasm_ref(pc, (emu_thumb_mode() ? 16 : 32)); /* rasm2 with libopcodes backend */
     /* static const darm_t *d; */
 
-#if 0
-    /* SPECIAL CASES */
-    uint32_t op = *(uint32_t *)pc;
-    uint8_t regcount;
-    emu_log_debug("op: %x\n", op);
-
-    // 0x0d2d0b00, 0x0fbf0f01, "vpush%c %B"
-    // ed2d8b02    vpush   {d8}
-    // ed2d8b04    vpush   {d8-d9}
-    if ((op & 0x0fbf0f01) == 0x0d2d0b00) {
-        regcount = (op & 0xff) / 2;
-        emu_log_info("SPECIAL: vpush %d\n", regcount);
-        WREGN(SP) = RREGN(SP) - 4 * 2 * regcount; /* update SP (64 bit regs) */
-        goto next;
-    };
-
-    // 0x0cbd0b00, 0x0fbf0f01, "vpop%c %B"
-    // ecbd8b02    vpop    {d8}
-    // ecbd8b04    vpop    {d8-d9}
-    if ((op & 0x0fbf0f01) == 0x0cbd0b00) {
-        regcount = (op & 0xff) / 2;
-        emu_log_info("SPECIAL: vpop %d\n", regcount);
-        WREGN(SP) = RREGN(SP) + 4 * 2 * regcount; /* update SP (64 bit regs) */
-        goto next;
-    }
-
-    // ed9f9bed    vldr    d9, [pc, #948]
-    // f3878e1f    vmov.i8 d8, #255
-    if (op == 0xed9f9bed ||
-        op == 0xf3878e1f) {
-        emu_log_info("SPECIAL skipping %x\n", op);
-        goto next;
-    }
-#endif
-
     emu_disasm(emu, &emu->darm, CPU(pc));
 
     if (emu->skip) {
