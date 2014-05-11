@@ -1426,16 +1426,12 @@ void emu_init() {
     /* process maps */
     emu_parse_maps(emu_global);
 
-#ifndef NO_TAINT
     /* taint tag storage */
     emu_init_taintmaps(emu_global);
-    emu_clear_taintpages(emu_global);
-#endif
 
     /* memory access via /proc/self/mem */
     emu_init_proc_mem();
 
-    emu_log_info("[+] init properties\n");
     emu_init_properties();
 
     // __atomic_swap(1, &emu.initialized);
@@ -2934,6 +2930,7 @@ void emu_init_proc_mem() {
 }
 
 void emu_init_properties() {
+    emu_log_info("[+] init properties\n");
     /* number of total instructions to emulate */
     char prop[PROPERTY_VALUE_MAX]; // max is 92
     property_get("debug.emu.stop_total", prop, "0");
