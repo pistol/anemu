@@ -839,7 +839,7 @@ inline void emu_type_memory(emu_thread_t *emu) {
 
         emu_log_debug("RMEM(%x): %x\n", addr, RMEM32(addr));
 
-        uint32_t data;
+        uint32_t data = 0xdeadbeef; /* please compiler gods */
         /* read 1, 2 or 4 bytes depending on instr type */
 
         switch(d->instr) {
