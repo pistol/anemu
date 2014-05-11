@@ -104,7 +104,7 @@ void emu_siginfo(int sig, siginfo_t *si, ucontext_t *uc) {
     }
 
     // assert ((uint32_t)si->si_addr == addr_fault);
-    if ((uint32_t)si->si_addr != addr_fault) {
+    if (sig == SIGSEGV && ((uint32_t)si->si_addr != addr_fault)) {
         emu_log_error("si_addr: %x addr: %x", (uint32_t)si->si_addr, addr_fault);
         emu_map_lookup((uint32_t)si->si_addr);
         gdb_wait();
