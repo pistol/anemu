@@ -6,6 +6,12 @@
 // #define ANDROID
 // disable verbose logging for perf measurements
 #define PROFILE
+#ifndef NO_TAINT
+# define TAINT_PC
+# define EMU_MEM_PREAD
+#else
+# define NO_MPROTECT
+#endif
 #define TRACE
 #define NO_TAINT
 #define TRACE_PATH "/sdcard/trace"
@@ -47,13 +53,18 @@
 /* darm disassembler */
 #include <darm.h>
 
-/* TODO: guard based on NDEBUG or DEBUG */
+#ifndef NDEBUG
 #define assert(x) if (!(x)) { emu_abort("ASSERTION (%s) FAILED file: %s line: %d\n", #x, __FILE__, __LINE__); }
+#else
+#define assert(x) (void)(NULL)
+#endif
+
+#define NELEM(x) ((int) (sizeof(x) / sizeof((x)[0])))
 
 #define UNUSED __attribute__((unused))
 
 #define SIGNAL SIGTRAP
-#define SEGV_FAULT_ADDR (void *)0xdeadbeef
+#define SEGV_FAULT_ADDR (uint32_t *)0xdeadbeef
 #define UCONTEXT_REG_OFFSET 3   /* skip first 3 fields (trap_no, error_code, oldmask) of uc_mcontext */
 
 #define CPU(reg) (emu->current.uc_mcontext.arm_##reg)
@@ -109,6 +120,7 @@ T: Thumb mode
 #define MAX_TAINTPAGES 256      /* number of distinct tainted pages */
 #define TAINTMAP_LIB   0        /* taintmap index for libs */
 #define TAINTMAP_STACK 1        /* taintmap index for stack */
+#define TAINTPAGE_SIZE (PAGE_SIZE >> 2)
 
 typedef struct _map_t {
     uint32_t vm_start;
@@ -121,12 +133,15 @@ typedef struct _map_t {
     uint32_t pages;
 } map_t;
 
+typedef uint16_t taintpage_t;
+
 #define N_REGS 16               /* r0-r15 */
 typedef struct _taintmap_t {
     uint32_t *data;             /* mmap-ed data */
     uint32_t  start;            /* address range start */
     uint32_t  end;              /* address range end */
     uint32_t  bytes;            /* (end - start) bytes */
+    taintpage_t *pages;         /* taintpages */
 } taintmap_t;
 
 /* GLOBAL emu state */
@@ -135,8 +150,6 @@ typedef struct _emu_global_t {
     uint16_t   nr_maps;           /* number of process maps available */
     map_t      maps[MAX_MAPS];
     taintmap_t taintmaps[MAX_TAINTMAPS];   /* taint storage for memory */
-    uint32_t   taintpages[MAX_TAINTPAGES]; /* unique taint pages */
-    uint16_t   nr_taintpages;              /* nr of in use taint pages */
     int32_t    running;                    /* number of currently emulating threads */
     bool       disabled;                   /* prevent further emulation */
     bool       standalone;        /* standalone or target based emu */
@@ -172,11 +185,6 @@ typedef struct _emu_thread_t {
     uint8_t     skip;             /* special hack to skip certain tricky functions */
     uint8_t     lock_acquired;    /* target program holding a lock */
 } emu_thread_t;
-
-/* Internal state */
-// WARNING: state is not designed to be thread safe
-// currently expecting a single thread to be in emulation a time
-// this is enforced via a global mutex: emu_lock
 
 /* Synchronization */
 // mutex options: PTHREAD_MUTEX_INITIALIZER or PTHREAD_RECURSIVE_MUTEX_INITIALIZER
@@ -224,13 +232,9 @@ static emu_global_t *emu_global = &__emu_global;
 #define WTREG4(dest, a, b, c, d) WTREG(dest, RTREG(a) | RTREG(b) | RTREG(c) | RTREG(d))
 
 /* taint memory */
-#ifndef NO_TAINT
 #define RTMEM(addr)      emu_get_taint_mem(addr)
 #define WTMEM(addr, tag) emu_set_taint_mem(addr, tag)
-#else
-#define RTMEM(addr)      (0)
-#define WTMEM(addr, tag) (void)(NULL)
-#endif
+
 /* process two operands according to instr type */
 #define OP(a, b) emu_dataop(emu, a, b)
 /* shorthand for cleaner arguments */
@@ -374,15 +378,6 @@ formats for S instructions:
 
 #define PLD(regname) asm volatile("pld [%[reg]]" :: [reg] "r" (d->regname));
 
-#define SIGCONTEXT_REG_COUNT 21
-#ifndef PROFILE
-static const char *sigcontext_names[] = {"trap_no", "error_code", "oldmask",
-                                         "r0", "r1", "r2", "r3", "r4", "r5",
-                                         "r6", "r7", "r8", "r9", "r10",
-                                         "fp", "ip", "sp", "lr", "pc", "cpsr",
-                                         "fault_address"};
-#endif
-
 typedef enum _cpumode_t {
     M_ARM, M_THUMB
 } cpumode_t;
@@ -505,6 +500,15 @@ typedef struct pthread_internal_t
 
 /* API */
 
+void
+emu_init_handler(int sig,
+                 void (*handler)(int, siginfo_t *, void *),
+                 void *stack,
+                 size_t stack_size);
+
+void emu_handler_trap(int sig, siginfo_t *si, void *uc);
+void emu_handler_segv(int sig, siginfo_t *si, void *uc);
+
 static void emu_init();
 void emu_ucontext(emu_thread_t *emu, ucontext_t *ucontext);
 void emu_start(emu_thread_t *emu);
@@ -594,8 +598,12 @@ int mutex_unlock(pthread_mutex_t *mutex);
 
 uint32_t getAlignedPage(uint32_t addr);
 void emu_handler_segv(int sig, siginfo_t *si, void *ucontext);
-void mprotectInit();
-int8_t mprotectPage(uint32_t addr, uint32_t flags);
+
+#ifndef NO_MPROTECT
+static int8_t mprotectPage(uint32_t addr, uint32_t flags);
+#else
+#define mprotectPage(...) (void)(NULL)
+#endif
 
 void emu_protect_mem();
 void emu_unprotect_mem();

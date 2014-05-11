@@ -18,6 +18,7 @@
 #include <cutils/atomic.h>
 #include <cutils/properties.h>  /* adb setprop, getprop */
 #include <sys/xattr.h>          /* fsetxattr, fgetxattr */
+#include <sys/resource.h>       /* [set,get]rlimit */
 
 #if HAVE_SETRLIMIT
 # include <sys/types.h>
@@ -89,7 +90,6 @@ void emu_siginfo(int sig, siginfo_t *si, ucontext_t *uc) {
 #ifdef WITH_VFP
     dbg_dump_ucontext_vfp(uc);
 #endif
-
     emu_map_lookup(pc);
     emu_map_lookup(addr_fault);
 
@@ -975,7 +975,6 @@ inline void emu_type_memory(emu_thread_t *emu) {
                 reglist       &= ~(1 << reg);                 /* unset this bit */
                 emu_log_debug("addr: %x, r%d: %8x\n", addr, reg, RREGN(reg));
                 WMEM32(addr, RREGN(reg));
-                if (RTMEM(addr) || RTREGN(reg)) WTMEM(addr, RTREGN(reg));
                 WTMEM(addr, RTREGN(reg));
                 addr          += 4;
             }
@@ -1006,7 +1005,7 @@ inline void emu_type_memory(emu_thread_t *emu) {
                 emu_log_debug("addr: %x, r%d: %8x\n", addr, reg, RMEM32(addr));
                 if (reg == PC) break; /* PC is last reg, handled specially */
                 WREGN(reg) = RMEM32(addr);
-                if (RTREGN(reg) || RTMEM(addr)) WTREGN(reg, RTMEM(addr));
+                WTREGN(reg, RTMEM(addr));
                 addr          += 4;
             }
         } else  {
@@ -1036,7 +1035,6 @@ inline void emu_type_bits(emu_thread_t *emu) {
         uint32_t lsb = d->lsb;
         uint32_t msb = lsb + d->width - 1;
         assert(msb >= lsb);
-        }
         /* R[d]<msb:lsb> = R[n]<(msb-lsb):0>; */
         /* 1. clear out        R[d]<msb:lsb>  = 0 */
         uint32_t val = RREG(Rd);
@@ -1057,6 +1055,7 @@ inline void emu_type_bits(emu_thread_t *emu) {
     case I_UBFX: {
         uint32_t lsb = d->lsb;
         uint32_t msb = lsb + d->width - 1;
+        assert(msb < 31);
         WREG(Rd) = BitExtract(RREG(Rn), lsb, msb);
         WTREG1(Rd, Rn);
         break;
@@ -1527,13 +1526,6 @@ emu_init_handler(int sig,
     assert(sig == SIGTRAP || sig == SIGSEGV);
     assert(stack != NULL && stack_size >= MINSIGSTKSZ);
 
-#if HAVE_SETRLIMIT
-    /* Be recursion friendly */
-    struct rlimit rl;
-    rl.rlim_cur = rl.rlim_max = 0x100000; /* 1 MB */
-    setrlimit (RLIMIT_STACK, &rl);
-#endif
-
     /* 1. setup alternate stack for handler */
     if (stack == NULL) {
         emu_abort("unallocated stack");
@@ -1618,8 +1610,11 @@ inline uint8_t emu_disasm(emu_thread_t *emu, darm_t *d, uint32_t pc) {
     if (emu_debug()) {
         darm_str_t str;
         darm_str2(d, &str, 1); /* lowercase str */
+#ifndef PROFILE
         map_t *m = emu_map_lookup(pc);
-
+#else
+        map_t *m = NULL;
+#endif
         Dl_info info;
         const char* symbol_name;
         ptrdiff_t function_offset = 0;
@@ -1723,21 +1718,21 @@ inline uint32_t emu_read_reg(emu_thread_t *emu, darm_reg_t reg) {
 
 inline void dbg_dump_ucontext(ucontext_t *uc) {
     mcontext_t *r = &uc->uc_mcontext;
-    emu_log_debug("dump gp regs:\n");
-    emu_log_debug("fault addr %8x\n",
+    emu_log_info("dump gp regs:\n");
+    emu_log_info("fault addr %8x\n",
                  (uint32_t)r->fault_address);
-    emu_log_debug("r0: %8x  r1: %8x  r2: %8x  r3: %8x\n",
+    emu_log_info("r0: %8x  r1: %8x  r2: %8x  r3: %8x\n",
                  (uint32_t)r->arm_r0, (uint32_t)r->arm_r1, (uint32_t)r->arm_r2,  (uint32_t)r->arm_r3);
-    emu_log_debug("r4: %8x  r5: %8x  r6: %8x  r7: %8x\n",
+    emu_log_info("r4: %8x  r5: %8x  r6: %8x  r7: %8x\n",
                  (uint32_t)r->arm_r4, (uint32_t)r->arm_r5, (uint32_t)r->arm_r6,  (uint32_t)r->arm_r7);
-    emu_log_debug("r8: %8x  r9: %8x  sl: %8x  fp: %8x\n",
+    emu_log_info("r8: %8x  r9: %8x  sl: %8x  fp: %8x\n",
                  (uint32_t)r->arm_r8, (uint32_t)r->arm_r9, (uint32_t)r->arm_r10, (uint32_t)r->arm_fp);
-    emu_log_debug("ip: %8x  sp: %8x  lr: %8x  pc: %8x  cpsr: %08x\n",
+    emu_log_info("ip: %8x  sp: %8x  lr: %8x  pc: %8x  cpsr: %08x\n",
                  (uint32_t)r->arm_ip, (uint32_t)r->arm_sp, (uint32_t)r->arm_lr,  (uint32_t)r->arm_pc, (uint32_t)r->arm_cpsr);
 }
 
 inline void dbg_dump_ucontext_vfp(ucontext_t *uc) {
-    emu_log_debug("dump vfp regs:\n");
+    emu_log_info("dump vfp regs:\n");
     /* dump VFP registers from uc_regspace */
     struct aux_sigframe *aux;
     aux = (struct aux_sigframe *) uc->uc_regspace;
@@ -1750,22 +1745,22 @@ inline void dbg_dump_ucontext_vfp(ucontext_t *uc) {
     struct user_vfp vfp_regs = vfp->ufp;
     int i;
     for (i = 0; i < NUM_VFP_REGS; i += 2) {
-        emu_log_debug("d%-2d: %16llx  d%-2d: %16llx\n",
+        emu_log_info("d%-2d: %16llx  d%-2d: %16llx\n",
                       i,   vfp_regs.fpregs[i],
                       i+1, vfp_regs.fpregs[i+1]);
     }
     // Floating-point Status and Control Register
-    emu_log_debug("fpscr:   %08lx\n", vfp_regs.fpscr);
+    emu_log_info("fpscr:   %08lx\n", vfp_regs.fpscr);
 
     // exception registers
     struct user_vfp_exc vfp_exc = vfp->ufp_exc;
     // Floating-Point Exception Control register
-    emu_log_debug("fpexc:   %08lx\n", vfp_exc.fpexc);
+    emu_log_info("fpexc:   %08lx\n", vfp_exc.fpexc);
     // Floating-Point Instruction Registers
     // FPINST contains the exception-generating instruction
-    emu_log_debug("fpinst:  %08lx\n", vfp_exc.fpinst);
+    emu_log_info("fpinst:  %08lx\n", vfp_exc.fpinst);
     // FPINST2 contains the bypassed instruction
-    emu_log_debug("fpinst2: %08lx\n", vfp_exc.fpinst2);
+    emu_log_info("fpinst2: %08lx\n", vfp_exc.fpinst2);
 
     // sanitise exception registers
     // based on $KERNEL/arch/arm/kernel/signal.c
@@ -1778,12 +1773,20 @@ inline void dbg_dump_ucontext_vfp(ucontext_t *uc) {
 
 inline void emu_dump(emu_thread_t *emu) {
     dbg_dump_ucontext(&emu->current);
+#ifdef WITH_VFP
+    dbg_dump_ucontext_vfp(&emu->current);
+#endif
 }
 
 /* show register changes since last diff call */
 inline void emu_dump_diff(emu_thread_t *emu) {
+    static const char *sigcontext_names[] = {"trap_no", "error_code", "oldmask",
+                                             "r0", "r1", "r2", "r3", "r4", "r5",
+                                             "r6", "r7", "r8", "r9", "r10",
+                                             "fp", "ip", "sp", "lr", "pc", "cpsr",
+                                             "fault_address"};
     static int i;
-    for (i = 0; i < SIGCONTEXT_REG_COUNT; i++) {
+    for (i = 0; i < NELEM(sigcontext_names); i++) {
         uint32_t current  = ((uint32_t *)&emu->current.uc_mcontext)[i];
         uint32_t previous = ((uint32_t *)&emu->previous.uc_mcontext)[i];
         if (current != previous) {
@@ -1823,7 +1826,7 @@ inline void emu_map_dump(map_t *m) {
 }
 
 void emu_parse_maps(emu_global_t *emu_global) {
-    emu_log_debug("processing maps...\n");
+    emu_log_info("[+] parse process maps\n");
 
     char buf[1024];
     emu_global->nr_maps = 0;
@@ -1948,10 +1951,8 @@ const char *get_ssname(int code) {
     }
 }
 
+#ifndef PROFILE
 map_t* emu_map_lookup(uint32_t addr) {
-#ifdef PROFILE
-    return NULL;
-#endif
 
     unsigned int i;
     map_t *m;
@@ -1973,11 +1974,10 @@ map_t* emu_map_lookup(uint32_t addr) {
     }
     // NOTE: since emu only parses maps at init and memory can later change
     // failure to find an addr may or may not be a bug
-#ifndef PROFILE
     if (emu_debug()) emu_log_error("unable to locate addr: %x\n", addr);
-#endif
     return NULL;
 }
+#endif
 
 /* Page Protection */
 
@@ -1990,9 +1990,11 @@ void
 emu_handler_segv(int sig, siginfo_t *si, void *ucontext) {
     emu_thread_t *emu = emu_tls_get();
     assert(emu);
-    if (emu->running && !emu_global->standalone) {
+    if (emu->running) {
         emu_abort("re-trap inside emu!\n");
     }
+    register uint32_t sp asm("sp");
+    emu_log_debug("SP = %x\n", sp);
     ucontext_t *uc = (ucontext_t *)ucontext;
     if (emu_debug()) {
         emu_siginfo(sig, si, uc);
@@ -2007,7 +2009,8 @@ emu_handler_segv(int sig, siginfo_t *si, void *ucontext) {
     // SEGV_MAPPER: Address not mapped to object
     // SEGV_ACCER: Invalid permissions for mapped object
     // expecting SEGV_ACCER only!
-    assert(si->si_code == SEGV_ACCERR);
+    assert((sig == SIGSEGV && si->si_code == SEGV_ACCERR) ||
+           (sig == SIGTRAP && si->si_code == TRAP_HWBKPT));
 
     emu_ucontext(emu, uc);
 
@@ -2103,6 +2106,9 @@ emu_init_taintmaps(emu_global_t *emu_global) {
     tm->start = start;
     tm->end   = end;
     tm->bytes = bytes;
+    tm->pages = pages;
+
+    emu_log_debug("mmap lib   range: %x - %x length: %x\n", start, end, bytes);
 
     /* stack taintmap */
 
@@ -2148,7 +2154,6 @@ inline taintmap_t *
 emu_get_taintmap(uint32_t addr) {
     assert(addr > 0);
     taintmap_t *tm;
-    addr = Align(addr, 4);      /* word align */
 
     uint32_t stack_start = emu_global->maps[emu_global->nr_maps - 2].vm_start;
     uint8_t  idx         = (addr > stack_start) ? TAINTMAP_STACK : TAINTMAP_LIB;
@@ -2157,6 +2162,7 @@ emu_get_taintmap(uint32_t addr) {
     if (tm->data == NULL || tm->start == 0) {
         emu_abort("uninitialized taintmap");
     }
+    assert(addr >= tm->start && addr < tm->end);
 
     return tm;
 }
@@ -2198,11 +2204,12 @@ emu_dump_taintmaps() {
                     // convert ranges offset to original word addresses
                     range_start = tm->start + range_start * sizeof(uint32_t);
                     range_end   = tm->start + range_end   * sizeof(uint32_t);
-                    emu_log_debug("taint range %d: %s start: %x end: %x length: %d tag: %x\n",
+                    emu_log_debug("taint range %2d: %s start: %x end: %x length: %5d tag: %x\n",
                                   ranges,
-                                  (idx == TAINTMAP_LIB) ? "lib" : "stack",
+                                  (idx == TAINTMAP_LIB) ? "lib  " : "stack",
                                   range_start, range_end, range_end - range_start, range_tag
                                   );
+                    if (idx == TAINTMAP_LIB) emu_map_lookup(range_start);
 
                     range_tag = TAINT_CLEAR;
                     range_inside = range_start = range_end = 0;
@@ -2382,10 +2389,6 @@ emu_get_taintpages() {
 // caller must hold taint_lock
 inline void
 emu_protect_mem() {
-#ifdef NO_MPROTECT
-    return;
-#endif
-
     emu_log_debug("protecting memory...\n");
     uint32_t idx;
     /* protect all pages in unique list */
@@ -2416,10 +2419,9 @@ emu_unprotect_mem() {
 
 inline
 bool emu_running() {
-    if (emu_global->target) {
+    if(emu_target()) {
         emu_thread_t *emu = emu_tls_get();
-        assert(emu);
-        return emu->running;
+        if (emu) return emu->running;
     }
     return 0;
 }
@@ -2656,7 +2658,7 @@ int32_t emu_thread_count_down() {
 
 void emu_hook_thread_entry(void *arg) {
     pthread_internal_t *thread = (pthread_internal_t *)arg;
-    assert(thread == pthread_self());
+    assert(thread == (pthread_internal_t *)pthread_self());
     thread->target = emu_target();
     if (thread->target) {
         // atomic increment a emu->thread_count and decrement it in __pthread_internal_free()
@@ -2781,7 +2783,7 @@ uint32_t emu_get_taint_file(int fd) {
 
         if (xret > 0) {
             xtag = xbuf;
-            emu_log_debug("%s : read(%d) taint tag: 0x%x\n", __func__, fd, xtag);
+            emu_log_debug("%s : fd %d taint tag: 0x%x\n", __func__, fd, xtag);
         } else {
 #define ENOATTR ENODATA
             if (errno == ENOATTR) {
@@ -2809,7 +2811,9 @@ int32_t emu_set_taint_file(int fd, uint32_t tag)
 
     ret = fsetxattr(fd, TAINT_XATTR_NAME, &tag, sizeof(tag), 0);
 
-    if (ret < 0) {
+    if (ret > 0) {
+        emu_log_debug("%s : fd %d taint tag: 0x%x\n", __func__, fd, tag);
+    } else {
         if (errno == ENOSPC || errno == EDQUOT) {
             emu_log_error("TaintLog: fsetxattr(%d): not enough room to set xattr", fd);
         } else if (errno == ENOTSUP) {
@@ -2915,12 +2919,12 @@ int emu_trampoline_write(int fd, void *buf, size_t count) {
     /* common case (no taint) */
     ret = __write(fd, buf, count);
     if (ret == -1) {
+        // this should never happen outside emu
+        assert(errno != EFAULT);
         if (errno != 2) {
             emu_log_error("write(%d, %p, %d) failed with ret: %ld and errno: %d\n", fd, buf, count, ret, errno);
             // dump_backtrace(gettid());
         }
-        // this should never happen outside emu
-        assert(errno != EFAULT);
     }
     return ret;
 }
