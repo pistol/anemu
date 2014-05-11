@@ -1449,14 +1449,7 @@ void emu_init() {
 
 #ifdef TRACE
     /* need to initialize log file before any printfs */
-    char traceFilename[256];
-    snprintf(traceFilename, sizeof(traceFilename), "%s-%d", TRACE_PATH, getpid());
-
-    emu_global->trace_fd = open(traceFilename, O_WRONLY | O_CREAT | O_SYNC);
-
-    if (!emu_global->trace_fd) {
-        emu_abort("Can't open trace file %s!\n", traceFilename);
-    }
+    emu_init_tracefile();
 #endif
 
     /* process maps */
@@ -2987,6 +2980,17 @@ void emu_init_properties() {
     property_get("debug.emu.debug", prop, "0");
     emu_global->debug = (int32_t)atoi(prop);
     emu_log_debug("debug value: %d\n", emu_global->debug);
+}
+
+void emu_init_tracefile() {
+    char traceFilename[256];
+    snprintf(traceFilename, sizeof(traceFilename), "%s-%d", TRACE_PATH, getpid());
+
+    emu_global->trace_fd = open(traceFilename, O_WRONLY | O_CREAT | O_SYNC);
+
+    if (!emu_global->trace_fd) {
+        emu_abort("Can't open trace file %s!\n", traceFilename);
+    }
 }
 
 #ifdef NO_TAINT
