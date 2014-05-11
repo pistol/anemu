@@ -595,7 +595,6 @@ int mutex_unlock(pthread_mutex_t *mutex);
 
 /* Page Protections */
 
-int32_t getPageSize();
 uint32_t getAlignedPage(uint32_t addr);
 void emu_handler_segv(int sig, siginfo_t *si, void *ucontext);
 void mprotectInit();

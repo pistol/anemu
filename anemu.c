@@ -1572,8 +1572,8 @@ emu_init_handler(int sig,
 /* Standalone on-demand emulation */
 uint32_t emu_function(void (*fun)()) {
     /* SIGSTKSZ = 8192 */
-    void *stack = mkstack(getPageSize() + SIGSTKSZ, getPageSize());
-    uint32_t stack_top = (uint32_t)stack + getPageSize() + SIGSTKSZ;
+    void *stack = mkstack(PAGE_SIZE + SIGSTKSZ, PAGE_SIZE);
+    uint32_t stack_top = (uint32_t)stack + PAGE_SIZE + SIGSTKSZ;
 
     emu_hook_thread_entry((void *)pthread_self());
     emu_thread_t *emu = emu_tls_get();
@@ -1837,8 +1837,6 @@ void emu_parse_maps(emu_global_t *emu_global) {
         emu_abort("open failed\n");
     }
 
-    int32_t page_size = getPageSize();
-
     while (fgets(buf, sizeof(buf), file) != NULL) {
         if (emu_global->nr_maps >= MAX_MAPS) {
             emu_abort("too many maps\n");
@@ -1855,7 +1853,7 @@ void emu_parse_maps(emu_global_t *emu_global) {
                    &m->major, &m->minor,
                    &m->ino,
                    m->name);
-        m->pages = (m->vm_end - m->vm_start) / page_size;
+        m->pages = (m->vm_end - m->vm_start) / PAGE_SIZE;
 #ifndef PROFILE
         // emu_map_dump(m);
 #endif
@@ -1984,28 +1982,9 @@ map_t* emu_map_lookup(uint32_t addr) {
 
 /* Page Protection */
 
-int32_t
-getPageSize() {
-    static int32_t pageSize = 0;
-
-    /* previous invocations will set pageSize */
-    if (pageSize) {
-        return pageSize;
-    }
-
-    /* this code executes once at initialization */
-    pageSize = sysconf(_SC_PAGE_SIZE);
-    if (pageSize == -1)
-        emu_log_error("error: sysconf %d", pageSize);
-
-    emu_log_debug("Page Size = %d bytes\n", pageSize);
-
-    return pageSize;
-}
-
 inline uint32_t
 getAlignedPage(uint32_t addr) {
-    return addr & ~ (getPageSize() - 1);
+    return addr & ~ (PAGE_SIZE - 1);
 }
 
 void
@@ -2057,7 +2036,7 @@ mprotectPage(uint32_t addr, uint32_t flags) {
     emu_map_lookup(addr);
 
     emu_log_debug("mprotecting page: %x\n", addr_aligned);
-    int8_t ret = mprotect((void *)addr_aligned, getPageSize(), flags);
+    int8_t ret = mprotect((void *)addr_aligned, PAGE_SIZE, flags);
     if (ret != 0) {
         emu_log_error("error: mprotect ret: %d errno: %d (%s)\n", ret, errno, strerror(errno));
         switch(errno) {
@@ -2677,7 +2656,7 @@ void emu_hook_thread_entry(void *arg) {
         // can then match it against /proc/self/task
         emu_thread_count_up();
 
-        size_t guard_size = getPageSize(); /* PAGE_SIZE */
+        size_t guard_size = PAGE_SIZE;
         size_t altstack_size = guard_size + 1 * SIGSTKSZ; /* ensures useable altstack is SIGSTKSZ */
 
         if (!thread->altstack) {
