@@ -352,6 +352,7 @@ inline void emu_type_sync(emu_thread_t *emu) {
             CPU(pc) += 3 * 4;
             /* account for extras: mov + teq + strexeq */
             emu->instr_count += 3;
+            android_atomic_add(3, &emu_global->instr_total);
 
             if (RREGN(d2.Rd) == 0) {    /* 0 if memory was updated  */
                 emu_log_debug("Lock aquire (LDREX/STREX) succesfull!\n");
@@ -386,6 +387,7 @@ inline void emu_type_sync(emu_thread_t *emu) {
             CPU(pc) += 2 * 4;
             /* account for extras: add + strex */
             emu->instr_count += 2;
+            android_atomic_add(2, &emu_global->instr_total);
 
             if (RREGN(d3.Rd) == 0) {    /* 0 if memory was updated  */
                 emu_log_debug("Lock aquire (LDREX/STREX) succesfull!\n");
@@ -422,6 +424,7 @@ inline void emu_type_sync(emu_thread_t *emu) {
             CPU(pc) += 2 * 4;
             /* account for extras: sub + strex */
             emu->instr_count += 2;
+            android_atomic_add(2, &emu_global->instr_total);
 
             if (RREGN(d3.Rd) == 0) {    /* 0 if memory was updated  */
                 emu_log_debug("Lock aquire (LDREX/STREX) succesfull!\n");
@@ -455,6 +458,7 @@ inline void emu_type_sync(emu_thread_t *emu) {
             CPU(pc) += 1 * 4;
             /* account for extras: strex */
             emu->instr_count += 1;
+            android_atomic_add(1, &emu_global->instr_total);
 
             if (RREGN(d2.Rd) == 0) {    /* 0 if memory was updated  */
                 emu_log_debug("Lock aquire (LDREX/STREX) succesfull!\n");
