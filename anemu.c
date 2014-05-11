@@ -922,20 +922,23 @@ inline void emu_type_memory(emu_thread_t *emu) {
         /* depending on instr, 1, 2 or 4 bytes of RREG(Rt) will be used and stored to mem */
         uint32_t data = RREG(Rt) & instr_mask(d->instr);
         switch(d->instr) {
-        case I_STR:
-            WMEM32(addr, data);
-            break;
         case I_STRB:
             WMEM8(addr, (uint8_t)data);
+            WTMEM(addr, RTMEM(addr) | RTREG(Rt));
             break;
         case I_STRH:
             WMEM16(addr, (uint16_t)data);
+            WTMEM(addr, RTMEM(addr) | RTREG(Rt));
+            break;
+        case I_STR:
+            WMEM32(addr, data);
+            WTMEM(addr, RTREG(Rt));
             break;
         case I_STRD:
             WMEM32(addr,     RREGN(d->Rt));
             WMEM32(addr + 4, RREGN(d->Rt + 1));
-            /* WTMEM(addr) case handled commonly below */
-            WTMEM(addr + 4, RTREGN(d->Rt + 1));
+            WTMEM(addr,      RTREG(Rt));
+            WTMEM(addr + 4,  RTREGN(d->Rt + 1));
             break;
         default: emu_abort("unexpected op");
         }
@@ -945,7 +948,6 @@ inline void emu_type_memory(emu_thread_t *emu) {
         }
 
         emu_log_debug("RMEM after:   %x\n", RMEM32(addr));
-        WTMEM(addr, RTREG(Rt));
 
         break;
     }
