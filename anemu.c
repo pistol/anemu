@@ -3281,7 +3281,6 @@ int tgkill(int tgid, int tid, int sig) {
 }
 */
 
-#if 1
 inline
 emu_thread_t* emu_tls_get() {
     void**  tls = (void**)__get_tls();
@@ -3292,9 +3291,6 @@ inline
 void emu_tls_set(emu_thread_t *emu) {
     void**  tls = (void**)__get_tls();
     tls[TLS_SLOT_EMU_THREAD] = emu;
-}
-
-    }
 }
 
 void emu_init_properties() {
