@@ -880,8 +880,8 @@ inline void emu_type_memory(emu_thread_t *emu) {
             }
         } else {                /* UnalignedSupport() || address<1:0> == '00' */
             EMU(WREG(Rt) = data);
-            WTREG(Rt, RTMEM(addr));
         }
+        WTREG(Rt, RTMEM(addr));
 
         break;
     }
