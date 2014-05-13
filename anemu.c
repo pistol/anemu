@@ -176,14 +176,7 @@ inline void emu_type_arith_shift(emu_thread_t *emu) {
             SWITCH_COMMON;
         }
     } else {
-        /* BIC has no Rs or shift */
-        /* FIXME: can we drop this special case? */
-        if (d->instr == I_BIC && d->shift == 0) {
-            /* shift type 0 is LSL */
-            EMU(WREG(Rd) = LSL(RREG(Rn), RREG(Rm)));
-        } else {
-            EMU(WREG(Rd) = OP(RREG(Rn), imsh));
-        }
+        EMU(WREG(Rd) = OP(RREG(Rn), imsh));
     }
     WTREG2(Rd, Rn, Rm);
 }
