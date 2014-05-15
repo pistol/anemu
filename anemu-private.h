@@ -505,6 +505,8 @@ typedef struct pthread_internal_t
        asm ("mrc p15, 0, r0, c13, c0, 3" : "=r"(__val) );  \
        (volatile void*)__val; })
 
+int setcontext(const ucontext_t *ucp);
+
 /* use the next free slot in bionic_tls to stash emu state*/
 #define TLS_SLOT_EMU_THREAD 5
 

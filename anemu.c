@@ -1433,10 +1433,6 @@ void emu_start(emu_thread_t *emu) {
     while(emu_singlestep(emu));
 }
 
-/* note: ucontext/setcontext support normally missing in Bionic */
-/* unless ported to Bionic, hack it by returning 0 */
-/* int setcontext (const ucontext_t *ucp) { return 0; } */
-
 void emu_stop(emu_thread_t *emu) {
     emu_log_debug("stopping emulation\n");
 

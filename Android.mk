@@ -31,8 +31,8 @@ LOCAL_SHARED_LIBRARIES  := libdl
 # LOCAL_SHARED_LIBRARIES  := libdl liblog libdarm libcorkscrew
 LOCAL_WHOLE_STATIC_LIBRARIES  += libdarm libcorkscrew
 # LOCAL_STATIC_LIBRARIES  += libr_asm libr_util libr_db libsdb libr
-LOCAL_SRC_FILES         := anemu.c.arm
-# LOCAL_SRC_FILES         +=  rasm.c
+LOCAL_ARM_MODE          := arm
+LOCAL_SRC_FILES         := anemu.c setcontext.S
 LOCAL_C_INCLUDES        += dalvik/vm/darm-v7
 # LOCAL_C_INCLUDES        += dalvik/vm/anemu/$(RASM)/include/libr
 LOCAL_CFLAGS            += -O0 -g -Wall -march=armv7-a -mcpu=cortex-a9
