@@ -19,6 +19,8 @@
 #include <cutils/properties.h>  /* adb setprop, getprop */
 #include <sys/xattr.h>          /* fsetxattr, fgetxattr */
 #include <sys/resource.h>       /* [set,get]rlimit */
+#define __STDC_FORMAT_MACROS 1
+#include <inttypes.h>
 
 #if HAVE_SETRLIMIT
 # include <sys/types.h>
