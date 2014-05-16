@@ -1394,33 +1394,35 @@ uint8_t emu_disabled() {
 static
 void emu_init() {
     if (emu_initialized()) return;
+    uint64_t init_start, init_end;
+
+    init_start = getticks();
 
     emu_global->debug = 1;
     emu_global->trap_bkpt = 0;
     emu_global->trap_segv = 0;
 
-    LOGD("initializing emu state ...\n");
+    emu_log_debug("initializing emu state ...\n");
 
 #ifdef TRACE
     /* need to initialize log file before any printfs */
-    emu_init_tracefile();
+    M(emu_init_tracefile());
 #endif
 
     /* process maps */
-    emu_parse_maps(emu_global);
-
+    M(emu_parse_maps(emu_global));
     /* taint tag storage */
-    emu_init_taintmaps(emu_global);
+    M(emu_init_taintmaps(emu_global));
 
     /* memory access via /proc/self/mem */
-    emu_init_proc_mem();
-
-    emu_init_properties();
+    M(emu_init_proc_mem());
+    M(emu_init_properties());
 
     // __atomic_swap(1, &emu.initialized);
     emu_global->initialized = 1;
 
-    emu_log_info("[+] emu initialized.\n");
+    init_end = getticks();
+    emu_log_info("[+] emu init  %6"PRIu64" cycles.\n", init_end - init_start);
 }
 
 void emu_start(emu_thread_t *emu) {
@@ -1429,8 +1431,7 @@ void emu_start(emu_thread_t *emu) {
     emu->running = 1;
     // wipe register taint
     emu_clear_taintregs(emu);
-
-    emu->time_start = time_ms();
+    emu->time_start = getticks();
 
     while(emu_singlestep(emu));
 }
@@ -1442,14 +1443,14 @@ void emu_stop(emu_thread_t *emu) {
 
     // WARNING: double conversion will need malloc and can deadlock!
 
-    emu->time_end = time_ms();
-    double delta = emu->time_end - emu->time_start;
-    LOGD("resuming exec pc %0lx -> %0lx time (ms): %d instr: %d time/instr (ns): %d\n",
+    emu->time_end = getticks();
+    uint64_t delta = emu->time_end - emu->time_start;
+    LOGD("resuming exec pc %0lx -> %0lx time (cycles): %"PRIu64" instr: %d time/instr (cycles): %"PRIu64"\n",
                  emu->original.uc_mcontext.arm_pc,
                  emu->current.uc_mcontext.arm_pc,
-                 (uint32_t)delta,
+                 delta,
                  emu->instr_count,
-                 (uint32_t)((delta * 1e6) / emu->instr_count));
+                 delta / emu->instr_count);
 
 #ifndef NO_TAINT
     if (emu_regs_tainted(emu)) {
@@ -2038,7 +2039,7 @@ emu_handler_segv(int sig, siginfo_t *si, void *ucontext) {
             // wipe register taint
             emu->running = 1;
             emu_clear_taintregs(emu);
-            emu->time_start = time_ms();
+            emu->time_start = getticks();
             emu_singlestep(emu);
         } else {
             /* instruction accessing tainted memory */
@@ -2831,6 +2832,32 @@ inline double time_ms(void) {
     clock_gettime(CLOCK_MONOTONIC, &res);
     double result = 1000.0 * res.tv_sec + (double) res.tv_nsec / 1e6;
     return result;
+}
+
+uint64_t getticks(void)
+{
+    static int fd,init = 0;
+    static struct perf_event_attr attr;
+    static uint64_t buffer;
+
+    if(!init) {
+        attr.type = PERF_TYPE_HARDWARE;
+        attr.config = PERF_COUNT_HW_CPU_CYCLES;
+        fd = syscall(__NR_perf_event_open, &attr, 0, -1, -1, 0);
+        if(fd < 0) {
+            fprintf(stderr,"ERROR - Cannot open perf event file descriptor:\n");
+            if(errno == -EPERM || errno == -EACCES)
+                fprintf(stderr,"  Permission denied.\n");
+            else if(errno == ENOENT)
+                fprintf(stderr,"  PERF_COUNT_HW_CPU_CYCLES event is not supported.\n");
+            else
+                fprintf(stderr,"  Attempting to open the file descriptor returned %d (%s).\n",errno, strerror(errno));
+            exit(-1);
+        }
+        init = 1;
+    }
+    __read(fd,&buffer,sizeof(uint64_t));
+    return buffer;
 }
 
 /*

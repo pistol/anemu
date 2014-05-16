@@ -52,6 +52,19 @@ extern "C" {  // only need to export C interface if
 #define __stringify_1(x...)	#x
 #define __stringify(x...)	__stringify_1(x)
 
+/* Benchmarking */
+#ifdef EMU_BENCH
+#define __STDC_FORMAT_MACROS 1
+#include <inttypes.h>
+uint64_t __tick_start, __tick_end;
+#define M(x)                                              \
+    __tick_start = getticks();                            \
+    x;                                                    \
+    __tick_end   = getticks();                            \
+    printf("[*] %s %6"PRIu64" cycles.\n", #x, __tick_end - __tick_start);
+#else
+#define M(x) x
+#endif
 /* Public API */
 
 /* Hooks */
@@ -85,6 +98,7 @@ int emu_initialized();
 
 /* Debugging */
 void gdb_wait();
+uint64_t getticks();
 
 #ifdef __cplusplus
 }
