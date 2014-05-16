@@ -591,9 +591,10 @@ void emu_dump(emu_thread_t *emu);
 void emu_dump_diff(emu_thread_t *emu);
 void emu_dump_cpsr(emu_thread_t *emu);
 void dump_backtrace(pid_t tid);
-inline uint32_t emu_read_reg(emu_thread_t *emu, darm_reg_t reg);
-inline uint32_t *emu_write_reg(emu_thread_t *emu, darm_reg_t reg);
-inline uint8_t emu_thumb_mode(emu_thread_t *emu);
+#endif
+uint32_t emu_read_reg(emu_thread_t *emu, darm_reg_t reg);
+uint32_t *emu_write_reg(emu_thread_t *emu, darm_reg_t reg);
+uint8_t emu_thumb_mode(emu_thread_t *emu);
 
 /* Memory */
 uint8_t mem_read8(uint32_t addr);
@@ -669,9 +670,7 @@ void emu_tls_set(emu_thread_t *emu);
 bool emu_debug();
 bool emu_bypass();
 bool stack_addr();
-inline uint32_t instr_mask(darm_instr_t instr);
-
-inline double time_ms();
+uint32_t instr_mask(darm_instr_t instr);
 
 // pthread wrappers with error checking
 int mutex_lock(pthread_mutex_t *mutex);
