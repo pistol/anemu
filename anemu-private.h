@@ -220,8 +220,8 @@ typedef struct _emu_thread_t {
     uint16_t    nr_maps;          /* number of process maps available */
     uint32_t    taintreg[N_REGS]; /* taint storage for regs */
     int32_t     instr_count;      /* number of ops seen in current trap handler */
-    double      time_start;       /* execution time measurements */
-    double      time_end;
+    uint64_t    time_start;       /* execution time measurements */
+    uint64_t    time_end;
     int32_t     trace_fd;         /* trace file descriptor */
     bool        running;          /* flag to avoid stdio within sig handler */
     bool        stop;             /* emu stop requested */
@@ -237,6 +237,9 @@ static pthread_mutex_t mmap_lock  = PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t taint_lock = PTHREAD_MUTEX_INITIALIZER;
 
 static emu_global_t __emu_global = {
+#ifndef NDEBUG
+    .debug = 1,
+#endif
     .trace_fd = STDOUT_FILENO, // stdout = 2
     .target   = 0,
     .disabled = 0

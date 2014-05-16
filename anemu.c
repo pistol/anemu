@@ -1230,8 +1230,6 @@ inline bool emu_advance_pc(emu_thread_t *emu) {
 inline bool emu_singlestep(emu_thread_t *emu) {
     // 1. decode instr
     // emu_disasm_ref(pc, (emu_thumb_mode() ? 16 : 32)); /* rasm2 with libopcodes backend */
-    /* static const darm_t *d; */
-
     emu_disasm(emu, &emu->darm, CPU(pc));
 
     if (emu->skip) {
@@ -1368,7 +1366,6 @@ void emu_init() {
 
     init_start = getticks();
 
-    emu_global->debug = 1;
     emu_global->trap_bkpt = 0;
     emu_global->trap_segv = 0;
 
@@ -1379,13 +1376,17 @@ void emu_init() {
     M(emu_init_tracefile());
 #endif
 
+#ifndef NO_TAINT
+#ifndef PROFILE
     /* process maps */
     M(emu_parse_maps(emu_global));
+#endif
     /* taint tag storage */
     M(emu_init_taintmaps(emu_global));
 
     /* memory access via /proc/self/mem */
     M(emu_init_proc_mem());
+#endif
     M(emu_init_properties());
 
     // __atomic_swap(1, &emu.initialized);
@@ -1635,8 +1636,8 @@ inline uint8_t emu_disasm(emu_thread_t *emu, darm_t *d, uint32_t pc) {
         emu_log_debug("bytes: %d\n", emu->disasm_bytes);
 
 #ifndef PROFILE
-        darm_dump(d, STDOUT_FILENO); /* dump internal darm_t state */
         // darm_dump(d, emu.trace_fd);  /* dump internal darm_t state */
+        if (emu_debug()) darm_dump(d, STDOUT_FILENO); /* dump internal darm_t state */
 #endif
     }
 #endif  /* TRACE */
@@ -1971,8 +1972,10 @@ emu_handler_segv(int sig, siginfo_t *si, void *ucontext) {
     if (emu->running) {
         emu_abort("re-trap inside emu!\n");
     }
+#ifndef NDEBUG
     register uint32_t sp asm("sp");
     emu_log_debug("SP = %x\n", sp);
+#endif
     ucontext_t *uc = (ucontext_t *)ucontext;
     if (emu_debug()) {
         emu_siginfo(sig, si, uc);
@@ -2001,13 +2004,17 @@ emu_handler_segv(int sig, siginfo_t *si, void *ucontext) {
 
     if (sig == SIGSEGV) {
 #ifndef NO_TAINT
-        android_atomic_inc(&emu_global->trap_segv);
+#ifdef ATOMIC_STATS
+        atomic_inc(&emu_global->trap_segv);
+#else
+        emu_global->trap_segv++;
+#endif
         uint32_t addr_fault = uc->uc_mcontext.fault_address;
         if (emu_get_taint_mem(addr_fault) == TAINT_CLEAR) {
             /* false positive, single-step instruction */
             emu_log_info("[-] taint false positive %x\n", addr_fault);
-            // wipe register taint
             emu->running = 1;
+            // wipe register taint
             emu_clear_taintregs(emu);
             emu->time_start = getticks();
             emu_singlestep(emu);
@@ -2017,8 +2024,12 @@ emu_handler_segv(int sig, siginfo_t *si, void *ucontext) {
             emu_start(emu);
         }
 #endif  /* NO_TAINT */
-        android_atomic_inc(&emu_global->trap_bkpt);
     } else if (sig == SIGTRAP || sig == SIGILL) {
+#ifdef ATOMIC_STATS
+        atomic_inc(&emu_global->trap_bkpt);
+#else
+        emu_global->trap_bkpt++;
+#endif
         emu_log_info("[+] taint resume marker\n");
         emu_start(emu);
     } else {
@@ -2443,9 +2454,6 @@ emu_set_taint_array(uint32_t addr, uint32_t tag, uint32_t length) {
 #ifndef PROFILE
     // emu_dump_taintmaps();
 #endif
-    /* TODO: make previous for loop return a list of pages tainted this time */
-    /* this avoids protecting ALL pages ever seen so far */
-    emu_protect_mem();
     mutex_unlock(&taint_lock);
 
     emu_log_info("%s: complete.\n", __func__);
@@ -2646,8 +2654,8 @@ emu_protect_mem() {
             mprotectPage(page, flags);
         }
     }
-    emu_log_debug("protected memory.\n");
 }
+#endif
 
 inline void
 emu_unprotect_mem() {
@@ -2854,6 +2862,7 @@ void dump_backtrace(pid_t tid)
         free_backtrace_symbols(backtrace_symbols, frames);
     }
 }
+#endif
 
 // mutex wrappers with error checking
 inline int mutex_lock(pthread_mutex_t *mutex) {
@@ -2952,12 +2961,12 @@ void *mkstack(size_t size, size_t guard_size) {
 
 inline
 int32_t emu_thread_count_up() {
-    return android_atomic_inc(&emu_global->thread_count);
+    return atomic_inc(&emu_global->thread_count);
 }
 
 inline
 int32_t emu_thread_count_down() {
-    return android_atomic_dec(&emu_global->thread_count);
+    return atomic_dec(&emu_global->thread_count);
 }
 
 void emu_hook_thread_entry(void *arg) {
@@ -3000,11 +3009,11 @@ void emu_hook_thread_entry(void *arg) {
         }
 
         // FIXME: delay this until trap time? not all threads will emu
-        emu_log_debug("init TLS emu thread ...\n");
         emu_thread_t *emu = emu_alloc(sizeof(emu_thread_t));
         emu->tid = gettid();
         assert(emu->tid == thread->kernel_id);
         emu_tls_set(emu);
+        emu_log_debug("[+] init TLS emu thread\n");
     }
 }
 
@@ -3066,6 +3075,7 @@ void emu_hook_Zygote_forkAndSpecializeCommon(void *arg) {
     emu_hook_thread_entry((void *)pthread_self());
 }
 
+#ifndef NO_TAINT
 uint32_t emu_get_taint_file(int fd) {
 #ifdef DEBUG_FILE_TAINT
     int skip = 1;
@@ -3134,6 +3144,7 @@ int32_t emu_set_taint_file(int fd, uint32_t tag)
 /* syscalls used by trampolines */
 extern ssize_t __read(int, void *, size_t);
 extern ssize_t __write(int, void *, size_t);
+#endif  /* NO_TAINT */
 
 ssize_t check_read(int fd, void *buf, size_t count) {
     ssize_t ret = __read(fd, buf, count);
