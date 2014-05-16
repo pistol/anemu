@@ -67,7 +67,7 @@ void emu_siginfo(int sig, siginfo_t *si, ucontext_t *uc) {
     emu_log_debug("emu threads: %d\n", emu_global->thread_count);
 
     // we only expect two signals in emulation
-    assert(sig == SIGTRAP || sig == SIGSEGV);
+    assert(sig == SIGTRAP || sig == SIGSEGV || sig == SIGILL);
 
     dbg_dump_ucontext(uc);
 #ifdef WITH_VFP
@@ -1477,21 +1477,16 @@ void emu_stop(emu_thread_t *emu) {
 inline uint8_t emu_stop_trigger(emu_thread_t *emu) {
     const darm_t *d = &emu->darm;
     switch(d->instr) {
-    case I_BKPT: {
-        /* special flags */
-        /* entering- JNI: 1337 */
-        /* emu_single_step(); */
-        if (d->imm == MARKER_START_VAL) {
+    case I_UDF: {
+        if (d->w == MARKER_START) {
             emu_log_debug("MARKER: starting emu\n");
-            // bypass complete
             emu->bypass = 0;
-            /* advance PC but leave emu enabled */
             return 1;
-        } else if (d->imm == MARKER_STOP_VAL) {
-            emu_log_debug("MARKER: leaving emu due to JNI re-entry\n");
+        } else if (d->w == MARKER_STOP) {
+            emu_log_debug("MARKER: stopping emu\n");
             emu->stop = 1;
         } else {
-            emu_abort("MARKER: unexpected value! %x\n", d->imm);
+            emu_abort("MARKER: unexpected value! %x\n", d->instr);
         }
         break;
     }
@@ -1500,6 +1495,16 @@ inline uint8_t emu_stop_trigger(emu_thread_t *emu) {
         if (RREG(Rm) == MARKER_STOP_VAL) {
             emu_log_debug("MARKER: stopping standalone emu\n");
             emu->stop = 1;
+        }
+        break;
+    }
+    case I_SVC: {
+        if (d->w == MARKER_START) {
+            emu_log_debug("MARKER: starting emu\n");
+            // bypass complete
+            emu->bypass = 0;
+            /* advance PC but leave emu enabled */
+            return 1;
         }
         break;
     }
@@ -1517,7 +1522,7 @@ emu_init_handler(int sig,
                  void *stack,
                  size_t stack_size) {
     emu_log_debug("[+] registering %s (%d) handler sigaltstack sp: %p size: %d  threads: %d ...\n", get_signame(sig), sig, stack, stack_size, emu_global->thread_count);
-    assert(sig == SIGTRAP || sig == SIGSEGV);
+    assert(sig == SIGTRAP || sig == SIGSEGV || sig == SIGILL);
     assert(stack != NULL && stack_size >= MINSIGSTKSZ);
 
     /* 1. setup alternate stack for handler */
@@ -1911,6 +1916,8 @@ const char *get_signame(int sig) {
     switch(sig) {
     case SIGSEGV:    return "SIGSEGV";
     case SIGTRAP:    return "SIGTRAP";
+    case SIGILL:     return "SIGILL" ;
+    case SIGABRT:    return "SIGABRT";
     default:         return "?";
     }
 }
@@ -1931,6 +1938,12 @@ const char *get_sigcode(int signo, int code) {
         case TRAP_BRANCH: return "TRAP_BRANCH";
 #define TRAP_HWBKPT 4
         case TRAP_HWBKPT: return "TRAP_HWBKPT";
+        }
+        break;
+    case SIGILL:
+        switch (code) {
+        case ILL_ILLOPC:  return "ILL_ILLOPC";
+        case ILL_ILLTRP:  return "ILL_ILLTRP";
         }
         break;
     }
@@ -2003,15 +2016,22 @@ emu_handler_segv(int sig, siginfo_t *si, void *ucontext) {
     // SEGV_MAPPER: Address not mapped to object
     // SEGV_ACCER: Invalid permissions for mapped object
     // expecting SEGV_ACCER only!
-    assert((sig == SIGSEGV && si->si_code == SEGV_ACCERR) ||
-           (sig == SIGTRAP && si->si_code == TRAP_HWBKPT));
+    assert((sig == SIGSEGV && si->si_code == SEGV_ACCERR) || // taint trap
+           (sig == SIGTRAP && si->si_code == TRAP_BRKPT) ||  // start marker
+           (sig == SIGILL  && si->si_code == ILL_ILLOPC));   // stop  marker
 
     emu_ucontext(emu, uc);
 
-    uint32_t addr_fault = uc->uc_mcontext.fault_address;
+    if (sig == SIGTRAP) {
+        assert(RMEM32(CPU(pc)) == MARKER_START);
+    } else if (sig == SIGILL) {
+        assert(RMEM32(CPU(pc)) == MARKER_STOP);
+    }
+
     if (sig == SIGSEGV) {
 #ifndef NO_TAINT
         android_atomic_inc(&emu_global->trap_segv);
+        uint32_t addr_fault = uc->uc_mcontext.fault_address;
         if (emu_get_taint_mem(addr_fault) == TAINT_CLEAR) {
             /* false positive, single-step instruction */
             emu_log_info("[-] taint false positive %x\n", addr_fault);
@@ -2026,8 +2046,8 @@ emu_handler_segv(int sig, siginfo_t *si, void *ucontext) {
             emu_start(emu);
         }
 #endif  /* NO_TAINT */
-    } else if (sig == SIGTRAP) {
         android_atomic_inc(&emu_global->trap_bkpt);
+    } else if (sig == SIGTRAP || sig == SIGILL) {
         emu_log_info("[+] taint resume marker\n");
         emu_start(emu);
     } else {

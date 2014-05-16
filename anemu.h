@@ -10,18 +10,47 @@ extern "C" {  // only need to export C interface if
               // used by C++ source code
 #endif
 
-#define MARKER_START_VAL    0x100
-#define MARKER_STOP_VAL     0x200
+#define MARKER_START_VAL    32
+#define MARKER_STOP_VAL     0xfdee /* udf 0xfdee : KGDB_BREAKINST */
 
-#define ASM_MARKER(val)  asm volatile("bkpt " #val)
+/* Lifted from $KERNEL/arch/arm/kernel/ptrace.c */
+/*
+ * Breakpoint SWI instruction: SWI &9F0001
+ */
+#define BREAKINST_ARM_SWI	  0xef9f0001
 
-// #define EMU_MARKER_START ASM_MARKER(MARKER_START_VAL)
-// #define EMU_MARKER_STOP  ASM_MARKER(MARKER_STOP_VAL)
+/*
+ * New breakpoints - use an undefined instruction.  The ARM architecture
+ * reference manual guarantees that the following instruction space
+ * will produce an undefined instruction exception on all CPUs:
+ *
+ *  ARM:   xxxx 0111 1111 xxxx xxxx xxxx 1111 xxxx
+ *  Thumb: 1101 1110 xxxx xxxx
+ */
+#define BREAKINST_ARM	  0xe7f001f0 // udf #16 - SIGTRAP
 
-#define EMU_MARKER_START asm volatile("bkpt 0x100")
-#define EMU_MARKER_STOP  asm volatile("bkpt 0x200")
+#define GDB_BREAKINST   BREAKINST_ARM_SWI // SIGTRAP
+#define KGDB_BREAKINST  0xe7ffdefe        // udf #0xfdee - SIGILL
+
+/* #define MARKER_START  GDB_BREAKINST */
+#define MARKER_START  BREAKINST_ARM
+#define MARKER_STOP  KGDB_BREAKINST
+
+#define ASM(opcode)      asm volatile(".inst " __stringify(opcode))
+
+#define EMU_MARKER_START ASM(MARKER_START)
+#define EMU_MARKER_STOP  ASM(MARKER_STOP)
 
 #define unlikely(x) __builtin_expect(!!(x), 0)
+
+/* Lifted from $KERNEL/include/linux/stringify.h */
+/* Indirect stringification.  Doing two levels allows the parameter to be a
+ * macro itself.  For example, compile with -DFOO=bar, __stringify(FOO)
+ * converts to "bar".
+ */
+
+#define __stringify_1(x...)	#x
+#define __stringify(x...)	__stringify_1(x)
 
 /* Public API */
 
