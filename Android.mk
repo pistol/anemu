@@ -56,3 +56,22 @@ LOCAL_CFLAGS            += -DANDROID
 
 # include $(BUILD_SHARED_LIBRARY)
 include $(BUILD_STATIC_LIBRARY)
+
+include $(CLEAR_VARS)
+LOCAL_MODULE            := emu-matrix
+LOCAL_MODULE_TAGS       := optional
+LOCAL_REQUIRED_MODULES  := libdarm
+LOCAL_SHARED_LIBRARIES  := libc libdl
+LOCAL_WHOLE_STATIC_LIBRARIES  += libanemu libdarm
+LOCAL_STATIC_LIBRARIES  += libanemu libdarm
+LOCAL_ARM_MODE          := arm
+LOCAL_SRC_FILES         := tests/matrix.c
+LOCAL_CFLAGS            += -O0 -Wall -march=armv7-a -mcpu=cortex-a9 -mfloat-abi=soft
+# DEBUG: keep macros + debug symbols
+LOCAL_CFLAGS            += -g3
+# NDK_ROOT is automatically set when using ndk-build
+ifneq (,$(NDK_ROOT))
+	LOCAL_LDLIBS          += -L$(ANDROID)/arm/darm-v7/obj/local/armeabi-v7a/
+	LOCAL_LDFLAGS         += -ldarm -lc -llog
+endif
+include $(BUILD_EXECUTABLE)
