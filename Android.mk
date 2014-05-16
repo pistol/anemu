@@ -30,13 +30,19 @@ LOCAL_REQUIRED_MODULES  := libdarm
 LOCAL_SHARED_LIBRARIES  := libdl
 # LOCAL_SHARED_LIBRARIES  := libdl liblog libdarm libcorkscrew
 LOCAL_WHOLE_STATIC_LIBRARIES  += libdarm libcorkscrew
-# LOCAL_STATIC_LIBRARIES  += libr_asm libr_util libr_db libsdb libr
 LOCAL_ARM_MODE          := arm
 LOCAL_SRC_FILES         := anemu.c setcontext.S
 LOCAL_C_INCLUDES        += dalvik/vm/darm-v7
-# LOCAL_C_INCLUDES        += dalvik/vm/anemu/$(RASM)/include/libr
-LOCAL_CFLAGS            += -O0 -g -Wall -march=armv7-a -mcpu=cortex-a9
-LOCAL_CFLAGS            += -fPIC
+# NDK_ROOT is automatically set when using ndk-build
+ifneq (,$(NDK_ROOT))
+LOCAL_CFLAGS            += -DNDK_BUILD
+LOCAL_C_INCLUDES        += $(ANDROID)/arm/darm-v7
+endif
+LOCAL_CFLAGS            += -Wall -march=armv7-a -mcpu=cortex-a9 -mtune=cortex-a9 -mfpu=neon
+LOCAL_CFLAGS            += -Ofast
+# DEBUG: keep macros + debug symbols
+LOCAL_CFLAGS            += -g3
+LOCAL_CFLAGS            += -fno-omit-frame-pointer
 LOCAL_CFLAGS            += -nodefaultlibs -nostdlib
 LOCAL_LDFLAGS           := -Wl,--exclude-libs=libgcc.a
 
@@ -44,15 +50,19 @@ LOCAL_LDFLAGS           := -Wl,--exclude-libs=libgcc.a
 LOCAL_SYSTEM_SHARED_LIBRARIES :=
 LOCAL_STATIC_LIBRARIES += libc_nomalloc
 
-# FIXME: flags (defines) are not used?
-LOCAL_CFLAGS            += -DANDROID
 # measurements enabled, disable logging
 # LOCAL_CFLAGS            += -DPROFILE
-# LOCAL_CFLAGS            += -UNDEBUG
 
-# LOCAL_CFLAGS += -fno-function-sections
-# LOCAL_CFLAGS += -fno-omit-frame-pointer
-# LOCAL_CFLAGS += -pg
+# enable assertions by disabling NDEBUG flag
+LOCAL_CFLAGS              += -UNDEBUG
+# LOCAL_CFLAGS            += -DNDEBUG
+
+ifeq ($(ARCH_ARM_HAVE_VFP),true)
+LOCAL_CFLAGS += -DWITH_VFP
+endif
+ifeq ($(ARCH_ARM_HAVE_VFP_D32),true)
+LOCAL_CFLAGS += -DWITH_VFP_D32
+endif
 
 # include $(BUILD_SHARED_LIBRARY)
 include $(BUILD_STATIC_LIBRARY)
