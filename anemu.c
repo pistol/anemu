@@ -1,33 +1,3 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
-// #include <assert.h>
-#include <signal.h>
-#include <sys/mman.h>           /* mprotect */
-#include <errno.h>
-#include <asm/ptrace.h>         /* PSR bit macros */
-#include <pthread.h>
-#include <time.h>
-#include <string.h>             /* memset */
-#include <sys/prctl.h>          /* thread name */
-#include <sys/uio.h>            /* writev */
-#include <fcntl.h>              /* open, close */
-#include <dlfcn.h>              /* dladdr */
-#include <corkscrew/demangle.h> /* demangle C++ */
-#include <corkscrew/backtrace.h>
-#include <cutils/atomic.h>
-#include <cutils/properties.h>  /* adb setprop, getprop */
-#include <sys/xattr.h>          /* fsetxattr, fgetxattr */
-#include <sys/resource.h>       /* [set,get]rlimit */
-#define __STDC_FORMAT_MACROS 1
-#include <inttypes.h>
-
-#if HAVE_SETRLIMIT
-# include <sys/types.h>
-# include <sys/time.h>
-# include <sys/resource.h>
-#endif
-
 #include "anemu-private.h"
 
 #define TAINT_CLEAR 0x0
@@ -3119,7 +3089,6 @@ uint32_t emu_get_taint_file(int fd) {
             xtag = xbuf;
             emu_log_debug("%s : fd %d taint tag: 0x%x\n", __func__, fd, xtag);
         } else {
-#define ENOATTR ENODATA
             if (errno == ENOATTR) {
                 // emu_log_error("fgetxattr(%s): no taint tag\n", result);
             } else if (errno == ERANGE) {
@@ -3334,20 +3303,20 @@ void emu_tls_set(emu_thread_t *emu) {
 void emu_init_properties() {
     emu_log_info("[+] init properties\n");
     /* number of total instructions to emulate */
-    char prop[PROPERTY_VALUE_MAX]; // max is 92
-    property_get("debug.emu.stop_total", prop, "0");
+    char prop[PROP_VALUE_MAX]; // max is 92
+    property_get("debug.emu.stop_total", prop);
     emu_global->stop_total = (int32_t)atoi(prop);
     emu_log_debug("stop_total value: %d\n", emu_global->stop_total);
 
-    property_get("debug.emu.stop_handler", prop, "0");
+    property_get("debug.emu.stop_handler", prop);
     emu_global->stop_handler = (int32_t)atoi(prop);
     emu_log_debug("stop_handler value: %d\n", emu_global->stop_handler);
 
-    property_get("debug.emu.debug_offset", prop, "100");
+    property_get("debug.emu.debug_offset", prop);
     emu_global->debug_offset = (int32_t)atoi(prop);
     emu_log_debug("debug_offset value: %d\n", emu_global->debug_offset);
 
-    property_get("debug.emu.debug", prop, "0");
+    property_get("debug.emu.debug", prop);
     emu_global->debug = (int32_t)atoi(prop);
     emu_log_debug("debug value: %d\n", emu_global->debug);
 }

@@ -2,27 +2,60 @@
 #define _INCLUDE_ANEMU_PRIVATE_H_
 
 #include "anemu.h"
+#include <dlfcn.h>              /* dladdr */
+#include <errno.h>
+#include <fcntl.h>              /* open, close */
+#include <pthread.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>             /* memset */
+#include <sys/atomics.h>
+#include <sys/mman.h>           /* mprotect */
+#include <sys/prctl.h>          /* thread name */
+#include <sys/ptrace.h>         /* PSR bit macros */
+#include <sys/resource.h>       /* [set,get]rlimit */
+#include <sys/syscall.h>
+#include <sys/system_properties.h>
+#include <sys/uio.h>            /* writev */
+#include <time.h>
+#include <unistd.h>
+#ifdef EMU_DEMANGLE
+#include <corkscrew/demangle.h> /* demangle C++ */
+#include <corkscrew/backtrace.h>
+#endif
+#ifdef NDK_BUILD
+// NDK, unlike AOSP, does not provide ucontext.h and perf_event.h
+#include "perf_event.h"
+#include "ucontext.h"
+#define __read read
+#else
+#include <linux/perf_event.h>
+#endif
 
-// #define ANDROID
-// disable verbose logging for perf measurements
+#define __STDC_FORMAT_MACROS 1
+#include <inttypes.h>
+
+// xattr.h from $AOSP/dalvik/libattr/attr/xattr.h
+#include "xattr.h"              /* fsetxattr, fgetxattr */
+
+#define atomic_inc __atomic_inc
+#define atomic_dec __atomic_dec
+#define property_get __system_property_get
+#ifdef NDEBUG
 #define PROFILE
+#else
+#define TRACE
+#define TRACE_PATH "/sdcard/trace"
+#endif
+
 #ifndef NO_TAINT
 # define TAINT_PC
 # define EMU_MEM_PREAD
 #else
 # define NO_MPROTECT
 #endif
-#define TRACE
-#define NO_TAINT
-#define TRACE_PATH "/sdcard/trace"
-
-// NDK, unlike AOSP, does not provide ucontext.h
-#ifdef NDK_BUILD
-#include "ucontext.h"
-#endif
 
 #ifdef ANDROID
-// #include <sys/cdefs.h>
 #include <android/log.h>
 #define LOG_TAG "anemu"
 #define LOGI(...) ((void)__android_log_print(ANDROID_LOG_INFO,    LOG_TAG, __VA_ARGS__))
@@ -30,11 +63,9 @@
 #define LOGV(...) ((void)__android_log_print(ANDROID_LOG_VERBOSE, LOG_TAG, __VA_ARGS__))
 #define LOGE(...) ((void)__android_log_print(ANDROID_LOG_ERROR,   LOG_TAG, __VA_ARGS__))
 #define LOGW(...) ((void)__android_log_print(ANDROID_LOG_WARN,    LOG_TAG, __VA_ARGS__))
-//#define printf LOGI
-#else
+#define printf LOGI
 #endif
 
-// TODO: use LOGE, LOGW, LOGI, LOGD
 #ifndef PROFILE
 // #define emu_log_trace(...) { if (emu.trace_file) { lprintf(emu.trace_file, __VA_ARGS__); fflush(emu.trace_file); }}
 #define emu_log_trace emu_log_info

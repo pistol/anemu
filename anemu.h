@@ -3,12 +3,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
-#include <signal.h>
-
-#ifdef __cplusplus
-extern "C" {  // only need to export C interface if
-              // used by C++ source code
-#endif
+#include <sys/types.h>
 
 #define MARKER_START_VAL    32
 #define MARKER_STOP_VAL     0xfdee /* udf 0xfdee : KGDB_BREAKINST */
@@ -65,6 +60,9 @@ uint64_t __tick_start, __tick_end;
 #else
 #define M(x) x
 #endif
+
+#include <sys/cdefs.h>
+__BEGIN_DECLS
 /* Public API */
 
 /* Hooks */
@@ -100,8 +98,6 @@ int emu_initialized();
 void gdb_wait();
 uint64_t getticks();
 
-#ifdef __cplusplus
-}
-#endif
+__END_DECLS
 
 #endif  /* _INCLUDE_ANEMU_H_ */
