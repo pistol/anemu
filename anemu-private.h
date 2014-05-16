@@ -16,9 +16,13 @@
 #define NO_TAINT
 #define TRACE_PATH "/sdcard/trace"
 
+// NDK, unlike AOSP, does not provide ucontext.h
+#ifdef NDK_BUILD
+#include "ucontext.h"
+#endif
+
 #ifdef ANDROID
 // #include <sys/cdefs.h>
-#include <sys/ucontext.h>
 #include <android/log.h>
 #define LOG_TAG "anemu"
 #define LOGI(...) ((void)__android_log_print(ANDROID_LOG_INFO,    LOG_TAG, __VA_ARGS__))
@@ -28,7 +32,6 @@
 #define LOGW(...) ((void)__android_log_print(ANDROID_LOG_WARN,    LOG_TAG, __VA_ARGS__))
 //#define printf LOGI
 #else
-#include <ucontext.h>
 #endif
 
 // TODO: use LOGE, LOGW, LOGI, LOGD
