@@ -2520,7 +2520,14 @@ emu_set_taint_array(uint32_t addr, uint32_t tag, uint32_t length) {
     for (p = addr; p < (addr + length); p += PAGE_SIZE) {
         taintpage_t *tp = emu_get_taintpage(p);
         if (!(*tp == 0 && tag == TAINT_CLEAR)) {
-            for (x = p; x < (p + PAGE_SIZE); x += 4) {
+            uint32_t p_end;
+            // safety check if current page would cross the taint array end
+            if (p + PAGE_SIZE <= (addr + length)) {
+                p_end = p + PAGE_SIZE;
+            } else {
+                p_end = addr + length;
+            }
+            for (x = p; x < p_end; x += 4) {
                 emu_set_taint_mem(x, tag);
             }
         }
