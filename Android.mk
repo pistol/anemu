@@ -88,3 +88,39 @@ ifneq (,$(NDK_ROOT))
 	LOCAL_LDFLAGS         += -lc -llog -lanemu -ldarm
 endif
 include $(BUILD_EXECUTABLE)
+
+include $(CLEAR_VARS)
+LOCAL_MODULE            := emu-jpeg
+LOCAL_MODULE_TAGS       := optional
+LOCAL_REQUIRED_MODULES  := libdarm
+LOCAL_SHARED_LIBRARIES  := libexif
+LOCAL_C_INCLUDES        := external/jhead
+LOCAL_WHOLE_STATIC_LIBRARIES  += libanemu
+LOCAL_ARM_MODE          := arm
+LOCAL_SRC_FILES         := tests/jpeg.c
+LOCAL_CFLAGS            += -O0 -Wall -march=armv7-a -mcpu=cortex-a9 -mfloat-abi=soft
+# DEBUG: keep macros + debug symbols
+LOCAL_CFLAGS            += -g3
+include $(BUILD_EXECUTABLE)
+
+include $(CLEAR_VARS)
+LOCAL_MODULE            := emu-asm
+LOCAL_MODULE_TAGS       := optional
+LOCAL_WHOLE_STATIC_LIBRARIES  += libanemu
+LOCAL_ARM_MODE          := arm
+LOCAL_SRC_FILES         := tests/asm.c
+LOCAL_CFLAGS            += -O0 -Wall -march=armv7-a -mcpu=cortex-a9 -mfloat-abi=soft
+# DEBUG: keep macros + debug symbols
+LOCAL_CFLAGS            += -g3
+include $(BUILD_EXECUTABLE)
+
+include $(CLEAR_VARS)
+LOCAL_MODULE            := emu-trap
+LOCAL_MODULE_TAGS       := optional
+LOCAL_WHOLE_STATIC_LIBRARIES  += libanemu
+LOCAL_ARM_MODE          := arm
+LOCAL_SRC_FILES         := tests/trap.c
+LOCAL_CFLAGS            += -O3 -Wall -march=armv7-a -mcpu=cortex-a9
+# DEBUG: keep macros + debug symbols
+# LOCAL_CFLAGS            += -g3
+include $(BUILD_EXECUTABLE)

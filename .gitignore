@@ -6,5 +6,8 @@ anemu
 tests/zlib
 tests/matrix
 tests/target
+tests/trap
 libanemu.a
 libanemu.so
+obj/
+libs/
