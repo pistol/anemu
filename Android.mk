@@ -36,6 +36,7 @@ LOCAL_C_INCLUDES        += dalvik/vm/darm-v7
 # NDK_ROOT is automatically set when using ndk-build
 ifneq (,$(NDK_ROOT))
 LOCAL_CFLAGS            += -DNDK_BUILD
+LOCAL_SRC_FILES         += xattr.c
 LOCAL_C_INCLUDES        += $(ANDROID)/arm/darm-v7
 endif
 LOCAL_CFLAGS            += -Wall -march=armv7-a -mcpu=cortex-a9 -mtune=cortex-a9 -mfpu=neon
@@ -44,6 +45,7 @@ LOCAL_CFLAGS            += -Ofast
 LOCAL_CFLAGS            += -g3
 LOCAL_CFLAGS            += -fno-omit-frame-pointer
 LOCAL_CFLAGS            += -nodefaultlibs -nostdlib
+LOCAL_CFLAGS            += -fno-strict-aliasing
 LOCAL_LDFLAGS           := -Wl,--exclude-libs=libgcc.a
 
 # explicitly out implicit libs like libdl and libc
@@ -70,7 +72,7 @@ include $(BUILD_STATIC_LIBRARY)
 include $(CLEAR_VARS)
 LOCAL_MODULE            := emu-matrix
 LOCAL_MODULE_TAGS       := optional
-LOCAL_REQUIRED_MODULES  := libdarm
+LOCAL_REQUIRED_MODULES  := libanemu libdarm
 LOCAL_SHARED_LIBRARIES  := libc libdl
 LOCAL_WHOLE_STATIC_LIBRARIES  += libanemu libdarm
 LOCAL_STATIC_LIBRARIES  += libanemu libdarm
@@ -81,7 +83,8 @@ LOCAL_CFLAGS            += -O0 -Wall -march=armv7-a -mcpu=cortex-a9 -mfloat-abi=
 LOCAL_CFLAGS            += -g3
 # NDK_ROOT is automatically set when using ndk-build
 ifneq (,$(NDK_ROOT))
+	LOCAL_LDLIBS          += -L$(ANDROID)/arm/anemu/obj/local/armeabi-v7a/
 	LOCAL_LDLIBS          += -L$(ANDROID)/arm/darm-v7/obj/local/armeabi-v7a/
-	LOCAL_LDFLAGS         += -ldarm -lc -llog
+	LOCAL_LDFLAGS         += -lc -llog -lanemu -ldarm
 endif
 include $(BUILD_EXECUTABLE)
