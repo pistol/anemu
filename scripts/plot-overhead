@@ -1,0 +1,71 @@
+#!/bin/bash
+
+title="System Overhead"
+xlabel=""
+ylabel="Cycles"
+
+echo $app
+echo $title
+echo $xlabel
+echo $ylabel
+
+input="overhead-cycles.txt"
+output="overhead"
+
+gnuplot -persist << EOF
+set terminal postscript eps size 6in, 3in color font 'Verdana,18'
+
+set output '$output.eps'
+set key top left
+set termoption dash
+
+set style line 1 lt 1 lw 0 pt 2 lc rgb "#009900" # green
+set style line 2 lt 1 lw 0 pt 7 lc rgb "#0080FF" # blue
+set style line 3 lt 1 lw 0 pt 6 lc rgb "red"
+set style line 4 lt 1 lw 0 pt 5 lc rgb "orange"
+set style line 5 lt 1 lw 0 pt 5 lc rgb "purple"
+
+set boxwidth 0.5 absolute
+#set lmargin 4.5
+
+set title "$title"
+# set xlabel "$xlabel"
+set ylabel "$ylabel"
+# set y2label "$y2label"
+
+# define axis
+# remove border on top and right and set color to gray
+set style line 11 lc rgb '#808080' lt 1
+set border 3 back ls 11
+set tics nomirror
+# define grid
+set style line 12 lc rgb '#808080' lt 0 lw 1
+set grid back ls 12
+
+set xtics nomirror autofreq
+# set ytics -10,10,10
+set xtics rotate by -45
+
+set style fill solid
+
+set output '$output-cycles.eps'
+plot '$input' using 1: xtic(3) w boxes ls 2 title ''
+
+set output '$output-scaled.eps'
+set ylabel "Cycles (Thousands)"
+plot '$input' using (\$1/1000): xtic(3) w boxes ls 2 title ''
+# ymin = GPVAL_DATA_Y_MIN
+ymin = `cat $input | awk '{print $1'} | sort -n | head -1`
+
+set output '$output-normalized.eps'
+set title "System Overhead\nRelative to null syscall"
+set ylabel "Normalized Overhead\n"
+plot '$input' using (\$1/ymin): xtic(3) w boxes ls 2 title ''
+
+EOF
+epstopdf $output-cycles.eps
+rm $output-cycles.eps
+epstopdf $output-scaled.eps
+rm $output-scaled.eps
+epstopdf $output-normalized.eps
+rm $output-normalized.eps

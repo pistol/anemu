@@ -1,0 +1,100 @@
+#!/bin/bash
+
+title="Emulation Trap Breakdown"
+xlabel=""
+
+echo $app
+echo $title
+echo $xlabel
+echo $ylabel
+
+input="traps.txt"
+output="traps"
+
+gnuplot -persist << EOF
+set terminal postscript eps size 3in, 3in color enhanced font 'Verdana,18'
+
+set output '$output.eps'
+set key below
+set termoption dash
+
+set style line 1 lt 1 lw 0 pt 2 lc rgb "#228B22" # 
+set style line 2 lt 1 lw 0 pt 7 lc rgb "green"
+set style line 3 lt 1 lw 0 pt 6 lc rgb "#0080FF"
+set style line 4 lt 1 lw 0 pt 5 lc rgb "#4169E1"
+set style line 5 lt 1 lw 0 pt 5 lc rgb "purple"
+
+set boxwidth 0.8 absolute
+#set lmargin 4.5
+
+set title "$title"
+# set xlabel "$xlabel"
+set ylabel "$ylabel"
+# set y2label "$y2label"
+
+# define axis
+# remove border on top and right and set color to gray
+set style line 11 lc rgb '#808080' lt 1
+set border 3 back ls 11
+set tics nomirror
+# define grid
+set style line 12 lc rgb '#808080' lt 0 lw 1
+set grid back ls 12
+
+set xtics nomirror autofreq
+# set ytics -10,10,10
+set xtics rotate by -45
+
+set style fill solid
+
+set style data histograms
+set style histogram rowstacked gap 1
+
+set ylabel "Trap Count"
+
+plot '$input' using 2:xtic(1) ls 1 title col, \
+           '' using 3:xtic(1) ls 2 title col, \
+           '' using 4:xtic(1) ls 3 title col, \
+           '' using 5:xtic(1) ls 4 title col
+
+set output "$output-percent.eps"
+set ylabel "Trap Percentage"
+set yrange [0:100]
+set ytics 20
+set mytics 2
+plot 'traps-percent.txt' using 2:xtic(1) ls 1 title col, \
+           '' using 3:xtic(1) ls 2 title col, \
+           '' using 4:xtic(1) ls 3 title col, \
+           '' using 5:xtic(1) ls 4 title col
+
+
+set output "mem-tainted.eps"
+set ylabel "Memory Percentage"
+set title "Memory Access Breakdown"
+set yrange [0:100]
+set ytics 20
+set mytics 2
+plot 'mem-tainted.txt' using 2:xtic(1) ls 1 title col, \
+           '' using 3:xtic(1) ls 2 title col, \
+           '' using 4:xtic(1) ls 3 title col, \
+           '' using 5:xtic(1) ls 4 title col
+
+
+set output "time-kernel.eps"
+set ylabel "Fraction of Time"
+set title "Time spent in User or Kernel"
+set yrange [0:100]
+set ytics 20
+set mytics 2
+plot 'kernel.txt' using (\$2/(\$2+\$3)*100):xtic(1) ls 1 title col(2), \
+               '' using (\$3/(\$2+\$3)*100) ls 3 title col(3)
+
+EOF
+epstopdf $output.eps
+rm $output.eps
+epstopdf $output-percent.eps
+rm $output-percent.eps
+epstopdf mem-tainted.eps
+rm mem-tainted.eps
+epstopdf time-kernel.eps
+rm time-kernel.eps
