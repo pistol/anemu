@@ -81,6 +81,8 @@ int emu_trampoline_write(int fd, void *buf, size_t count);
 uint32_t emu_target();
 void emu_set_target(pid_t pid);
 void emu_set_standalone(bool status);
+bool emu_set_protect(bool state);
+void emu_mprotect_mem(bool state);
 
 /* emulate starting at a given address (e.g. function) */
 uint32_t emu_function(void (*fun)());
@@ -89,10 +91,18 @@ void emu_set_taint_array(uint32_t addr, uint32_t tag, uint32_t length);
 uint32_t emu_get_taint_array(uint32_t addr, uint32_t length);
 uint32_t emu_get_taint_pages();
 
+uint32_t emu_dump_taintmaps();
+uint32_t emu_dump_taintpages();
+
+void emu_mprotect_mem(bool state);
+#define emu_protect_mem()   emu_mprotect_mem(true)
+#define emu_unprotect_mem() emu_mprotect_mem(false)
+
 bool emu_running();
 uint8_t emu_disabled();
 int32_t emu_get_trace_fd();
 int emu_initialized();
+void emu_dump_stats();
 
 /* Debugging */
 void gdb_wait();

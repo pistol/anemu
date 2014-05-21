@@ -191,11 +191,20 @@ typedef struct _emu_global_t {
     taintmap_t taintmaps[MAX_TAINTMAPS];   /* taint storage for memory */
     int32_t    running;                    /* number of currently emulating threads */
     bool       disabled;                   /* prevent further emulation */
+    bool       protect;                    /* dynamic toggle for taint mprotect */
     bool       standalone;        /* standalone or target based emu */
     uint32_t   target;            /* pid targetted for emulation */
     int32_t    instr_total;       /* number of ops seen so far */
     int32_t    trap_bkpt;         /* trap counter */
     int32_t    trap_segv;
+    uint32_t   taint_hit;
+    uint32_t   taint_hit_stack;
+    uint32_t   taint_miss;
+    uint32_t   taint_miss_stack;
+    uint32_t   taint_mem_read;
+    uint32_t   taint_mem_write;
+    uint32_t   mem_read;
+    uint32_t   mem_write;
     int32_t    trace_fd;          /* trace file descriptor */
     int32_t    mem_fd;            /* memory access via /proc/self/mem */
     int32_t    thread_count;      /* number of threads configured for emu (sigaltstacks) */
@@ -205,6 +214,7 @@ typedef struct _emu_global_t {
     int32_t    stop_total;
     int32_t    stop_handler;
     int32_t    debug_offset;
+    int32_t    selective;
 } emu_global_t;
 
 /* Per-Thread emu state */
@@ -238,11 +248,13 @@ static pthread_mutex_t taint_lock = PTHREAD_MUTEX_INITIALIZER;
 
 static emu_global_t __emu_global = {
 #ifndef NDEBUG
-    .debug = 1,
+    .debug = true,
 #endif
+    .protect = true,           // default mprotect newly (un)tainted pages
     .trace_fd = STDOUT_FILENO, // stdout = 2
     .target   = 0,
-    .disabled = 0
+    .disabled = 0,
+    .selective = 1
 };
 
 static emu_global_t *emu_global = &__emu_global;
@@ -631,8 +643,8 @@ static void emu_clear_taintregs(emu_thread_t *emu);
 static uint8_t emu_regs_tainted(emu_thread_t *emu);
 static void emu_init_taintmaps(emu_global_t *emu_global);
 static taintmap_t *emu_get_taintmap(uint32_t addr);
-static uint32_t emu_dump_taintmaps();
-static uint32_t emu_dump_taintpages();
+uint32_t emu_dump_taintmaps();
+uint32_t emu_dump_taintpages();
 static uint32_t emu_get_taint_mem(uint32_t addr);
 static void emu_set_taint_mem(uint32_t addr, uint32_t tag);
 // next two defined in anemu.h already
@@ -667,8 +679,11 @@ uint32_t emu_get_taint_file(int fd);
 int32_t emu_set_taint_file(int fd, uint32_t tag);
 emu_thread_t* emu_tls_get();
 void emu_tls_set(emu_thread_t *emu);
+bool emu_protect();
+bool emu_set_running(bool state);
 bool emu_debug();
 bool emu_bypass();
+bool emu_selective();
 bool stack_addr();
 uint32_t instr_mask(darm_instr_t instr);
 
@@ -687,8 +702,6 @@ static int8_t mprotectPage(uint32_t addr, uint32_t flags);
 #define mprotectPage(...) (void)(NULL)
 #endif
 
-void emu_protect_mem();
-void emu_unprotect_mem();
 int emu_mark_page(uint32_t addr);
 int emu_unmark_page(uint32_t addr);
 void emu_clear_taintpages();

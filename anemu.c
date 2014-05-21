@@ -1375,6 +1375,10 @@ void emu_init() {
 
     emu_global->trap_bkpt = 0;
     emu_global->trap_segv = 0;
+    emu_global->taint_miss = 0;
+    emu_global->taint_hit = 0;
+    emu_global->taint_miss_stack = 0;
+    emu_global->taint_hit_stack = 0;
 
     emu_log_debug("initializing emu state ...\n");
 
@@ -1404,9 +1408,10 @@ void emu_init() {
 }
 
 void emu_start(emu_thread_t *emu) {
-    emu_log_info("starting emulation ...\n\n");
+    emu_log_debug("starting emulation ...\n");
 
-    emu->running = 1;
+    emu_set_running(true);
+    emu_set_protect(true);
     // wipe register taint
     emu_clear_taintregs(emu);
     emu->time_start = getticks();
@@ -1423,7 +1428,7 @@ void emu_stop(emu_thread_t *emu) { // Hammertime!
 
     emu->time_end = getticks();
     uint64_t delta = emu->time_end - emu->time_start;
-    LOGD("resuming exec pc %0lx -> %0lx time (cycles): %"PRIu64" instr: %d time/instr (cycles): %"PRIu64"\n",
+    emu_log_debug("resuming exec pc %0lx -> %0lx time (cycles): %"PRIu64" instr: %d time/instr (cycles): %"PRIu64"\n",
                  emu->original.uc_mcontext.arm_pc,
                  emu->current.uc_mcontext.arm_pc,
                  delta,
@@ -1431,21 +1436,17 @@ void emu_stop(emu_thread_t *emu) { // Hammertime!
                  delta / emu->instr_count);
 
 #ifndef NO_TAINT
-    if (emu_regs_tainted(emu)) {
+    if (emu_selective() && emu_regs_tainted(emu)) {
         emu_log_warn("WARNING: stopping emu with tainted regs!\n");
     }
 #endif
     if (emu_debug()) {
         emu_dump(emu);
         emu_dump_taintmaps();
+        emu_dump_stats();
     }
     emu->stop = 0;
     emu->running = 0;
-    emu_log_info("emulation stopped. total instr: %d traps bkpt: %d segv: %d\n",
-                 emu_global->instr_total,
-                 emu_global->trap_bkpt,
-                 emu_global->trap_segv
-                 );
     emu->instr_count = 0;
     emu_log_debug(LOG_BANNER_SIG);
     /* if we are not in standalone, we need to restore execution context to latest values */
@@ -1788,6 +1789,57 @@ void emu_dump_cpsr(emu_thread_t *emu) {
                   );
 }
 
+void emu_dump_stats() {
+    LOGI("[s] total instr: %d traps bkpt: %d segv: %d\n",
+         emu_global->instr_total,
+         emu_global->trap_bkpt,
+         emu_global->trap_segv);
+    uint32_t noshit  = emu_global->taint_hit  - emu_global->taint_hit_stack;
+    uint32_t nosmiss = emu_global->taint_miss - emu_global->taint_miss_stack;
+    LOGI("[s] taint ~SHit SHit ~SMiss SMiss: %7d %7d %7d %7d\n",
+         noshit,
+         emu_global->taint_hit_stack,
+         nosmiss,
+         emu_global->taint_miss_stack
+         );
+    double total_traps = emu_global->taint_hit + emu_global->taint_miss;
+    LOGI("[s] total traps: %.0f % ~SHit SHit ~SMiss Smiss (%): %2.1f %2.1f %2.1f %2.1f\n",
+         total_traps,
+         noshit  / total_traps * 100,
+         emu_global->taint_hit_stack  / total_traps * 100,
+         nosmiss  / total_traps * 100,
+         emu_global->taint_miss_stack / total_traps * 100
+         );
+    double stack_traps = emu_global->taint_hit_stack + emu_global->taint_miss_stack;
+    LOGI("[s] stack traps: %.0f (%2.1f%) hit miss(%): %2.1f %2.1f\n",
+         stack_traps,
+         stack_traps / total_traps * 100,
+         emu_global->taint_hit_stack  / stack_traps * 100,
+         emu_global->taint_miss_stack / stack_traps * 100
+         );
+
+    LOGI("[s] mem read vs tainted: %d %d (%2.1f%)\n",
+         emu_global->mem_read,
+         emu_global->taint_mem_read,
+         emu_global->taint_mem_read / (double)emu_global->mem_read * 100
+         );
+    LOGI("[s] mem write vs tainted: %d %d (%2.1f%)\n",
+         emu_global->mem_write,
+         emu_global->taint_mem_write,
+         emu_global->taint_mem_write / (double)emu_global->mem_write * 100
+         );
+
+    double ntread  = emu_global->mem_read  - emu_global->taint_mem_read;
+    double ntwrite = emu_global->mem_write - emu_global->taint_mem_write;
+    double memrw   = emu_global->mem_read  + emu_global->mem_write;
+    LOGI("[s] mem ~TRead Tread ~TWrite TWrite: %-2.1f %-2.1f %-2.1f %-2.1f\n",
+         ntread/memrw * 100,
+         emu_global->taint_mem_read / memrw * 100,
+         ntwrite/memrw * 100,
+         emu_global->taint_mem_write / memrw * 100
+         );
+}
+
 void emu_map_dump(map_t *m) {
     if (m != NULL) {
         emu_log_debug("%x-%x [%6u pages] %c%c%c%c %8llx %3x:%02x %8u %s\n",
@@ -2017,9 +2069,17 @@ emu_handler_segv(int sig, siginfo_t *si, void *ucontext) {
         emu_global->trap_segv++;
 #endif
         uint32_t addr_fault = uc->uc_mcontext.fault_address;
+        bool stack_taint = stack_addr(addr_fault);
         if (emu_get_taint_mem(addr_fault) == TAINT_CLEAR) {
             /* false positive, single-step instruction */
-            emu_log_info("[-] taint false positive %x\n", addr_fault);
+            emu_log_debug("[-] taint miss %x\n", addr_fault);
+#ifdef ATOMIC_STATS
+            atomic_inc(&emu_global->taint_miss);
+            if (stack_taint) atomic_inc(emu_global->taint_miss_stack);
+#else
+            emu_global->taint_miss++;
+            if (stack_taint) emu_global->taint_miss_stack++;
+#endif
             emu->running = 1;
             // wipe register taint
             emu_clear_taintregs(emu);
@@ -2027,7 +2087,14 @@ emu_handler_segv(int sig, siginfo_t *si, void *ucontext) {
             emu_singlestep(emu);
         } else {
             /* instruction accessing tainted memory */
-            emu_log_info("[+] taint trap %x\n", addr_fault);
+            emu_log_debug("[+] taint hit %x\n", addr_fault);
+#ifdef ATOMIC_STATS
+            atomic_inc(&emu_global->taint_hit);
+            if (stack_taint) atomic_inc(emu_global->taint_hit_stack);
+#else
+            emu_global->taint_hit++;
+            if (stack_taint) emu_global->taint_hit_stack++;
+#endif
             emu_start(emu);
         }
 #endif  /* NO_TAINT */
@@ -2037,7 +2104,7 @@ emu_handler_segv(int sig, siginfo_t *si, void *ucontext) {
 #else
         emu_global->trap_bkpt++;
 #endif
-        emu_log_info("[+] taint resume marker\n");
+        emu_log_debug("[+] taint resume marker\n");
         emu_start(emu);
     } else {
         emu_abort("unexpected sig");
@@ -2290,7 +2357,7 @@ emu_dump_taintmaps_slow() {
 }
 
 // taintmaps are dumped in ranges for compact output
-static uint32_t
+uint32_t
 emu_dump_taintmaps() {
     // validation only
     // emu_dump_taintmaps_slow();
@@ -2341,7 +2408,7 @@ emu_dump_taintmaps() {
                             // convert ranges offset to original word addresses
                             range_start = tm->start + range_start * sizeof(uint32_t);
                             range_end   = tm->start + range_end   * sizeof(uint32_t);
-                            emu_log_info("taint range %2d: %s start: %x end: %x length: %5d tag: %x\n",
+                            LOGI("taint range %2d: %s start: %x end: %x length: %5d tag: %x\n",
                                          ranges,
                                          (idx == TAINTMAP_LIB) ? "lib  " : "stack",
                                          range_start, range_end, range_end - range_start, range_tag
@@ -2362,7 +2429,7 @@ emu_dump_taintmaps() {
     return ranges;
 }
 
-static uint32_t
+uint32_t
 emu_dump_taintpages() {
     emu_log_debug("dumping taintpages...\n");
     uint32_t pages = 0;
@@ -2384,7 +2451,7 @@ emu_dump_taintpages() {
             if (count) { // tainted page
                 assert(count <= TAINTPAGE_SIZE);
                 uint32_t page_addr = tm->start + page_idx * PAGE_SIZE;
-                emu_log_info("taint page %x count: %4d", page_addr, count);
+                LOGI("taint page %x count: %4d words", page_addr, count);
                 pages++;
             }
         }
@@ -2438,10 +2505,10 @@ void emu_set_taint_mem(uint32_t addr, uint32_t tag) {
 void
 emu_set_taint_array(uint32_t addr, uint32_t tag, uint32_t length) {
     if (emu_disabled()) {
-        LOGD("%s: emu disabled\n", __func__);
+        emu_log_debug("%s: emu disabled\n", __func__);
         return;
     }
-    emu_log_info("%s: addr: %x tag: %x length: %d\n", __func__, addr, tag, length);
+    emu_log_debug("%s: addr: %x tag: %x length: %d\n", __func__, addr, tag, length);
     assert(addr != 0 && length > 0);
 
     // Important: must initialize state first - this includes necessary logging and taintmaps
@@ -2464,7 +2531,7 @@ emu_set_taint_array(uint32_t addr, uint32_t tag, uint32_t length) {
 #endif
     mutex_unlock(&taint_lock);
 
-    emu_log_info("%s: complete.\n", __func__);
+    emu_log_debug("%s: complete.\n", __func__);
 }
 
 uint32_t
@@ -2473,7 +2540,7 @@ emu_get_taint_array(uint32_t addr, uint32_t length) {
     if (emu_disabled() || !emu_initialized()) return TAINT_CLEAR;
 
     // can't use logging via fprintf since we are getting called from a __swrite()
-    emu_log_info("%s: addr: %x length: %d\n", __func__, addr, length);
+    emu_log_debug("%s: addr: %x length: %d\n", __func__, addr, length);
     assert(addr != 0 && length > 0);
 
     uint32_t ret = TAINT_CLEAR;
@@ -2505,15 +2572,17 @@ emu_update_taintpage(uint32_t page, int8_t increment) {
     taintpage_t *tp = emu_get_taintpage(page);
 
     assert(!(*tp == TAINTPAGE_SIZE && increment == +1));
-    if (*tp == 0 && increment == +1) {
-        emu_log_taint("taint: losing virgin mprotect page: %x\n", page);
-        static const uint32_t flags = PROT_NONE;
-        mprotectPage(page, flags);
-    } else if (*tp == +1 && increment == -1) {
-        emu_log_taint("taint: become virgin mprotect page: %x\n", page);
-        // TODO: extend taintpage_t to restore original page flags (r/w/x)
-        static const uint32_t flags = PROT_READ | PROT_WRITE;
-        mprotectPage(page, flags);
+    if (emu_protect()) {
+        if (*tp == 0 && increment == +1) {
+            emu_log_taint("taint: losing virgin mprotect page: %x\n", page);
+            static const uint32_t flags = PROT_NONE;
+            mprotectPage(page, flags);
+        } else if (*tp == +1 && increment == -1) {
+            emu_log_taint("taint: become virgin mprotect page: %x\n", page);
+            // TODO: extend taintpage_t to restore original page flags (r/w/x)
+            static const uint32_t flags = PROT_READ | PROT_WRITE;
+            mprotectPage(page, flags);
+        }
     }
     assert(!(*tp == 0 && increment == -1));
     // TODO: atomic update global nr_taintpages (track 0->1 and 1->0 page counts)
@@ -2652,23 +2721,10 @@ emu_get_taintpages() {
 
 // caller must hold taint_lock
 void
-emu_protect_mem() {
-    emu_log_debug("protecting memory...\n");
-    uint32_t idx;
-    /* protect all pages in unique list */
-    static const uint32_t flags = PROT_NONE;
-    for (idx = 0; idx < MAX_TAINTPAGES; idx++) {
-        uint32_t page = emu_global->taintpages[idx];
-        if (page != 0) {
-            mprotectPage(page, flags);
-        }
-    }
-}
-#endif
-
-void
-emu_unprotect_mem() {
-    static const uint32_t flags = PROT_READ | PROT_WRITE;
+emu_mprotect_mem(bool state) {
+    // true  prevents (tainted) page access (NONE)
+    // false makes (untainted) page accessible as RW
+    const uint32_t flags = state ? PROT_NONE : PROT_READ | PROT_WRITE;
     uint32_t idx;
     taintmap_t *tm;
     for (idx = TAINTMAP_LIB; idx < MAX_TAINTMAPS; idx++) {
@@ -2683,11 +2739,12 @@ emu_unprotect_mem() {
             taintpage_t count = tm->pages[page_idx];
             if (count) {
                 uint32_t page = tm->start + page_idx * PAGE_SIZE;
-                emu_log_debug("unprotect page: %x taint count: %d\n", page, count);
+                emu_log_debug("%sprotect page: %x taint count: %d\n", state ? "" : "un", page, count);
                 mprotectPage(page, flags);
             }
         }
     }
+    emu_set_protect(true);
 }
 
 inline
@@ -2708,6 +2765,16 @@ bool emu_set_running(bool state) {
 }
 
 inline
+bool emu_protect() {
+    return emu_global->protect;
+}
+
+inline
+bool emu_set_protect(bool state) {
+    return emu_global->protect = state;
+}
+
+inline
 bool emu_debug() {
     return emu_global->debug;
 }
@@ -2718,6 +2785,11 @@ bool emu_bypass() {
     assert(emu);
     // only bypass when emu is running
     return emu->running ? emu->bypass : 0;
+}
+
+inline
+bool emu_selective() {
+    return emu_global->selective;
 }
 
 inline
@@ -3326,6 +3398,11 @@ void emu_init_properties() {
     emu_log_info("[+] init properties\n");
     /* number of total instructions to emulate */
     char prop[PROP_VALUE_MAX]; // max is 92
+
+    property_get("debug.emu.debug", prop);
+    emu_global->debug = (int32_t)atoi(prop);
+    emu_log_debug("debug value: %d\n", emu_global->debug);
+
     property_get("debug.emu.stop_total", prop);
     emu_global->stop_total = (int32_t)atoi(prop);
     emu_log_debug("stop_total value: %d\n", emu_global->stop_total);
@@ -3338,9 +3415,10 @@ void emu_init_properties() {
     emu_global->debug_offset = (int32_t)atoi(prop);
     emu_log_debug("debug_offset value: %d\n", emu_global->debug_offset);
 
-    property_get("debug.emu.debug", prop);
-    emu_global->debug = (int32_t)atoi(prop);
-    emu_log_debug("debug value: %d\n", emu_global->debug);
+    property_get("debug.emu.selective", prop);
+    emu_global->selective = (int32_t)atoi(prop);
+    emu_log_debug("selective value: %d\n", emu_global->selective);
+
 }
 
 void emu_init_tracefile() {
