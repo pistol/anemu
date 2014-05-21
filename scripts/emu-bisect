@@ -1,0 +1,80 @@
+#!/usr/bin/perl
+
+use strict;
+no strict 'subs';
+use warnings;
+
+use Getopt::Long;
+use Data::Dumper qw(Dumper);
+
+my $jpg  = "/storage/sdcard0/DCIM/Camera/IMG_20140502_065800.jpg";
+# my $valid = "f6b01d6853f6766323d619ed6a918926";
+# my $valid = "9c23bb6a79a6f28b45174a247473e065";
+# my $valid = "a28c8beb57e8c9431f6f1d9fb9ed59d0";
+# my $valid = "67a65682950dff3e325a1d9f8e6d2bd0";
+my $iterations = 1;
+my $bench= "emu-jpeg 1 $iterations 0 $jpg";
+my $cmd = "adb shell $bench | md5sum";
+my $start = $ARGV[0];
+my $target = $ARGV[1];
+
+if (!$target) {
+  print "missing target number\n";
+  exit;
+}
+
+if (!$start) {
+  $start = 1;
+}
+
+# find reference hash
+my $temp = undef;
+my $refhash;
+for my $idx (1 .. 5) {
+  my $cmd = "adb shell emu-jpeg 0 $iterations 0 $jpg | md5sum";
+  $refhash = `$cmd`;
+  $refhash =~ s/  -\n//;
+  # print "$refhash\n";
+  if (defined $temp && $temp ne $refhash) {
+    printf("reference hash failed\n");
+    exit;
+  }
+  $temp = $refhash;
+}
+
+print "auto generated reference hash: $refhash\n";
+
+my $offset = 20;
+my $min = $start;
+my $max = $target;
+my $test = $max;
+my $idx = 0;
+my $hash;
+my $result;
+my $spaces = 85;
+print "emu bisection using cmd:\n$cmd\n";
+print "-" x $spaces . "\n";
+printf("%2s | %7s | %4s | %32s | %7s (%7s - %-7s)\n", "idx", "instr", "P/F", "result-hash", "width", "min", "max");
+print "-" x $spaces . "\n";
+
+print `adb shell setprop debug.emu.debug_offset $offset`;
+while(1) {
+  print `adb shell setprop debug.emu.stop_total $test`;
+  $hash = `$cmd`;
+  $hash =~ s/  -\n//;
+  if ($hash eq $refhash) {
+    $result = "PASS";
+    $min = $test;
+  } else {
+    $result = "FAIL";
+    $max = $test;
+  }
+  $idx++;
+  printf("%3d | %7d | %4s | %32s | %7d (%7d - %7d)\n", $idx, $test, $result, $hash, $max - $min, $min, $max);
+  last if ($min == $target);
+  last if ($max - $min <= 1);
+  $test = int (($min + $max) / 2);
+}
+print "-" x $spaces . "\n";
+# reset value
+print `adb shell setprop debug.emu.stop_total 0`
