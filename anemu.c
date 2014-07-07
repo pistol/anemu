@@ -69,11 +69,7 @@ void emu_handler_trap(int sig, siginfo_t *si, void *ucontext) {
     emu_thread_t emu;
     ucontext_t *uc = (ucontext_t *)ucontext;
     emu_siginfo(sig, si, uc);
-#ifdef ATOMIC_STATS
-    atomic_inc(&emu_global->trap_bkpt);
-#else
-    emu_global->trap_bkpt++;
-#endif
+    COUNT(trap_bkpt);
 
     assert(emu_initialized());
 
@@ -267,6 +263,8 @@ void emu_type_sync(emu_thread_t *emu) {
         emu_log_debug("Rt: %x Rn: %x MEM Rn: %x\n", RREG(Rt), RREG(Rn), RMEM32(RREG(Rn)));
         WREG(Rt) = RMEM32(RREG(Rn));
         emu->lock_acquired = 1;
+        COUNT(instr_ldrex);
+        COUNT(instr_load);
         break;
     }
     case I_STREX: {
@@ -278,6 +276,8 @@ void emu_type_sync(emu_thread_t *emu) {
         assert(d->imm == 0);
         WMEM32(RREG(Rn), RREG(Rt));
         WREG(Rd) = 0;           /* 0: success, 1: fail */
+        COUNT(instr_strex);
+        COUNT(instr_store);
         mutex_unlock(&emu_lock);
         break;
     }
@@ -797,6 +797,7 @@ void emu_type_memory(emu_thread_t *emu) {
     case I_LDRSH:
     case I_LDRH:
     case I_LDRD: {
+        COUNT(instr_load);
         assert(d->Rn != R_INVLD);
         assert(d->Rt != R_INVLD);
 
@@ -877,6 +878,7 @@ void emu_type_memory(emu_thread_t *emu) {
     case I_STRB:
     case I_STRH:
     case I_STRD: {
+        COUNT(instr_store);
         if (d->imm && d->Rm != R_INVLD) {
             emu_abort("expected either imm or Rm but not both!\n");
         }
@@ -1191,18 +1193,15 @@ bool emu_advance_pc(emu_thread_t *emu) {
     if (!emu->branched) CPU(pc) += emu->disasm_bytes;
     emu->branched = 0;
     emu->instr_count++;
-#ifdef ATOMIC_STATS
-    atomic_inc(&emu_global->instr_total);
-#else
-    emu_global->instr_total++;
-#endif
+    COUNT(instr_total);
 
+    emu_log_debug("handled instructions: %d\n", COUNTER(instr_total));
 #ifndef PROFILE
-    emu_log_debug("handled instructions: %d\n", emu_global->instr_total);
     if (emu_debug()) {
         emu_dump_diff(emu);
         dbg_dump_ucontext(&emu->current);
     }
+#endif  /* PROFILE */
 
 #ifndef NO_TAINT
     if (emu_regs_tainted(emu) == 0) {
@@ -1212,12 +1211,12 @@ bool emu_advance_pc(emu_thread_t *emu) {
     emu_log_debug(LOG_BANNER_INSTR);
 #endif
 
-    if (emu_global->stop_total && emu_global->instr_total >= emu_global->stop_total - emu_global->debug_offset) {
+    if (emu_global->stop_total && COUNTER(instr_total) >= emu_global->stop_total - emu_global->debug_offset) {
         emu_global->debug = 1;
     }
 
-    if (emu_global->stop_total && emu_global->instr_total >= emu_global->stop_total) {
-        emu_log_info("SPECIAL: permanently turning off emu after %d instructions.\n", emu_global->instr_total);
+    if (emu_global->stop_total && COUNTER(instr_total) >= emu_global->stop_total) {
+        emu_log_info("SPECIAL: permanently turning off emu after %d instructions.\n", COUNTER(instr_total));
         emu_log_debug("disabling emu\n");
         emu_unprotect_mem();
         emu->stop = 1;
@@ -1437,7 +1436,7 @@ void emu_stop(emu_thread_t *emu) { // Hammertime!
 
 #ifndef NO_TAINT
     if (emu_selective() && emu_regs_tainted(emu)) {
-        emu_log_warn("WARNING: stopping emu with tainted regs!\n");
+        emu_log_warn("WARNING: stopping emu with tainted regs! instr: %d\n", COUNTER(instr_total));
     }
 #endif
     if (emu_debug()) {
@@ -1791,53 +1790,83 @@ void emu_dump_cpsr(emu_thread_t *emu) {
 
 void emu_dump_stats() {
     LOGI("[s] total instr: %d traps bkpt: %d segv: %d\n",
-         emu_global->instr_total,
-         emu_global->trap_bkpt,
-         emu_global->trap_segv);
-    uint32_t noshit  = emu_global->taint_hit  - emu_global->taint_hit_stack;
-    uint32_t nosmiss = emu_global->taint_miss - emu_global->taint_miss_stack;
+         COUNTER(instr_total),
+         COUNTER(trap_bkpt),
+         COUNTER(trap_segv));
+    uint32_t noshit  = COUNTER(taint_hit)  - COUNTER(taint_hit_stack);
+    uint32_t nosmiss = COUNTER(taint_miss) - COUNTER(taint_miss_stack);
     LOGI("[s] taint ~SHit SHit ~SMiss SMiss: %7d %7d %7d %7d\n",
          noshit,
-         emu_global->taint_hit_stack,
+         COUNTER(taint_hit_stack),
          nosmiss,
-         emu_global->taint_miss_stack
+         COUNTER(taint_miss_stack)
          );
-    double total_traps = emu_global->taint_hit + emu_global->taint_miss;
-    LOGI("[s] total traps: %.0f % ~SHit SHit ~SMiss Smiss (%): %2.1f %2.1f %2.1f %2.1f\n",
+    double total_traps = COUNTER(taint_hit) + COUNTER(taint_miss);
+    LOGI("[s] total traps: %.0f %% ~SHit SHit ~SMiss Smiss (%%): %2.1f %2.1f %2.1f %2.1f\n",
          total_traps,
          noshit  / total_traps * 100,
-         emu_global->taint_hit_stack  / total_traps * 100,
+         COUNTER(taint_hit_stack)  / total_traps * 100,
          nosmiss  / total_traps * 100,
-         emu_global->taint_miss_stack / total_traps * 100
+         COUNTER(taint_miss_stack) / total_traps * 100
          );
-    double stack_traps = emu_global->taint_hit_stack + emu_global->taint_miss_stack;
-    LOGI("[s] stack traps: %.0f (%2.1f%) hit miss(%): %2.1f %2.1f\n",
+    double stack_traps = COUNTER(taint_hit_stack) + COUNTER(taint_miss_stack);
+    LOGI("[s] stack traps: %.0f (%2.1f%%) hit miss(%%): %2.1f %2.1f\n",
          stack_traps,
          stack_traps / total_traps * 100,
-         emu_global->taint_hit_stack  / stack_traps * 100,
-         emu_global->taint_miss_stack / stack_traps * 100
+         COUNTER(taint_hit_stack)  / stack_traps * 100,
+         COUNTER(taint_miss_stack) / stack_traps * 100
          );
 
-    LOGI("[s] mem read vs tainted: %d %d (%2.1f%)\n",
-         emu_global->mem_read,
-         emu_global->taint_mem_read,
-         emu_global->taint_mem_read / (double)emu_global->mem_read * 100
+    LOGI("[s] mem read vs tainted: %d %d (%2.1f%%)\n",
+         COUNTER(mem_read),
+         COUNTER(taint_mem_read),
+         COUNTER(taint_mem_read) / (double)COUNTER(mem_read) * 100
          );
-    LOGI("[s] mem write vs tainted: %d %d (%2.1f%)\n",
-         emu_global->mem_write,
-         emu_global->taint_mem_write,
-         emu_global->taint_mem_write / (double)emu_global->mem_write * 100
+    LOGI("[s] mem write vs tainted: %d %d (%2.1f%%)\n",
+         COUNTER(mem_write),
+         COUNTER(taint_mem_write),
+         COUNTER(taint_mem_write) / (double)COUNTER(mem_write) * 100
          );
 
-    double ntread  = emu_global->mem_read  - emu_global->taint_mem_read;
-    double ntwrite = emu_global->mem_write - emu_global->taint_mem_write;
-    double memrw   = emu_global->mem_read  + emu_global->mem_write;
+    double ntread  = COUNTER(mem_read)  - COUNTER(taint_mem_read);
+    double ntwrite = COUNTER(mem_write) - COUNTER(taint_mem_write);
+    double memrw   = COUNTER(mem_read)  + COUNTER(mem_write);
     LOGI("[s] mem ~TRead Tread ~TWrite TWrite: %-2.1f %-2.1f %-2.1f %-2.1f\n",
          ntread/memrw * 100,
-         emu_global->taint_mem_read / memrw * 100,
+         COUNTER(taint_mem_read) / memrw * 100,
          ntwrite/memrw * 100,
-         emu_global->taint_mem_write / memrw * 100
+         COUNTER(taint_mem_write) / memrw * 100
          );
+
+    LOGI("[s] instr total load store ldrex strex: %d %d %d %d %d\n",
+         COUNTER(instr_total),
+         COUNTER(instr_load),
+         COUNTER(instr_store),
+         COUNTER(instr_ldrex),
+         COUNTER(instr_strex)
+         );
+
+    assert(COUNTER(instr_ldrex) == COUNTER(instr_strex));
+
+    LOGI("[s] mprotect: %d stack: %d protect: %d unprotect: %d\n",
+         COUNTER(mprotect),
+         COUNTER(mprotect_stack),
+         COUNTER(protect),
+         COUNTER(unprotect)
+         );
+    LOGI("[s] taintpages: %d\n", emu_global->taintpages);
+    LOGI("[s] intercept emu read: %d write: %d stack: %d\n",
+         COUNTER(intercept_emu_read),
+         COUNTER(intercept_emu_write),
+         COUNTER(intercept_stack)
+         );
+    LOGI("[s] trampoline read: %d write: %d taint read: %d write: %d\n",
+         COUNTER(trampoline_read),
+         COUNTER(trampoline_write),
+         COUNTER(trampoline_read_taint),
+         COUNTER(trampoline_write_taint)
+         );
+}
 }
 
 void emu_map_dump(map_t *m) {
@@ -2063,47 +2092,23 @@ emu_handler_segv(int sig, siginfo_t *si, void *ucontext) {
 
     if (sig == SIGSEGV) {
 #ifndef NO_TAINT
-#ifdef ATOMIC_STATS
-        atomic_inc(&emu_global->trap_segv);
-#else
-        emu_global->trap_segv++;
-#endif
+        COUNT(trap_segv);
         uint32_t addr_fault = uc->uc_mcontext.fault_address;
         bool stack_taint = stack_addr(addr_fault);
         if (emu_get_taint_mem(addr_fault) == TAINT_CLEAR) {
             /* false positive, single-step instruction */
             emu_log_debug("[-] taint miss %x\n", addr_fault);
-#ifdef ATOMIC_STATS
-            atomic_inc(&emu_global->taint_miss);
-            if (stack_taint) atomic_inc(emu_global->taint_miss_stack);
-#else
-            emu_global->taint_miss++;
-            if (stack_taint) emu_global->taint_miss_stack++;
-#endif
-            emu->running = 1;
-            // wipe register taint
-            emu_clear_taintregs(emu);
-            emu->time_start = getticks();
-            emu_singlestep(emu);
+            COUNT(taint_miss);
+            if (stack_taint) COUNT(taint_miss_stack);
         } else {
             /* instruction accessing tainted memory */
             emu_log_debug("[+] taint hit %x\n", addr_fault);
-#ifdef ATOMIC_STATS
-            atomic_inc(&emu_global->taint_hit);
-            if (stack_taint) atomic_inc(emu_global->taint_hit_stack);
-#else
-            emu_global->taint_hit++;
-            if (stack_taint) emu_global->taint_hit_stack++;
-#endif
-            emu_start(emu);
+            COUNT(taint_hit);
+            if (stack_taint) COUNT(taint_hit_stack);
         }
 #endif  /* NO_TAINT */
     } else if (sig == SIGTRAP || sig == SIGILL) {
-#ifdef ATOMIC_STATS
-        atomic_inc(&emu_global->trap_bkpt);
-#else
-        emu_global->trap_bkpt++;
-#endif
+        COUNT(trap_bkpt);
         emu_log_debug("[+] taint resume marker\n");
         emu_start(emu);
     } else {
@@ -2195,6 +2200,8 @@ mprotectPage(uint32_t addr, uint32_t flags) {
 
         emu_abort("mprotect");
     }
+    COUNT(mprotect);
+    if (stack_addr(addr)) COUNT(mprotect_stack);
     return ret;
 }
 #endif  /* NO_MPROTECT */
@@ -3006,7 +3013,7 @@ void gdb_wait() {
         return;
     }
     emu_log_error(LOG_BANNER_SIG);
-    emu_log_error("waiting for gdb to attach pid: %d tid: %d ...\n", getpid(), gettid());
+    emu_log_error("waiting for gdb to attach pid: %d tid: %d instr: %d...\n", getpid(), gettid(), COUNTER(instr_total));
     volatile int c = 0;
     while(!attached && c == 0) {
         *(int volatile *)&c;
@@ -3475,6 +3482,9 @@ uint32_t mem_write32(uint32_t addr, uint32_t val) {
     int32_t fd = emu_global->mem_fd;                   \
     assert(fd);                                        \
     ssize_t bytes;                                     \
+    if (emu_get_taint_mem(addr)) {                     \
+        COUNT(taint_mem_##type);                       \
+    }                                                  \
     if (!stack_addr(addr)) {                           \
         bytes = p##type(fd, &val, sizeof(val), addr);  \
     } else {                                           \
@@ -3490,6 +3500,7 @@ uint32_t mem_write32(uint32_t addr, uint32_t val) {
 /* READ */
 inline
 uint8_t mem_read8(uint32_t addr) {
+    COUNT(mem_read);
 #ifndef NO_TAINT
     uint8_t val = 0;
     if (emu_get_taintpage(addr)) {
@@ -3501,6 +3512,7 @@ uint8_t mem_read8(uint32_t addr) {
 
 inline
 uint16_t mem_read16(uint32_t addr) {
+    COUNT(mem_read);
 #ifndef NO_TAINT
     uint16_t val = 0;
     if (emu_get_taintpage(addr)) {
@@ -3512,6 +3524,7 @@ uint16_t mem_read16(uint32_t addr) {
 
 inline
 uint32_t mem_read32(uint32_t addr) {
+    COUNT(mem_read);
 #ifndef NO_TAINT
     uint32_t val = 0;
     if (emu_get_taintpage(addr)) {
@@ -3524,6 +3537,7 @@ uint32_t mem_read32(uint32_t addr) {
 /* WRITE */
 inline
 uint8_t mem_write8(uint32_t addr, uint8_t val) {
+    COUNT(mem_write);
 #ifndef NO_TAINT
     if (emu_get_taintpage(addr)) {
         MEM_OP(write);
@@ -3534,6 +3548,7 @@ uint8_t mem_write8(uint32_t addr, uint8_t val) {
 
 inline
 uint16_t mem_write16(uint32_t addr, uint16_t val) {
+    COUNT(mem_write);
 #ifndef NO_TAINT
     if (emu_get_taintpage(addr)) {
         MEM_OP(write);
@@ -3544,6 +3559,7 @@ uint16_t mem_write16(uint32_t addr, uint16_t val) {
 
 inline
 uint32_t mem_write32(uint32_t addr, uint32_t val) {
+    COUNT(mem_write);
 #ifndef NO_TAINT
     if (emu_get_taintpage(addr)) {
         MEM_OP(write);
