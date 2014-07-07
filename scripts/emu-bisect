@@ -7,14 +7,15 @@ use warnings;
 use Getopt::Long;
 use Data::Dumper qw(Dumper);
 
-my $jpg  = "/storage/sdcard0/DCIM/Camera/IMG_20140502_065800.jpg";
+# my $jpg  = "/storage/sdcard0/DCIM/Camera/IMG_20140502_065800.jpg";
+my $jpg  = "/storage/sdcard0/DCIM/Camera/IMG_20140522_045210.jpg";
 # my $valid = "f6b01d6853f6766323d619ed6a918926";
 # my $valid = "9c23bb6a79a6f28b45174a247473e065";
 # my $valid = "a28c8beb57e8c9431f6f1d9fb9ed59d0";
 # my $valid = "67a65682950dff3e325a1d9f8e6d2bd0";
 my $iterations = 1;
 my $bench= "emu-jpeg 1 $iterations 0 $jpg";
-my $cmd = "adb shell $bench | md5sum";
+my $cmd = "adb shell $bench | ack -v DirStart | md5sum";
 my $start = $ARGV[0];
 my $target = $ARGV[1];
 
@@ -31,7 +32,9 @@ if (!$start) {
 my $temp = undef;
 my $refhash;
 for my $idx (1 .. 5) {
-  my $cmd = "adb shell emu-jpeg 0 $iterations 0 $jpg | md5sum";
+  # my $cmd = "adb shell emu-jpeg 0 $iterations 0 $jpg | md5sum";
+  # something is really funky with DirStart in the output, it varies..., let's cut it
+  my $cmd = "adb shell emu-jpeg 0 $iterations 0 $jpg | ack -v DirStart | md5sum";
   $refhash = `$cmd`;
   $refhash =~ s/  -\n//;
   # print "$refhash\n";

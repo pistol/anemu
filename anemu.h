@@ -4,6 +4,9 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <sys/types.h>
+#include <time.h>
+#define __STDC_FORMAT_MACROS 1
+#include <inttypes.h>
 
 #define MARKER_START_VAL    32
 #define MARKER_STOP_VAL     0xfdee /* udf 0xfdee : KGDB_BREAKINST */
@@ -30,11 +33,13 @@
 /* #define MARKER_START  GDB_BREAKINST */
 #define MARKER_START  BREAKINST_ARM
 #define MARKER_STOP  KGDB_BREAKINST
+#define MARKER_BYPASS GDB_BREAKINST
 
 #define ASM(opcode)      asm volatile(".inst " __stringify(opcode))
 
 #define EMU_MARKER_START ASM(MARKER_START)
 #define EMU_MARKER_STOP  ASM(MARKER_STOP)
+#define EMU_MARKER_BYPASS ASM(MARKER_BYPASS)
 
 #define unlikely(x) __builtin_expect(!!(x), 0)
 
@@ -49,14 +54,12 @@
 
 /* Benchmarking */
 #ifdef EMU_BENCH
-#define __STDC_FORMAT_MACROS 1
-#include <inttypes.h>
-uint64_t __tick_start, __tick_end;
+int64_t __tick_start, __tick_end;
 #define M(x)                                              \
-    __tick_start = getticks();                            \
+    time_ns(&__tick_start);                               \
     x;                                                    \
-    __tick_end   = getticks();                            \
-    printf("[*] %s %6"PRIu64" cycles.\n", #x, __tick_end - __tick_start);
+    time_ns(&__tick_end);                                               \
+    printf("[*] %s %6"PRId64" cycles.\n", #x, __tick_end - __tick_start);
 #else
 #define M(x) x
 #endif
@@ -64,6 +67,10 @@ uint64_t __tick_start, __tick_end;
 #include <sys/cdefs.h>
 __BEGIN_DECLS
 /* Public API */
+
+/* syscalls used by trampolines */
+extern ssize_t __read(int, void *, size_t);
+extern ssize_t __write(int, void *, size_t);
 
 /* Hooks */
 void emu_hook_thread_entry(void *arg);
@@ -74,8 +81,8 @@ void emu_hook_exit_thread(int ret);
 void emu_hook_Zygote_forkAndSpecializeCommon(void *arg);
 
 /* Trampolines */
-int emu_trampoline_read(int fd, void *buf, size_t count);
-int emu_trampoline_write(int fd, void *buf, size_t count);
+ssize_t emu_trampoline_read(int fd, void *buf, size_t count);
+ssize_t emu_trampoline_write(int fd, void *buf, size_t count);
 
 /* check if current pid / app is targeted for emulation */
 uint32_t emu_target();
@@ -87,12 +94,15 @@ void emu_mprotect_mem(bool state);
 /* emulate starting at a given address (e.g. function) */
 uint32_t emu_function(void (*fun)());
 
+// TODO: change arguments to (addr, length, tag) for consistency with get
 void emu_set_taint_array(uint32_t addr, uint32_t tag, uint32_t length);
-uint32_t emu_get_taint_array(uint32_t addr, uint32_t length);
-uint32_t emu_get_taint_pages();
+// uint32_t emu_get_taint_array(uint32_t addr, uint32_t length);
+uint32_t emu_get_taintpages();
 
 uint32_t emu_dump_taintmaps();
 uint32_t emu_dump_taintpages();
+
+void emu_reset_stats();
 
 void emu_mprotect_mem(bool state);
 #define emu_protect_mem()   emu_mprotect_mem(true)
@@ -106,7 +116,14 @@ void emu_dump_stats();
 
 /* Debugging */
 void gdb_wait();
-uint64_t getticks();
+// double time_ms();
+// uint64_t getticks();
+int time_ns(struct timespec *res);
+int64_t diff_ns(struct timespec *start,
+                struct timespec *end);
+int64_t ns_to_cycles(int64_t ns);
+
+const char *get_signame(int sig);
 
 __END_DECLS
 

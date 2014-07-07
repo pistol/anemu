@@ -29,6 +29,7 @@ const char* emu_disasm_ref(unsigned int pc, uint8_t bits) {
     if (bits == 16) ins &= 0xffff;
 
     r_asm_set_pc(rasm, pc);
+    // printf("r_asm_disassemble() pc: %x bits: %d len: %d\n", pc, bits, len);
     r_asm_disassemble(rasm, &rop, (const unsigned char *)pc, len);
     printf("disas: %x %x %s\n", pc, ins, rop.buf_asm);
 
