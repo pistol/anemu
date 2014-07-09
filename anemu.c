@@ -252,7 +252,6 @@ void emu_type_pusr(emu_thread_t *emu) {
     }
 }
 
-#if 1
 void emu_type_sync(emu_thread_t *emu) {
     const darm_t *d = &emu->darm;
 
@@ -275,6 +274,7 @@ void emu_type_sync(emu_thread_t *emu) {
         emu->lock_acquired = 0;
         assert(d->imm == 0);
         WMEM32(RREG(Rn), RREG(Rt));
+        WTMEM(RREG(Rn), RTREG(Rt));
         WREG(Rd) = 0;           /* 0: success, 1: fail */
         COUNT(instr_strex);
         COUNT(instr_store);
@@ -284,185 +284,6 @@ void emu_type_sync(emu_thread_t *emu) {
         SWITCH_COMMON;
     }
 }
-
-#else
-void emu_type_sync(emu_thread_t *emu) {
-    const darm_t *d = &emu->darm;
-
-    switch(d->instr) {
-    case I_LDREX: {
-        emu_log_debug("LDREX before:\n");
-        emu_log_debug("Rt: %x Rn: %x MEM Rn: %x\n", RREG(Rt), RREG(Rn), RMEM32(RREG(Rn)));
-
-        emu_log_debug("Checking for special lock aquire case...\n");
-        darm_t d2, d3, d4;
-        emu_disasm(emu, &d2, CPU(pc) +  4);
-        emu_disasm(emu, &d3, CPU(pc) +  8);
-        emu_disasm(emu, &d4, CPU(pc) + 12);
-
-        /* pthread_mutex_lock */
-        /* __bionic_cmpxchg() */
-        if (d2.instr == I_MOV &&
-            d3.instr == I_TEQ &&
-            d4.instr == I_STREX) {
-            emu_log_debug("Detecting lock aquire (LDREX/STREX) __bionic_cmpxchg! Executing atomically.\n");
-
-            uint32_t mem_Rn = 0;
-
-            asm volatile ("ldrex %[Rt], [%[Rn]]\n"
-                          "mov %[Rd2], #0\n"
-                          "teq %[Rt], %[Rm3]\n"
-                          "strexeq %[Rd2], %[Rt4], [%[Rn]]"
-                          : [Rt] "=&r" (WREGN(d->Rt)), [Rd2] "=&r" (WREGN(d2.Rd)), "+m" (mem_Rn)
-                          : [Rn] "r" (RREGN(d->Rn)), [Rm3] "Ir" (RREGN(d3.Rm)), [Rt4] "r" (RREGN(d4.Rt))
-                          : "cc"
-                          );
-
-            WMEM32(RREG(Rn), mem_Rn);
-
-            emu_log_debug("LDREX after:\n");
-            emu_log_debug("Rt: %x Rn: %x MEM Rn: %x\n", RREG(Rt), RREG(Rn), RMEM32(RREG(Rn)));
-
-            WTREG(Rt, RTMEM(RREG(Rn)));
-            WTREGN(d2.Rd, TAINT_CLEAR);
-            WTREGN(d4.Rt, TAINT_CLEAR); /* status */
-
-            /* updating PC via WREGN is treated as a branch */
-            /* which means PC is not advanced a further +2/4 */
-            /* thus we have to use CPU(pc) instead of WREGN(pc) */
-            CPU(pc) += 3 * 4;
-            /* account for extras: mov + teq + strexeq */
-            emu->instr_count += 3;
-            atomic_add(3, &emu_global->instr_total);
-
-            if (RREGN(d2.Rd) == 0) {    /* 0 if memory was updated  */
-                emu_log_debug("Lock aquire (LDREX/STREX) succesfull!\n");
-                /* special case to avoid deadlock on malloc! */
-                emu->lock_acquired = 1;
-                // WTMEM(RREG(Rn), RTREGN(d4.Rt));
-            } else {
-                emu_abort("STREX failed to update memory\n");
-            }
-        }
-        /* android_atomic_add() */
-        else if (d2.instr == I_ADD &&
-                 d3.instr == I_STREX) {
-            emu_log_debug("Detecting lock aquire (LDREX/STREX) android_atomic_add! Executing atomically.\n");
-
-            asm volatile ("ldrex %[Rt], [%[Rn]]\n"
-                          "add %[Rd2], %[Rt], #1\n"
-                          "strex %[Rd3], %[Rd2], [%[Rn]]"
-                          : [Rt] "+r" (WREGN(d->Rt)), [Rd2] "+r" (WREGN(d2.Rd)), [Rd3] "=&r" (WREGN(d3.Rd))
-                          : [Rn] "r" (RREGN(d->Rn))
-                          : "cc"
-                          );
-
-            emu_log_debug("LDREX after:\n");
-            emu_log_debug("Rt: %x Rn: %x MEM Rn: %x\n", RREG(Rt), RREG(Rn), RMEM32(RREG(Rn)));
-
-            WTREG(Rt, RTMEM(RREG(Rn)));
-            WTREGN(d2.Rd, RTREG(Rt));
-            WTMEM(RREG(Rn), RTREGN(d3.Rd));
-            WTREGN(d3.Rd, TAINT_CLEAR);
-
-            CPU(pc) += 2 * 4;
-            /* account for extras: add + strex */
-            emu->instr_count += 2;
-            atomic_add(2, &emu_global->instr_total);
-
-            if (RREGN(d3.Rd) == 0) {    /* 0 if memory was updated  */
-                emu_log_debug("Lock aquire (LDREX/STREX) succesfull!\n");
-                emu->lock_acquired = 0;
-                /* FIXME: deadlock on malloc! */
-                // WTMEM(RREG(Rn), RTREGN(d4.Rt));
-            } else {
-                emu_abort("STREX failed to update memory\n");
-            }
-
-        }
-        /* pthread_mutex_unlock */
-        /* __bionic_atomic_dec() */
-        else if (d2.instr == I_SUB &&
-                 d3.instr == I_STREX) {
-            emu_log_debug("Detecting lock aquire (LDREX/STREX) __bionic_atomic_dec! Executing atomically.\n");
-
-            asm volatile ("ldrex %[Rt], [%[Rn]]\n"
-                          "sub %[Rd2], %[Rt], #1\n"
-                          "strex %[Rd3], %[Rd2], [%[Rn]]"
-                          : [Rt] "+r" (WREGN(d->Rt)), [Rd2] "+r" (WREGN(d2.Rd)), [Rd3] "=&r" (WREGN(d3.Rd))
-                          : [Rn] "r" (RREGN(d->Rn))
-                          : "cc"
-                          );
-
-            emu_log_debug("LDREX after:\n");
-            emu_log_debug("Rt: %x Rn: %x MEM Rn: %x\n", RREG(Rt), RREG(Rn), RMEM32(RREG(Rn)));
-
-            WTREG(Rt, RTMEM(RREG(Rn)));
-            WTREGN(d2.Rd, RTREG(Rt));
-            WTMEM(RREG(Rn), RTREGN(d3.Rd));
-            WTREGN(d3.Rd, TAINT_CLEAR);
-
-            CPU(pc) += 2 * 4;
-            /* account for extras: sub + strex */
-            emu->instr_count += 2;
-            atomic_add(2, &emu_global->instr_total);
-
-            if (RREGN(d3.Rd) == 0) {    /* 0 if memory was updated  */
-                emu_log_debug("Lock aquire (LDREX/STREX) succesfull!\n");
-                emu->lock_acquired = 0;
-                /* FIXME: deadlock on malloc! */
-                // WTMEM(RREG(Rn), RTREGN(d4.Rt));
-            } else {
-                emu_abort("STREX failed to update memory\n");
-            }
-        }
-        /* pthread_mutex_unlock */
-        /* int32_t __bionic_swap(int32_t new_value, volatile int32_t* ptr) */
-        /* TODO: how about calling the functions directly? */
-        else if (d2.instr == I_STREX) {
-            emu_log_debug("Detecting lock aquire (LDREX/STREX) __bionic_swap! Executing atomically.\n");
-
-            asm volatile ("ldrex %[Rt], [%[Rn]]\n"
-                          "strex %[Rd2], %[Rt2], [%[Rn]]"
-                          : [Rt] "+r" (WREGN(d->Rt)) /* prev */, [Rd2] "=&r" (WREGN(d2.Rd)) /* status */
-                          : [Rn] "r" (RREGN(d->Rn)) /* ptr */, [Rt2] "r" (WREGN(d2.Rt)) /* new_value */
-                          : "cc"
-                          );
-
-            emu_log_debug("LDREX after:\n");
-            emu_log_debug("Rt: %x Rn: %x MEM Rn: %x\n", RREG(Rt), RREG(Rn), RMEM32(RREG(Rn)));
-
-            WTREG(Rt, RTMEM(RREG(Rn)));
-            WTMEM(RREG(Rn), RTREGN(d2.Rt));
-            WTREGN(d2.Rd, TAINT_CLEAR);
-
-            CPU(pc) += 1 * 4;
-            /* account for extras: strex */
-            emu->instr_count += 1;
-            atomic_add(1, &emu_global->instr_total);
-
-            if (RREGN(d2.Rd) == 0) {    /* 0 if memory was updated  */
-                emu_log_debug("Lock aquire (LDREX/STREX) succesfull!\n");
-                emu->lock_acquired = 0;
-                /* FIXME: deadlock on malloc! */
-                // WTMEM(RREG(Rn), RTREGN(d4.Rt));
-            } else {
-                emu_abort("STREX failed to update memory\n");
-            }
-        } else {
-            emu_abort("Lonely LDREX...\n");
-        }
-
-        break;
-    }
-    case I_STREX: {
-        emu_abort("unexpected STREX (should be part of a previous LDREX pattern)\n");
-        break;
-    }
-        SWITCH_COMMON;
-    }
-}
-#endif
 
 void emu_type_mvcr(emu_thread_t *emu) {
     const darm_t *d = &emu->darm;
