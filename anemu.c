@@ -1261,9 +1261,9 @@ uint8_t emu_disabled() {
 static
 void emu_init() {
     if (emu_initialized()) return;
-    uint64_t init_start, init_end;
+    struct timespec init_start, init_end;
 
-    init_start = getticks();
+    time_ns(&init_start);
 
     // clear counters
     memset(&emu_global->stats, 0, sizeof(stats_t));
@@ -1291,8 +1291,8 @@ void emu_init() {
     // __atomic_swap(1, &emu.initialized);
     emu_global->initialized = 1;
 
-    init_end = getticks();
-    emu_log_info("[+] emu init  %6"PRIu64" cycles.\n", init_end - init_start);
+    time_ns(&init_end);
+    emu_log_info("[+] emu init  %6"PRId64" cycles.\n", ns_to_cycles(diff_ns(&init_start, &init_end)));
 }
 
 void emu_start(emu_thread_t *emu) {
@@ -1302,8 +1302,9 @@ void emu_start(emu_thread_t *emu) {
     emu_set_protect(true);
     // wipe register taint
     emu_clear_taintregs(emu);
-    emu->time_start = getticks();
-
+#ifdef EMU_BENCH
+    time_ns(&emu->time_start);
+#endif
     while(emu_singlestep(emu));
 }
 
@@ -1312,16 +1313,16 @@ void emu_stop(emu_thread_t *emu) { // Hammertime!
 
     CPU(pc) |= emu_thumb_mode(emu) ? 1 : 0; /* LSB set for Thumb */
 
-    // WARNING: double conversion will need malloc and can deadlock!
-
-    emu->time_end = getticks();
-    uint64_t delta = emu->time_end - emu->time_start;
-    emu_log_debug("resuming exec pc %0lx -> %0lx time (cycles): %"PRIu64" instr: %d time/instr (cycles): %"PRIu64"\n",
+#ifdef EMU_BENCH
+    time_ns(&emu->time_end);
+    int64_t delta = ns_to_cycles(diff_ns(&emu->time_start, &emu->time_end));
+    emu_log_debug("resuming exec pc %0lx -> %0lx time (cycles): %"PRId64" instr: %d time/instr (cycles): %"PRId64"\n",
                  emu->original.uc_mcontext.arm_pc,
                  emu->current.uc_mcontext.arm_pc,
                  delta,
                  emu->instr_count,
                  delta / emu->instr_count);
+#endif
 
 #ifndef NO_TAINT
     if (emu_selective() && emu_regs_tainted(emu)) {
@@ -2804,11 +2805,39 @@ void darm_enc(emu_thread_t *emu) {
     }
 }
 
-double time_ms() {
+#define CLOCK_MONOTONIC_RAW 4
+#define NANOS 1e9
+
+double _time_ms() {
     struct timespec res;
-    clock_gettime(CLOCK_MONOTONIC, &res);
-    double result = 1000.0 * res.tv_sec + (double) res.tv_nsec / 1e6;
-    return result;
+    clock_gettime(CLOCK_MONOTONIC_RAW, &res);
+    return 1000.0 * res.tv_sec + (double) res.tv_nsec / 1e6;
+}
+
+int64_t _time_ns() {
+    struct timespec res;
+    clock_gettime(CLOCK_MONOTONIC_RAW, &res);
+    return res.tv_sec * NANOS + res.tv_nsec;
+}
+
+int64_t diff_ns(struct timespec *start,
+                struct timespec *end) {
+    int64_t sec, nsec;
+    sec  = end->tv_sec  - start->tv_sec;
+    nsec = end->tv_nsec - start->tv_nsec;
+    return sec * NANOS + nsec;
+}
+
+int64_t ns_to_cycles(int64_t ns) {
+    // TODO: dynamically read scaling
+    // /sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq
+    static const double scaling = 1.2; /* GHz */
+    return ns / scaling;
+}
+
+inline
+int time_ns(struct timespec *res) {
+    return clock_gettime(CLOCK_MONOTONIC_RAW, res);
 }
 
 uint64_t getticks(void)
