@@ -691,7 +691,21 @@ void emu_type_memory(emu_thread_t *emu) {
         } else {                /* UnalignedSupport() || address<1:0> == '00' */
             EMU(WREG(Rt) = data);
         }
-        WTREG(Rt, RTMEM(addr));
+#ifndef NO_TAINT
+        uint32_t tag = RTMEM(addr);
+        WTREG(Rt, tag);
+        if (emu->check_trap) {
+            bool stack_taint = stack_addr(addr);
+            if (tag) {
+                COUNT(taint_hit);
+                if (stack_taint) COUNT(taint_hit_stack);
+            } else {
+                COUNT(taint_miss);
+                if (stack_taint) COUNT(taint_miss_stack);
+            }
+            emu->check_trap = 0;
+        }
+#endif
 
         break;
     }
@@ -733,27 +747,44 @@ void emu_type_memory(emu_thread_t *emu) {
         emu_log_debug("RMEM before:  %x\n", RMEM32(addr));
         /* depending on instr, 1, 2 or 4 bytes of RREG(Rt) will be used and stored to mem */
         uint32_t data = RREG(Rt) & instr_mask(d->instr);
+#ifndef NO_TAINT
+        uint32_t tag = RTREG(Rt);
+#endif
         switch(d->instr) {
         case I_STRB:
             WMEM8(addr, (uint8_t)data);
-            WTMEM(addr, RTMEM(addr) | RTREG(Rt));
+            WTMEM(addr, RTMEM(addr) | tag);
             break;
         case I_STRH:
             WMEM16(addr, (uint16_t)data);
-            WTMEM(addr, RTMEM(addr) | RTREG(Rt));
+            WTMEM(addr, RTMEM(addr) | tag);
             break;
         case I_STR:
             WMEM32(addr, data);
-            WTMEM(addr, RTREG(Rt));
+            WTMEM(addr, tag);
             break;
         case I_STRD:
             WMEM32(addr,     RREGN(d->Rt));
             WMEM32(addr + 4, RREGN(d->Rt + 1));
-            WTMEM(addr,      RTREG(Rt));
+            WTMEM(addr,      tag);
             WTMEM(addr + 4,  RTREGN(d->Rt + 1));
             break;
         default: emu_abort("unexpected op");
         }
+
+#ifndef NO_TAINT
+        if (emu->check_trap) {
+            bool stack_taint = stack_addr(addr);
+            if (tag) {
+                COUNT(taint_hit);
+                if (stack_taint) COUNT(taint_hit_stack);
+            } else {
+                COUNT(taint_miss);
+                if (stack_taint) COUNT(taint_miss_stack);
+            }
+            emu->check_trap = 0;
+        }
+#endif
 
         if ((d->W == B_SET) || (d->P == B_UNSET)) { /* write-back */
             EMU(WREG(Rn) = offset_addr);
@@ -776,16 +807,36 @@ void emu_type_memory(emu_thread_t *emu) {
         uint8_t reg            = 0;
 
         if (reglist) {
+            uint32_t tag = TAINT_CLEAR;
+            uint32_t tags = TAINT_CLEAR;
             while (reglist) {
                 reg            = TrailingZerosCount(reglist); /* count trailing zeros */
                 reglist       &= ~(1 << reg);                 /* unset this bit */
                 emu_log_debug("addr: %x, r%d: %8x\n", addr, reg, RREGN(reg));
                 WMEM32(addr, RREGN(reg));
-                WTMEM(addr, RTREGN(reg));
+#ifndef NO_TAINT
+                tag = RTREGN(reg);
+                tags |= tag;
+                WTMEM(addr, tag);
+#endif
                 addr          += 4;
             }
+#ifndef NO_TAINT
+            if (emu->check_trap) {
+                bool stack_taint = stack_addr(addr);
+                if (tags) {
+                    COUNT(taint_hit);
+                    if (stack_taint) COUNT(taint_hit_stack);
+                } else {
+                    COUNT(taint_miss);
+                    if (stack_taint) COUNT(taint_miss_stack);
+                }
+                emu->check_trap = 0;
+            }
+#endif
         } else {
             WMEM32(addr, RREG(Rt));
+            WTMEM(addr, RTREGN(reg));
         }
         if (d->instr == I_PUSH) {
             EMU(WREG(Rn) = RREG(Rn) - 4 * regcount);
@@ -805,15 +856,34 @@ void emu_type_memory(emu_thread_t *emu) {
         uint8_t reg            = 0;
 
         if (reglist) {
+            uint32_t tag = TAINT_CLEAR;
+            uint32_t tags = TAINT_CLEAR;
             while (reglist) {
                 reg            = TrailingZerosCount(reglist); /* count trailing zeros */
                 reglist       &= ~(1 << reg);                 /* unset this bit */
                 emu_log_debug("addr: %x, r%d: %8x\n", addr, reg, RMEM32(addr));
                 if (reg == PC) break; /* PC is last reg, handled specially */
                 WREGN(reg) = RMEM32(addr);
-                WTREGN(reg, RTMEM(addr));
+#ifndef NO_TAINT
+                tag = RTMEM(addr);
+                tags |= tag;
+                WTREGN(reg, tag);
+#endif
                 addr          += 4;
             }
+#ifndef NO_TAINT
+            if (emu->check_trap) {
+                bool stack_taint = stack_addr(addr);
+                if (tags) {
+                    COUNT(taint_hit);
+                    if (stack_taint) COUNT(taint_hit_stack);
+                } else {
+                    COUNT(taint_miss);
+                    if (stack_taint) COUNT(taint_miss_stack);
+                }
+                emu->check_trap = 0;
+            }
+#endif
         } else  {
             WREG(Rt) = RMEM32(addr);
         }
@@ -1069,6 +1139,8 @@ bool emu_singlestep(emu_thread_t *emu) {
 
     if (!emu_eval_cond(emu)) {
         emu_log_debug("skipping instruction: condition NOT passed\n");
+        // STREX mutex issue paranoia
+        assert(emu->darm.instr != I_STREX);
         goto next;
     }
 
@@ -1912,6 +1984,10 @@ emu_handler_segv(int sig, siginfo_t *si, void *ucontext) {
     } else if (sig == SIGILL) {
         assert(RMEM32(CPU(pc)) == MARKER_STOP);
     }
+
+    /* signal downstream load/store handling to check for taint false positive */
+    assert(emu->check_trap == 0);
+    emu->check_trap = 1;
 
     if (sig == SIGSEGV) {
 #ifndef NO_TAINT
