@@ -3121,10 +3121,7 @@ uint32_t emu_get_taint_file(int fd) {
 #define TAINT_XATTR_NAME "user.taint"
         xret = fgetxattr(fd, TAINT_XATTR_NAME, &xbuf, sizeof(xbuf));
 
-        if (xret > 0) {
-            xtag = xbuf;
-            emu_log_debug("%s : fd %d taint tag: 0x%x\n", __func__, fd, xtag);
-        } else {
+        if (xret < 0) {
             if (errno == ENOATTR) {
                 // emu_log_error("fgetxattr(%s): no taint tag\n", result);
             } else if (errno == ERANGE) {
@@ -3133,9 +3130,14 @@ uint32_t emu_get_taint_file(int fd) {
                 /* XATTRs are not supported. No need to spam the logs */
             } else if (errno == EPERM) {
                 /* Strange interaction with /dev/log/main. Suppress the log */
+            } else if (errno == EACCES) {
+                /* Permission Denied on things like Sockets. Supress the log */
             } else {
                 emu_log_error("TaintLog: fgetxattr(%d): unknown error code %d\n", fd, errno);
             }
+        } else {
+            xtag = xbuf;
+            emu_log_debug("%s : fd %d taint tag: 0x%x\n", __func__, fd, xtag);
         }
 #ifdef DEBUG_FILE_TAINT
     }
@@ -3150,9 +3152,7 @@ int32_t emu_set_taint_file(int fd, uint32_t tag)
 
     ret = fsetxattr(fd, TAINT_XATTR_NAME, &tag, sizeof(tag), 0);
 
-    if (ret > 0) {
-        emu_log_debug("%s : fd %d taint tag: 0x%x\n", __func__, fd, tag);
-    } else {
+    if (ret < 0) {
         if (errno == ENOSPC || errno == EDQUOT) {
             emu_log_error("TaintLog: fsetxattr(%d): not enough room to set xattr", fd);
         } else if (errno == ENOTSUP) {
@@ -3162,6 +3162,8 @@ int32_t emu_set_taint_file(int fd, uint32_t tag)
         } else {
             emu_log_error("TaintLog: fsetxattr(%d): unknown error code %d", fd, errno);
         }
+    } else {
+        emu_log_debug("%s : fd %d taint tag: 0x%x\n", __func__, fd, tag);
     }
 
     return ret;
