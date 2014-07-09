@@ -5,6 +5,7 @@ int** allocateMatrix(int size) {
     int i;
     for(i = 0; i < rows; i++) {
         mat[i] = (int *)malloc(cols * sizeof(int));
+        if (tag) emu_set_taint_array((intptr_t)mat[i], tag, cols * sizeof(int));
     }
     return mat;
 }
