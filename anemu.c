@@ -1096,12 +1096,13 @@ bool emu_advance_pc(emu_thread_t *emu) {
 #endif  /* PROFILE */
 
 #ifndef NO_TAINT
-    if (emu_regs_tainted(emu) == 0) {
+    if (emu_selective() && !emu_regs_tainted(emu)) {
         emu_log_debug("taint: no tainted regs remaining, enable protection and leave emu\n");
+        emu->stop = 1;
+        return !emu->stop;
     }
-#endif
+#endif /* NO_TAINT */
     emu_log_debug(LOG_BANNER_INSTR);
-#endif
 
     if (emu_global->stop_total && COUNTER(instr_total) >= emu_global->stop_total - emu_global->debug_offset) {
         emu_global->debug = 1;
@@ -1110,10 +1111,14 @@ bool emu_advance_pc(emu_thread_t *emu) {
     if (emu_global->stop_total && COUNTER(instr_total) >= emu_global->stop_total) {
         emu_log_info("SPECIAL: permanently turning off emu after %d instructions.\n", COUNTER(instr_total));
         emu_log_debug("disabling emu\n");
-        emu_unprotect_mem();
         emu->stop = 1;
         emu_global->disabled = 1;
+#ifndef NDEBUG
         if (emu_debug()) emu_dump_taintmaps();
+#endif
+        // disable emu handler
+        emu_unprotect_mem();
+        signal(SIGSEGV, SIG_DFL);
     } else if (emu_global->stop_handler && emu->instr_count >= emu_global->stop_handler) { /* NOTE: we are using a one time count */
         emu_log_info("SPECIAL: stopping current trap  emu after %d instructions.\n", emu->instr_count);
         emu->stop = 1;
@@ -1121,7 +1126,9 @@ bool emu_advance_pc(emu_thread_t *emu) {
         // emu_stop_trigger() raised flag
     }
 
+#ifndef NDEBUG
     if (emu_debug()) emu_dump_taintpages();
+#endif
     return !emu->stop;
 }
 
@@ -1354,10 +1361,11 @@ uint8_t emu_stop_trigger(emu_thread_t *emu) {
     case I_UDF: {
         if (d->w == MARKER_START) {
             emu_log_debug("MARKER: starting emu\n");
-            emu->bypass = 0;
             return 1;
         } else if (d->w == MARKER_STOP) {
             emu_log_debug("MARKER: stopping emu\n");
+            emu_unprotect_mem();
+            emu_global->disabled = 1;
             emu->stop = 1;
         } else {
             emu_abort("MARKER: unexpected value! %x\n", d->instr);
@@ -1376,7 +1384,6 @@ uint8_t emu_stop_trigger(emu_thread_t *emu) {
         if (d->w == MARKER_START) {
             emu_log_debug("MARKER: starting emu\n");
             // bypass complete
-            emu->bypass = 0;
             /* advance PC but leave emu enabled */
             return 1;
         }
@@ -1413,9 +1420,7 @@ emu_init_handler(int sig,
 
     // inspect oldstack and see if we had already setup the thread->altstack
     if (oss.ss_sp != NULL || oss.ss_size != 0 || oss.ss_flags == SA_ONSTACK) {
-        pthread_internal_t *thread = (pthread_internal_t *)pthread_self();
-        emu_log_warn("[-] sigaltstack previously setup! tid: %d oss ss_sp: %p ss_flags: %d ss_size: %d\n", thread->kernel_id, oss.ss_sp, oss.ss_flags, oss.ss_size);
-        dump_backtrace(gettid()); // should be safe to call - we are not in a handler
+        emu_log_warn("[-] %7s sigaltstack previously setup! tid: %d oss ss_sp: %p ss_flags: %d ss_size: %d\n", get_signame(sig), ((pthread_internal_t *)pthread_self())->kernel_id, oss.ss_sp, oss.ss_flags, oss.ss_size);
     }
     // assert(oss.ss_sp == NULL && oss.ss_size == 0 && oss.ss_flags != SA_ONSTACK);
 
@@ -1493,8 +1498,6 @@ uint8_t emu_disasm(emu_thread_t *emu, darm_t *d, uint32_t pc) {
         if (dladdr((void *)pc, &info)) {
             /* FIXME: can't use strdup since it uses dlmalloc... */
             /* HACK: temporarily disable dlmalloc marker to allow call  */
-            dlemu_set_tid(0);
-            dlemu_set_tid(gettid());
             char* demangled = emu->lock_acquired ? "locked" : demangle_symbol_name(info.dli_sname);
             symbol_name = demangled ? demangled : info.dli_sname;
             function_offset = (uintptr_t)info.dli_saddr - (uintptr_t)info.dli_fbase;
@@ -1998,6 +2001,7 @@ emu_handler_segv(int sig, siginfo_t *si, void *ucontext) {
     if (sig == SIGSEGV) {
 #ifndef NO_TAINT
         COUNT(trap_segv);
+#if 0
         uint32_t addr_fault = uc->uc_mcontext.fault_address;
         bool stack_taint = stack_addr(addr_fault);
         if (emu_get_taint_mem(addr_fault) == TAINT_CLEAR) {
@@ -2011,6 +2015,7 @@ emu_handler_segv(int sig, siginfo_t *si, void *ucontext) {
             COUNT(taint_hit);
             if (stack_taint) COUNT(taint_hit_stack);
         }
+#endif
 #endif  /* NO_TAINT */
     } else if (sig == SIGTRAP || sig == SIGILL) {
         COUNT(trap_bkpt);
@@ -2484,7 +2489,6 @@ emu_set_taint_array(uint32_t addr, uint32_t tag, uint32_t length) {
 #ifndef PROFILE
     // emu_dump_taintmaps();
 #endif
-    mutex_unlock(&taint_lock);
 
     emu_log_debug("%s: complete.\n", __func__);
 }
@@ -2820,6 +2824,7 @@ bool emu_debug() {
     return emu_global->debug;
 }
 
+#if 0
 inline
 bool emu_bypass() {
     emu_thread_t *emu = emu_tls_get();
@@ -2828,6 +2833,7 @@ bool emu_bypass() {
     // only bypass when emu is running
     return emu->running ? tainted : 0;
 }
+#endif
 
 inline
 bool emu_selective() {

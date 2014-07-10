@@ -28,6 +28,7 @@
 #include "perf_event.h"
 #include "ucontext.h"
 #define __read read
+#define __write write
 #else
 #include <linux/perf_event.h>
 #endif
@@ -38,15 +39,19 @@
 // xattr.h from $AOSP/dalvik/libattr/attr/xattr.h
 #include "xattr.h"              /* fsetxattr, fgetxattr */
 
+#include <bionic_atomic_inline.h>
+
 #define atomic_inc __atomic_inc
 #define atomic_dec __atomic_dec
+#define atomic_add __sync_fetch_and_add
+#define atomic_sub __sync_fetch_and_sub
 #define property_get __system_property_get
 #ifdef NDEBUG
 #define PROFILE
 #else
 #define TRACE
-#define TRACE_PATH "/sdcard/trace"
 #endif
+#define TRACE_PATH "/sdcard/trace"
 
 #ifndef NO_TAINT
 # define TAINT_PC
@@ -110,6 +115,8 @@
 #define emu_printf(...) { LOGE("%s: ", __func__); LOGE(__VA_ARGS__); }
 #define EMU_ENTRY LOGE("%s\n", __func__)
 
+#ifndef PROFILE
+#warning "emu_abort() enabled! This has a huge performance impact!"
 #define emu_abort(...) {                                           \
   UNUSED int __errnum = errno;                                     \
   emu_log_error("\n");                                             \
@@ -118,15 +125,23 @@
   emu_log_error( "errno %d %s\n", __errnum, strerror(__errnum));   \
   emu_log_error("%s: ", __func__);                                 \
   emu_log_error(__VA_ARGS__);                                      \
-  emu_log_error("instr total: %d\n", emu_global->instr_total);     \
+  emu_log_error("instr total: %d\n", COUNTER(instr_total));        \
   emu_log_error("line: %d\n", __LINE__);                           \
   emu_log_error("*********************************\n\n");          \
   emu_global->debug = 1;                                           \
-  emu_dump_taintmaps();                                            \
+  emu_unprotect_mem();                                             \
   gdb_wait();                                                      \
   signal(SIGSEGV, SIG_DFL);                                        \
   *SEGV_FAULT_ADDR = 0xbadf00d;                                    \
 }
+#else
+#define emu_abort(...) {                                           \
+    emu_log_error(__VA_ARGS__);                                    \
+    gdb_wait();                                                    \
+    signal(SIGSEGV, SIG_DFL);                                      \
+    *SEGV_FAULT_ADDR = 0xbadf00d;                                  \
+}
+#endif
 
 #define SWITCH_COMMON                                                  \
     case I_INVLD: {                                                    \
@@ -161,6 +176,39 @@ T: Thumb mode
 #define TAINTMAP_STACK 1        /* taintmap index for stack */
 #define TAINTPAGE_SIZE (PAGE_SIZE >> 2)
 
+#define ALIGN_PAGE __attribute__((aligned(PAGE_SIZE)))
+#define INLINE     __attribute__((always_inline))
+
+typedef struct _stats_t {
+    uint32_t trap_bkpt;         /* trap counter */
+    uint32_t trap_segv;
+    uint32_t taint_hit;
+    uint32_t taint_hit_stack;
+    uint32_t taint_miss;
+    uint32_t taint_miss_stack;
+    uint32_t taint_mem_read;
+    uint32_t taint_mem_write;
+    uint32_t mem_read;
+    uint32_t mem_write;
+    uint32_t instr_load;
+    uint32_t instr_ldrex;
+    uint32_t instr_store;
+    uint32_t instr_strex;
+    uint32_t instr_total;       /* number of ops seen so far */
+    uint32_t mprotect;          /* calls to protect or unprotect a page */
+    uint32_t mprotect_stack;
+    uint32_t protect;
+    uint32_t unprotect;
+    uint32_t trampoline;        /* read or write trampolines */
+    uint32_t intercept_emu_read;
+    uint32_t intercept_emu_write;
+    uint32_t trampoline_read;
+    uint32_t trampoline_read_taint;
+    uint32_t trampoline_write;
+    uint32_t trampoline_write_taint;
+    uint32_t intercept_stack;
+} stats_t;
+
 typedef struct _map_t {
     uint32_t vm_start;
     uint32_t vm_end;
@@ -181,7 +229,14 @@ typedef struct _taintmap_t {
     uint32_t  end;              /* address range end */
     uint32_t  bytes;            /* (end - start) bytes */
     taintpage_t *pages;         /* taintpages */
-} taintmap_t;
+    uint16_t  page_count;       /* nr of in use taint pages */
+} ALIGN_PAGE taintmap_t;
+
+typedef struct _interceptor_t {
+    void*    fun;
+    uint32_t argc;
+    void*    argv[16];
+} interceptor_t;
 
 /* GLOBAL emu state */
 typedef struct _emu_global_t {
@@ -189,33 +244,27 @@ typedef struct _emu_global_t {
     uint16_t   nr_maps;           /* number of process maps available */
     map_t      maps[MAX_MAPS];
     taintmap_t taintmaps[MAX_TAINTMAPS];   /* taint storage for memory */
+    uint32_t   taintpages;
     int32_t    running;                    /* number of currently emulating threads */
     bool       disabled;                   /* prevent further emulation */
     bool       protect;                    /* dynamic toggle for taint mprotect */
     bool       standalone;        /* standalone or target based emu */
     uint32_t   target;            /* pid targetted for emulation */
-    int32_t    instr_total;       /* number of ops seen so far */
-    int32_t    trap_bkpt;         /* trap counter */
-    int32_t    trap_segv;
-    uint32_t   taint_hit;
-    uint32_t   taint_hit_stack;
-    uint32_t   taint_miss;
-    uint32_t   taint_miss_stack;
-    uint32_t   taint_mem_read;
-    uint32_t   taint_mem_write;
-    uint32_t   mem_read;
-    uint32_t   mem_write;
     int32_t    trace_fd;          /* trace file descriptor */
     int32_t    mem_fd;            /* memory access via /proc/self/mem */
     int32_t    thread_count;      /* number of threads configured for emu (sigaltstacks) */
     uint32_t   stack_max;         /* RLIMIT_STACK */
     uint32_t   stack_base;        /* stack top - RLIMIT_STACK */
+
+    /* properties */
     int32_t    debug;             /* dynamic debug statements */
     int32_t    stop_total;
     int32_t    stop_handler;
     int32_t    debug_offset;
     int32_t    selective;
-} emu_global_t;
+
+    stats_t    stats;
+} ALIGN_PAGE emu_global_t;
 
 /* Per-Thread emu state */
 typedef struct _emu_thread_t {
@@ -227,18 +276,19 @@ typedef struct _emu_thread_t {
     uint8_t     branched;         /* branch taken? */
     uint8_t     disasm_bytes;     /* bytes used in last disasm */
     uint32_t   *regs;             /* easy access to ucontext regs */
-    uint16_t    nr_maps;          /* number of process maps available */
     uint32_t    taintreg[N_REGS]; /* taint storage for regs */
     int32_t     instr_count;      /* number of ops seen in current trap handler */
-    uint64_t    time_start;       /* execution time measurements */
-    uint64_t    time_end;
+    struct timespec    time_start;       /* execution time measurements */
+    struct timespec    time_end;
     int32_t     trace_fd;         /* trace file descriptor */
-    bool        running;          /* flag to avoid stdio within sig handler */
+    bool        running;          /* trampolines require checking if emu is running */
     bool        stop;             /* emu stop requested */
     uint8_t     skip;             /* special hack to skip certain tricky functions */
     bool        bypass;           /* flag to bypass emulation of trampolines */
-    uint8_t     lock_acquired;    /* target program holding a lock */
-} emu_thread_t;
+    bool        check_trap;
+    uint8_t     lock_acquired;    /* lock tracking for ldrex/strex pairs */
+    interceptor_t interceptor;
+} ALIGN_PAGE emu_thread_t;
 
 /* Synchronization */
 // mutex options: PTHREAD_MUTEX_INITIALIZER or PTHREAD_RECURSIVE_MUTEX_INITIALIZER
@@ -258,6 +308,11 @@ static emu_global_t __emu_global = {
 };
 
 static emu_global_t *emu_global = &__emu_global;
+
+/* counters for statistics */
+#define COUNT(counter)       (COUNTER(counter)++)
+#define COUNTER(counter)     (__emu_global.stats.counter)
+#define WCOUNT(counter, val) (COUNTER(counter) = val)
 
 /* read/write register by number */
 #define RREGN(reg)  emu_read_reg(emu, reg)
@@ -602,6 +657,7 @@ void dbg_dump_ucontext_vfp(ucontext_t *uc);
 void emu_dump(emu_thread_t *emu);
 void emu_dump_diff(emu_thread_t *emu);
 void emu_dump_cpsr(emu_thread_t *emu);
+#ifdef AOSP_BUILD
 void dump_backtrace(pid_t tid);
 #endif
 uint32_t emu_read_reg(emu_thread_t *emu, darm_reg_t reg);
@@ -645,17 +701,20 @@ static void emu_init_taintmaps(emu_global_t *emu_global);
 static taintmap_t *emu_get_taintmap(uint32_t addr);
 uint32_t emu_dump_taintmaps();
 uint32_t emu_dump_taintpages();
-static uint32_t emu_get_taint_mem(uint32_t addr);
-static void emu_set_taint_mem(uint32_t addr, uint32_t tag);
+uint32_t emu_get_taint_mem(uint32_t addr);
+void emu_set_taint_mem(uint32_t addr, uint32_t tag);
 // next two defined in anemu.h already
 void emu_set_taint_array(uint32_t addr, uint32_t tag, uint32_t length);
 uint32_t emu_get_taint_array(uint32_t addr, uint32_t length);
-static taintpage_t* emu_get_taintpage(uint32_t addr);
-static void emu_update_taintpage(uint32_t page, int8_t increment);
-static ssize_t emu_memcpy(void *dest, const void *src, size_t n);
+ssize_t emu_taint_read(int fd, void *buf, size_t count);
+ssize_t emu_taint_write(int fd, void *buf, size_t count);
+taintpage_t* emu_get_taintpage(uint32_t addr);
+static void emu_update_taintpage(uint32_t page, int16_t increment);
+ssize_t emu_memcpy(void *dest, const void *src, size_t n);
 static void emu_memcpy_safe(void *dest, const void *src, size_t n);
 void emu_init_proc_mem();
 bool emu_intercept(emu_thread_t *emu, uint32_t addr);
+bool emu_check_intercept(emu_thread_t *emu);
 #else  /* NO_TAINT */
 #define emu_set_taint_reg(...)    (void)(NULL)
 #define emu_get_taint_reg(...)    (void)(NULL)
@@ -684,6 +743,7 @@ bool emu_protect();
 bool emu_set_running(bool state);
 bool emu_debug();
 bool emu_bypass();
+uint32_t get_sp();
 bool emu_selective();
 bool stack_addr();
 uint32_t instr_mask(darm_instr_t instr);
