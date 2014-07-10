@@ -2423,9 +2423,8 @@ emu_set_taint_array(uint32_t addr, uint32_t tag, uint32_t length) {
     // Important: must initialize state first - this includes necessary logging and taintmaps
     if (!emu_initialized()) emu_init();
 
-    mutex_lock(&taint_lock);
-    uint32_t p, x;
 
+#if 0
     for (p = addr; p < (addr + length); p += PAGE_SIZE) {
         taintpage_t *tp = emu_get_taintpage(p);
         if (!(*tp == 0 && tag == TAINT_CLEAR)) {
@@ -2441,6 +2440,46 @@ emu_set_taint_array(uint32_t addr, uint32_t tag, uint32_t length) {
             }
         }
     }
+#else
+    taintmap_t *taintmap = emu_get_taintmap(addr);
+    uint32_t p;
+    for (p = Align(addr,4); p < (addr + length); p += PAGE_SIZE) {
+        taintpage_t *tp = emu_get_taintpage(p);
+        if (!(*tp == 0 && tag == TAINT_CLEAR)) {
+            uint32_t p_end;
+            // safety check if current page would cross the taint array end
+            if (p + PAGE_SIZE < (addr + length)) {
+                p_end = p + PAGE_SIZE;
+            } else {
+                p_end = addr + length;
+            }
+            uint32_t x;
+            int16_t increment = 0;
+            for (x = p; x < p_end; x+=4) {
+                uint32_t offset = (x - taintmap->start) >> 2;
+                emu_log_debug("p: %x x: %x offset: %x\n", p, x, offset);
+                bool update = false;
+                if (tag == TAINT_CLEAR && taintmap->data[offset] != TAINT_CLEAR) {
+                    emu_log_taint("taint: un-tainting mem: %x offset: %x\n", x, offset);
+                    increment--;
+                    update = true;
+                } else if (tag != TAINT_CLEAR && taintmap->data[offset] == TAINT_CLEAR) {
+                    emu_log_taint("taint: tainting mem: %x offset: %x tag: %x\n", x, offset, tag);
+                    increment++;
+                    update = true;
+                }
+                if (update) {
+                    taintmap->data[offset] = tag;  /* word (32-bit) based tag storage */
+                    emu_log_debug("taint: x: %x offset %x tag %x\n", x, offset, tag);
+                }
+            }
+            if (increment) { // if taint toggled
+                emu_log_taint("taint: update taintpage increment %d\n", increment);
+                emu_update_taintpage(p, increment);
+            }
+        }
+    }
+#endif
 
 #ifndef PROFILE
     // emu_dump_taintmaps();
@@ -2460,12 +2499,25 @@ emu_get_taint_array(uint32_t addr, uint32_t length) {
     assert(addr != 0 && length > 0);
 
     uint32_t ret = TAINT_CLEAR;
-    uint32_t p, x;
-    for (p = addr; p < (addr + length); p += PAGE_SIZE) {
+    uint32_t p;
+    // taintmap can only be the same space for a single array range
+    taintmap_t *taintmap = emu_get_taintmap(addr);
+    for (p = Align(addr, 4); p < (addr + length); p += PAGE_SIZE) {
         taintpage_t *tp = emu_get_taintpage(p);
         if (*tp) { // is page tainted?
-            for (x = p; x < (p + PAGE_SIZE); x += 4) {
-                ret |= emu_get_taint_mem(x);
+            uint32_t p_end;
+            if (p + PAGE_SIZE < (addr + length)) {
+                p_end = p + PAGE_SIZE;
+            } else {
+                p_end = addr + length;
+            }
+            uint32_t offset;
+            uint32_t x;
+            for (x = p; x < p_end; x+=4) {
+                uint32_t offset = (x - taintmap->start) >> 2;
+                uint32_t tag = taintmap->data[offset]; /* word (32-bit) based tag storage */
+                emu_log_debug("p: %x x: %x offset: %x tag: %x\n", p, x, offset, tag);
+                ret |= tag;
             }
         }
     }
@@ -2484,20 +2536,26 @@ taintpage_t* emu_get_taintpage(uint32_t addr) {
 
 // assuming taintmap lock is held by caller so no atomic needed
 static void
-emu_update_taintpage(uint32_t page, int8_t increment) {
+emu_update_taintpage(uint32_t page, int16_t increment) {
+    if (increment == 0) return;
     taintpage_t *tp = emu_get_taintpage(page);
 
-    assert(!(*tp == TAINTPAGE_SIZE && increment == +1));
+    assert(!(*tp == TAINTPAGE_SIZE && increment > 0));
     if (emu_protect()) {
-        if (*tp == 0 && increment == +1) {
+        if (*tp == 0 && increment) {
+            assert(increment > 0);
+            emu_global->taintpages++;
             emu_log_taint("taint: losing virgin mprotect page: %x\n", page);
             static const uint32_t flags = PROT_NONE;
             mprotectPage(page, flags);
-        } else if (*tp == +1 && increment == -1) {
+            COUNT(protect);
+        } else if (*tp + increment == 0) {
+            emu_global->taintpages--;
             emu_log_taint("taint: become virgin mprotect page: %x\n", page);
             // TODO: extend taintpage_t to restore original page flags (r/w/x)
             static const uint32_t flags = PROT_READ | PROT_WRITE;
             mprotectPage(page, flags);
+            COUNT(unprotect);
         }
     }
     assert(!(*tp == 0 && increment == -1));
@@ -2627,6 +2685,7 @@ void emu_interceptor(void* fun, size_t argc, void* a0, void* a1, void* a2) {
 #else  /* !NO_TAINT */
 void emu_set_taint_array(uint32_t addr, uint32_t tag, uint32_t length) {}
 uint32_t emu_get_taint_array(uint32_t addr, uint32_t length)           { return TAINT_CLEAR; }
+uint32_t emu_dump_taintpages() { return 0; }
 #endif  /* NO_TAINT */
 
 #if 0

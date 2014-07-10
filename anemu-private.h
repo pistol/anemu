@@ -671,6 +671,7 @@ bool emu_intercept(emu_thread_t *emu, uint32_t addr);
 #define emu_update_taintpage(...) (void)(NULL)
 #define emu_init_proc_mem(...)    (void)(NULL)
 #define emu_intercept(...)        (void)(NULL)
+#define emu_check_intercept(...)  (void)(NULL)
 #endif  /* NO_TAINT */
 
 void emu_init_properties();
