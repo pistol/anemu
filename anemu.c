@@ -344,9 +344,10 @@ cpumode_t TargetInstrSet(emu_thread_t *emu, uint32_t instr) {
 }
 
 void BranchWritePC(emu_thread_t *emu, uint32_t addr) {
-    /* EMU_ENTRY; */
-    emu_log_debug("RREGN(PC): %x\n", RREGN(PC));
-    emu_log_debug("addr: %x\n", addr);
+    emu_log_debug("RREGN(PC): %x addr: %x\n", RREGN(PC), addr);
+#ifndef NO_TAINT
+    if (emu_intercept(emu, addr)) return;
+#endif
 #ifndef PROFILE
     if (emu_debug()) emu_map_lookup(addr);
 #endif
@@ -356,11 +357,13 @@ void BranchWritePC(emu_thread_t *emu, uint32_t addr) {
     } else {
         EMU(WREGN(PC) = addr & ~0b1);
     }
-    emu_intercept(emu, addr);
 }
 
 void BXWritePC(emu_thread_t *emu, uint32_t addr) {
     emu_log_debug("RREGN(PC): %x addr: %x\n", RREGN(PC), addr);
+#ifndef NO_TAINT
+    if (emu_intercept(emu, addr)) return;
+#endif
 #ifndef PROFILE
     if (emu_debug()) emu_map_lookup(addr);
 #endif
@@ -373,7 +376,6 @@ void BXWritePC(emu_thread_t *emu, uint32_t addr) {
     } else {
         emu_abort("invalid branch addr: %x", addr);
     }
-    emu_intercept(emu, addr);
 }
 
 void emu_type_branch_syscall(emu_thread_t *emu) {
@@ -1952,6 +1954,10 @@ getAlignedPage(uint32_t addr) {
 void
 emu_handler_segv(int sig, siginfo_t *si, void *ucontext) {
     emu_thread_t *emu = emu_tls_get();
+    ucontext_t *uc = (ucontext_t *)ucontext;
+    emu_ucontext(emu, uc);
+    emu_check_intercept(emu);
+
     assert(emu);
     if (emu->running) {
         emu_abort("re-trap inside emu!\n");
@@ -1959,12 +1965,11 @@ emu_handler_segv(int sig, siginfo_t *si, void *ucontext) {
 #ifndef NDEBUG
     register uint32_t sp asm("sp");
     emu_log_debug("SP = %x\n", sp);
-#endif
-    ucontext_t *uc = (ucontext_t *)ucontext;
     if (emu_debug()) {
         emu_siginfo(sig, si, uc);
         emu_dump_taintmaps();
     }
+#endif
 
     // emu must have been already initialized
     // by previously called set_taint_array which then mprotected memory
@@ -1977,11 +1982,11 @@ emu_handler_segv(int sig, siginfo_t *si, void *ucontext) {
     assert((sig == SIGSEGV && si->si_code == SEGV_ACCERR) || // taint trap
            (sig == SIGTRAP && si->si_code == TRAP_BRKPT) ||  // start marker
            (sig == SIGILL  && si->si_code == ILL_ILLOPC));   // stop  marker
+        // (sig == SIGILL  && si->si_code == ILL_ILLTRP));   // start marker
 
-    emu_ucontext(emu, uc);
 
     if (sig == SIGTRAP) {
-        assert(RMEM32(CPU(pc)) == MARKER_START);
+        assert(RMEM32(CPU(pc)) == MARKER_START || RMEM32(CPU(pc)) == MARKER_BYPASS);
     } else if (sig == SIGILL) {
         assert(RMEM32(CPU(pc)) == MARKER_STOP);
     }
@@ -2545,13 +2550,78 @@ void emu_init_proc_mem() {
 }
 
 bool emu_intercept(emu_thread_t *emu, uint32_t addr) {
-    if ((void *)addr == emu_trampoline_read ||
-        (void *)addr == emu_trampoline_write) {
-        emu_log_info("intercept: trampoline\n");
-        assert(!emu->bypass);
-        emu->bypass = 1;
+    bool intercept = false;
+    // on intercept, we call our own function and return to LR
+    // make sure r0 is set to proper return
+    if ((void *)addr == emu_trampoline_read) {
+        emu_log_info("intercept: trampoline read\n");
+        int fd       = (int)RREGN(r0);
+        void *buf    = (void*)RREGN(r1);
+        size_t count = (size_t)RREGN(r2);
+        ssize_t ret  = (ssize_t)emu_taint_read(fd, buf, count);
+        WREGN(r0)    = (uint32_t)ret;
+        WREGN(PC)    = RREGN(LR);
+        intercept    = true;
+        COUNT(intercept_emu_read);
+    } else if ((void *)addr == emu_trampoline_write) {
+        emu_log_info("intercept: trampoline write\n");
+        int fd       = (int)RREGN(r0);
+        void *buf    = (void*)RREGN(r1);
+        size_t count = (size_t)RREGN(r2);
+        ssize_t ret  = (ssize_t)emu_taint_write(fd, buf, count);
+        WREGN(r0)    = (uint32_t)ret;
+        WREGN(PC)    = RREGN(LR);
+        intercept    = true;
+        COUNT(intercept_emu_write);
     }
-    return emu->bypass;
+    return intercept;
+}
+
+bool emu_check_intercept(emu_thread_t *emu) {
+    bool intercept = false;
+    // NOTE: avoid RMEM32 since it increments stats counters and this is covert
+    // if (RMEM32(CPU(pc)) == MARKER_BYPASS) {
+    if (*(uint32_t*)(CPU(pc)) == MARKER_BYPASS) {
+        emu_log_debug("MARKER: bypass\n");
+        interceptor_t *i = &emu->interceptor;
+        if (i->fun == emu_taint_read) {
+            assert(i->argc == 3);
+            int fd       = (int)i->argv[0];
+            void *buf    = (void*)i->argv[1];
+            size_t count = (size_t)i->argv[2];
+            ssize_t ret  = emu_taint_read(fd, buf, count);
+            WREGN(r0)    = ret;
+            intercept    = true;
+        } else if (i->fun == emu_taint_write) {
+            assert(i->argc == 3);
+            int fd       = (int)i->argv[0];
+            void *buf    = (void*)i->argv[1];
+            size_t count = (size_t)i->argv[2];
+            ssize_t ret  = emu_taint_write(fd, buf, count);
+            WREGN(r0)    = ret;
+            intercept    = true;
+        } else {
+            emu_abort("unknown intercept\n");
+        }
+        if (intercept) {
+            CPU(pc) += 4;
+            COUNT(intercept_stack);
+            emu_stop(emu);      /* doesn't return */
+        }
+    }
+    return intercept;
+}
+
+__attribute__((always_inline))
+void emu_interceptor(void* fun, size_t argc, void* a0, void* a1, void* a2) {
+    emu_thread_t *emu        = emu_tls_get();
+    emu->interceptor.fun     = fun;
+    emu->interceptor.argc    = argc;
+    emu->interceptor.argv[0] = a0;
+    emu->interceptor.argv[1] = a1;
+    emu->interceptor.argv[2] = a2;
+
+    EMU_MARKER_BYPASS;
 }
 
 #else  /* !NO_TAINT */
@@ -2622,6 +2692,7 @@ emu_clear_taintpages() {
     }
     emu_global->taintpages = 0;
 }
+#endif
 
 
 __attribute__((always_inline))
@@ -3192,8 +3263,7 @@ ssize_t check_write(int fd, void *buf, size_t count) {
     return ret;
 }
 
-int emu_trampoline_read(int fd, void *buf, size_t count) {
-    ssize_t ret;
+ssize_t emu_trampoline_read(int fd, void *buf, size_t count) {
     // NOTES:
     // we don't want to emulate the taint propagation logic itself but still want to perform it
     // 1) original program calls trampoline while not under emulation -> all good
@@ -3203,127 +3273,128 @@ int emu_trampoline_read(int fd, void *buf, size_t count) {
     //   problem is any functions called from emu could later call trampoline, hard to determine which
     // 3) emu itself calls trampoline due to syscall use -> skip any taint propagation inside trampoline
 #ifndef NO_TAINT
+    // ssize_t ret = -1;
+    register ssize_t ret asm("r0") = -1;
     if (emu_target()) {
-        bool bypass = false;
         if (emu_running()) {
-            bypass = emu_bypass();
-            if (bypass) {
-                // program under emu called trampoline, perform taint propagation but with emu temp off
-                EMU_MARKER_STOP;
-            } else {
-                // emu is calling - no taint propagation wanted
-                goto no_taint;
-            }
-        }
-
-        uint32_t taint_file = emu_get_taint_file(fd);
-        uint32_t taint_buf  = emu_get_taint_array((uint32_t)buf, count);
-
-        if (!taint_file && !taint_buf) {
-            if (bypass) { EMU_MARKER_START; }
+            // case 2: this must be emu calling otherwise we'd have intercepted it while emulating earlier
             goto no_taint;
-        }
-
-        if (taint_buf) {
-            // need temp buffer to avoid EFAULT
-            emu_log_debug("read(%d, %p, %d) tainted buf - sneaking data...\n", fd, buf, count);
-            void *tmp = emu_alloc(count);
-            ret = check_read(fd, tmp, count);
-            if (ret) {
-                emu_memcpy(buf, tmp, ret);
-                emu_set_taint_array((uint32_t)buf, taint_file, ret);
-            }
-            emu_free(tmp, count);
         } else {
-            // can perform read directly
-            ret = check_read(fd, buf, count);
-            if (ret && taint_file) {
-                emu_log_debug("read(%d, %p, %d) tainted ret: %ld\n", fd, buf, count, ret);
-                emu_set_taint_array((uint32_t)buf, taint_file, ret);
+            // case 1
+            // if (!emu_disabled()) assert(*emu_get_taintpage(get_sp()) == 0);
+            if (!emu_disabled() && emu_get_taintpages() && (*emu_get_taintpage(get_sp()) != 0)) {
+                /* LOGE("interceptor read\n"); */
+                emu_log_debug("interceptor read\n");
+                emu_interceptor(emu_taint_read, 3, (void*)fd, (void*)buf, (void*)count);
+            } else {
+                ret = emu_taint_read(fd, buf, count);
             }
+            return ret;
         }
-
-        if (bypass) { EMU_MARKER_START; }
-
-        return ret;
     }
 no_taint:
+    return check_read(fd, buf, count);
+#else
+    return __read(fd, buf, count);
 #endif
-    /* common case (no taint) */
-    ret = check_read(fd, buf, count);
-    return ret;
 }
 
-int emu_trampoline_write(int fd, void *buf, size_t count) {
-    ssize_t ret;
 #ifndef NO_TAINT
-    if (emu_target()) {
-        bool bypass = false;
-        if (emu_running()) {
-            bypass = emu_bypass();
-            if (bypass) {
-                // program under emu called trampoline, perform taint propagation but with emu temp off
-                EMU_MARKER_STOP;
-            } else {
-                // emu is calling - no taint propagation wanted
-                goto no_taint;
-            }
-        }
-        uint32_t taint_file = emu_get_taint_file(fd);
-        uint32_t taint_buf  = emu_get_taint_array((uint32_t)buf, count);
+ssize_t emu_taint_read(int fd, void *buf, size_t count) {
+    uint32_t taint_file = emu_get_taint_file(fd);
+    uint32_t taint_buf  = emu_get_taint_array((uint32_t)buf, count);
 
-        if (!taint_file && !taint_buf) {
-            // let write go through - this must be Dalvik setting taint
-            emu_log_debug("write(%d, %p, %d) taint from Dalvik...\n", fd, buf, count);
-            if (bypass) EMU_MARKER_START;
+    COUNT(trampoline_read);
+    ssize_t ret = -1;
+    if (!taint_file && !taint_buf) {
+        ret = check_read(fd, buf, count);
+        return ret;
+    }
+
+    COUNT(trampoline_read_taint);
+    if (taint_buf) {
+        // need temp buffer to avoid EFAULT
+        /* LOGD("read(%d, %p, %d) tainted buf - sneaking data...\n", fd, buf, count); */
+        emu_log_debug("read(%d, %p, %d) tainted buf - sneaking data...\n", fd, buf, count);
+        void *tmp = emu_alloc(count);
+        ret = check_read(fd, tmp, count);
+        if (ret) {
+            emu_memcpy(buf, tmp, ret);
+            emu_set_taint_array((uint32_t)buf, taint_file, ret);
+        }
+        emu_free(tmp, count);
+    } else {
+        // can perform read directly
+        ret = check_read(fd, buf, count);
+        if (ret && taint_file) {
+            /* LOGD("read(%d, %p, %d) tainted ret: %ld\n", fd, buf, count, ret); */
+            emu_log_debug("read(%d, %p, %d) tainted ret: %ld\n", fd, buf, count, ret);
+            emu_set_taint_array((uint32_t)buf, taint_file, ret);
+        }
+    }
+    return ret;
+}
+#endif
+
+ssize_t emu_trampoline_write(int fd, void *buf, size_t count) {
+#ifndef NO_TAINT
+    register ssize_t ret asm("r0") = -1;
+    if (emu_target()) {
+        if (emu_running()) {
+            // case 2: emu is calling - no taint propagation wanted
             goto no_taint;
-        } else if (!taint_file && taint_buf) {
-            emu_log_debug("write(%d, %p, %d) tainted - sneaking data...\n", fd, buf, count);
-            void *tmp = emu_alloc(count);
-            emu_memcpy(tmp, buf, count);
-            ret = check_write(fd, tmp, count);
-            emu_free(tmp, count);
-            if (fd != STDOUT_FILENO && fd != STDERR_FILENO) {
-                emu_set_taint_file(fd, taint_buf);
+        } else {
+            // case 1
+            // if (!emu_disabled()) assert(*emu_get_taintpage(get_sp()) == 0);
+            if (!emu_disabled() && emu_get_taintpages() && (*emu_get_taintpage(get_sp()) != 0)) {
+                /* LOGE("interceptor write\n"); */
+                emu_log_debug("interceptor write\n");
+                emu_interceptor(emu_taint_write, 3, (void*)fd, (void*)buf, (void*)count);
+            } else {
+                ret = emu_taint_write(fd, buf, count);
             }
-            if (bypass) EMU_MARKER_START;
             return ret;
         }
     }
  no_taint:
-#endif  /* NO_TAINT */
-    /* common case (no taint) */
-    ret = __write(fd, buf, count);
-    if (ret == -1) {
-        // this should never happen outside emu
-        assert(errno != EFAULT);
-        if (errno != 2) {
-            emu_log_error("write(%d, %p, %d) failed with ret: %ld and errno: %d\n", fd, buf, count, ret, errno);
-            // dump_backtrace(gettid());
+    return check_write(fd, buf, count);
+#else  /* NO_TAINT */
+    return __write(fd, buf, count);
+#endif
+}
+
+#ifndef NO_TAINT
+ssize_t emu_taint_write(int fd, void *buf, size_t count) {
+    ssize_t ret = -1;
+    uint32_t taint_file = emu_get_taint_file(fd);
+    uint32_t taint_buf  = emu_get_taint_array((uint32_t)buf, count);
+
+    COUNT(trampoline_write);
+    if (!taint_file && !taint_buf) {
+        // let write go through - this must be Dalvik setting taint
+        ret = check_write(fd, buf, count);
+        emu_log_debug("write(%d, %p, %d) ret: %ld\n", fd, buf, count, ret);
+     } else if (!taint_file && taint_buf) {
+        emu_log_debug("write(%d, %p, %d) tainted - sneaking data...\n", fd, buf, count);
+        void *tmp = emu_alloc(count);
+        emu_memcpy(tmp, buf, count);
+        ret = check_write(fd, tmp, count);
+        emu_free(tmp, count);
+        if (fd != STDOUT_FILENO && fd != STDERR_FILENO) {
+            emu_set_taint_file(fd, taint_buf);
         }
+        COUNT(trampoline_write_taint);
+    } else { // taint_file
+        // NOTE: we never clear file taint if we're writing a non-tainted buffer
+        // this is because other parts of the file could still be tainted...
+        emu_log_debug("write(%d, %p, %d) tainted file but clear buffer...\n", fd, buf, count);
+        ret = check_write(fd, buf, count);
     }
     return ret;
 }
+#endif
 
-/*
-// thread kill (send signal to a thread)
-int tgkill(int tgid, int tid, int sig) {
-    int ret;
-    emu_log_debug("tgkill tgid: %d tid: %d sig: %d\n", tgid, tid, sig);
-    ret = syscall(__NR_tgkill, tgid, tid, sig);
-    if (ret != 0) {
-        switch(ret) {
-        case EINVAL: emu_abort("EINVAL: An invalid thread ID, thread group ID, or signal was specified."); break;
-        case EPERM:  emu_abort("EPERM  Permission denied."); break;
-        case ESRCH:  emu_abort("ESRCH  No process with the specified thread ID (and thread group ID) exists.");
-        default:     emu_abort("Unknown errno %d", ret);
-        }
-    }
-    return ret;
-}
-*/
-
-inline
+__attribute__((always_inline))
 emu_thread_t* emu_tls_get() {
     void**  tls = (void**)__get_tls();
     return tls[TLS_SLOT_EMU_THREAD];
@@ -3359,7 +3430,6 @@ void emu_init_properties() {
     property_get("debug.emu.selective", prop);
     emu_global->selective = (int32_t)atoi(prop);
     emu_log_debug("selective value: %d\n", emu_global->selective);
-
 }
 
 void emu_init_tracefile() {
