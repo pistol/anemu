@@ -288,6 +288,7 @@ typedef struct _emu_thread_t {
     bool        check_trap;
     uint8_t     lock_acquired;    /* lock tracking for ldrex/strex pairs */
     interceptor_t interceptor;
+    pthread_mutex_t lock;
 } ALIGN_PAGE emu_thread_t;
 
 /* Synchronization */

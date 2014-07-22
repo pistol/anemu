@@ -257,7 +257,7 @@ void emu_type_sync(emu_thread_t *emu) {
 
     switch(d->instr) {
     case I_LDREX: {
-        mutex_lock(&emu_lock);
+        mutex_lock(&emu->lock);
         emu_log_debug("LDREX before:\n");
         emu_log_debug("Rt: %x Rn: %x MEM Rn: %x\n", RREG(Rt), RREG(Rn), RMEM32(RREG(Rn)));
         WREG(Rt) = RMEM32(RREG(Rn));
@@ -278,7 +278,7 @@ void emu_type_sync(emu_thread_t *emu) {
         WREG(Rd) = 0;           /* 0: success, 1: fail */
         COUNT(instr_strex);
         COUNT(instr_store);
-        mutex_unlock(&emu_lock);
+        mutex_unlock(&emu->lock);
         break;
     }
         SWITCH_COMMON;
@@ -1149,7 +1149,10 @@ bool emu_singlestep(emu_thread_t *emu) {
     if (!emu_eval_cond(emu)) {
         emu_log_debug("skipping instruction: condition NOT passed\n");
         // STREX mutex issue paranoia
-        assert(emu->darm.instr != I_STREX);
+        if (emu->darm.instr == I_STREX) {
+            assert(emu->lock_acquired);
+            mutex_unlock(&emu->lock);
+        }
         goto next;
     }
 
@@ -3174,6 +3177,7 @@ void emu_hook_thread_entry(void *arg) {
         emu_thread_t *emu = emu_alloc(sizeof(emu_thread_t));
         emu->tid = gettid();
         assert(emu->tid == thread->kernel_id);
+        pthread_mutex_init(&emu->lock, NULL);
         emu_tls_set(emu);
         emu_log_debug("[+] init TLS emu thread\n");
     }
@@ -3188,6 +3192,7 @@ void emu_hook_pthread_internal_free(void *arg) {
         // check error
         emu_thread_t *emu = emu_tls_get();
         if (emu) {
+            pthread_mutex_destroy(&emu->lock);
             emu_log_debug("emu free: %p", emu);
             emu_free(emu, sizeof(emu_thread_t));
             emu_tls_set(NULL);
