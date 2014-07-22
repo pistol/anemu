@@ -408,6 +408,7 @@ void emu_type_branch_syscall(emu_thread_t *emu) {
         /* "svc #0" is the only "svc" instruction in libc.so */
         assert(d->imm == 0);
         SVC();
+        COUNT(syscall);
         break;
     }
         SWITCH_COMMON;
@@ -1747,6 +1748,8 @@ void emu_dump_stats() {
          );
 
     assert(COUNTER(instr_ldrex) == COUNTER(instr_strex));
+
+    LOGI("[s] syscall: %d\n", COUNTER(syscall));
 
     LOGI("[s] mprotect: %d stack: %d protect: %d unprotect: %d\n",
          COUNTER(mprotect),

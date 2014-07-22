@@ -207,6 +207,7 @@ typedef struct _stats_t {
     uint32_t trampoline_write;
     uint32_t trampoline_write_taint;
     uint32_t intercept_stack;
+    uint32_t syscall;
 } stats_t;
 
 typedef struct _map_t {
