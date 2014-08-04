@@ -26,7 +26,7 @@ LD=arm-eabi-ld
 AR=arm-eabi-ar
 RANLIB=arm-eabi-ranlib
 
-BIONIC=${ANDROID}/android-4.2.2_r1/bionic/
+BIONIC=${ANDROID}/android-4.1.1-test/bionic/
 # ANDROID_PRODUCT_OUT=$(ANDROID)/out/target/product/maguro
 
 CFLAGS+=-I$(BIONIC)/libc/include
@@ -84,7 +84,10 @@ lib: $(LIBS)
 #	objdump -dSsClwt $^ > $^.dis
 
 %: %.c
+#	$(CC) $(CFLAGS) -o $@ $^ -I. -Itests -lanemu -static -lz $(LDFLAGS)
 	$(CC) $(CFLAGS) -O0 -o $@ $^ -I. -Itests -lanemu -lz $(LDFLAGS)
+# $(CC) $(CFLAGS) -O0 -o $@ $^ -I. -Itests -static -lz -Wl,-Bdynamic $(LDFLAGS) -lanemu
+# $(CC) -rdynamic $(CFLAGS) -o $@ $^ -I. -Itests $(LDFLAGS) -L. -lanemu -Wl,--whole-archive -L$(HOME)/local -lz -Wl,--no-whole-archive -ldl
 
 test: lib $(TEST_BIN)
 	./tests/matrix 0 128
