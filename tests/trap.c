@@ -28,13 +28,17 @@
 
 // #include <assert.h>
 
+#include <anemu.h>              /* for timing functions */
+
 #ifndef NDEBUG
 #define assert(x) if (!(x)) { printf("ASSERTION (%s) FAILED file: %s line: %d\n", #x, __FILE__, __LINE__); exit(EXIT_FAILURE); }
 #else
 #define assert(x) (void)(NULL)
 #endif
 
+#ifndef PAGE_SIZE
 #define PAGE_SIZE 4096
+#endif
 
 #define __stringify_1(x...)	#x
 #define __stringify(x...)	__stringify_1(x)
@@ -46,33 +50,6 @@
 #define GDB_BREAKINST   BREAKINST_ARM_SWI
 #define KGDB_BREAKINST  0xe7ffdefe
 
-uint64_t getticks(void)
-{
-    static int fd,init = 0;
-    static struct perf_event_attr attr;
-    static uint64_t buffer;
-
-    if(!init) {
-        attr.type = PERF_TYPE_HARDWARE;
-        attr.config = PERF_COUNT_HW_CPU_CYCLES;
-        fd = syscall(__NR_perf_event_open, &attr, 0, -1, -1, 0);
-        if(fd < 0) {
-            fprintf(stderr,"ERROR - Cannot open perf event file descriptor:\n");
-            if(errno == -EPERM || errno == -EACCES)
-                fprintf(stderr,"  Permission denied.\n");
-            else if(errno == ENOENT)
-                fprintf(stderr,"  PERF_COUNT_HW_CPU_CYCLES event is not supported.\n");
-            else
-                fprintf(stderr,"  Attempting to open the file descriptor returned %d (%s).\n",errno, strerror(errno));
-            exit(-1);
-        }
-        init = 1;
-    }
-    // TODO: change to __sread
-    read(fd,&buffer,sizeof(uint64_t));
-    return buffer;
-}
-
 #ifdef __arm__
 #define REG(name) (((ucontext_t *)ucontext)->uc_mcontext.arm_##name)
 #define BKPT ASM(BREAKINST_ARM)
@@ -82,6 +59,7 @@ uint64_t getticks(void)
 #define BKPT asm volatile("int3")
 #endif
 
+/*
 const char *get_signame(int sig) {
     switch(sig) {
     case SIGSEGV:    return "SIGSEGV";
@@ -91,9 +69,9 @@ const char *get_signame(int sig) {
     default:         return "?";
     }
 }
+*/
 
 // time count
-uint64_t start, end, delta;
 uint64_t i, n;
 uint64_t count;
 
@@ -131,39 +109,47 @@ void handler_infinite(int sig) {
     if (count == n) exit(0);
 }
 
-#if 1
-// assumes start, end, i, n are already defined
-#define TEST(name, command, n, expect)                                  \
+struct timespec start, end;
+int64_t diff;
+
+#define MEASURE_START   time_ns(&start)
+#define MEASURE_END     time_ns(&end)
+#define DIFF            diff = ns_to_cycles(diff_ns(&start, &end));
+
+#define PRE                                                             \
+    assert(runs > 0);                                                   \
     count = 0;                                                          \
-    start = getticks();                                                 \
-    for (i = 0; i < n; i++) {                                           \
-        command;                                                        \
+    MEASURE_START;                                                      \
+    for (i = 0; i < runs; i++) {
+
+#define POST(name)                                                      \
     }                                                                   \
-    end = getticks();                                                   \
-    printf("%6"PRIu64" cycles \"%s\"\n",                                \
-           ((end - start) / n), name);                                  \
+    MEASURE_END;                                                    \
+    DIFF;                                                               \
+    printf("%6"PRId64" cycles \"%s\"\n",                                \
+           (diff / runs / div), name);                                  \
+    assert(i == runs);                                                  \
     assert(count == expect);                                            \
-    end = start = 0;
-#else
-#define TEST(name, command, n, expect)                                  \
-    count = 0;                                                          \
-    printf("n: %"PRIu64"\n", n);                                        \
-    start = getticks();                                                 \
-    for (i = 0; i < n; i++) {                                           \
-        command;                                                        \
-    }                                                                   \
-    end = getticks();                                                   \
-    printf("%6"PRIu64" cycles %s\n",                                    \
-           ((end - start) / n), name);                                  \
-    printf("start: %"PRIu64" end: %"PRIu64" count: %"PRIu64"\n\n", start, end, count); \
-    assert(count == expect);                                            \
-    end = start = 0;
-#endif
+    count = 0;
+
+#define TESTX(name, cmd)                        \
+    PRE;                                        \
+    cmd;                                        \
+    POST(name);
+
+#define TEST(name, cmd, co, ex)                  \
+    expect = ex;                                \
+    TESTX(name, cmd);
+
+
+#define INIT_ARRAY(arr, bytes)                  \
+    for (x = 0; x<bytes; x++) {                 \
+        ((uint8_t*)arr)[x] += x;                \
+    }
 
 #define __NR_null 376
 
 int main(int argc, char ** argv) {
-    end = start = delta = 0;
     // setup signal handler
 #if 1
     struct sigaction sa;
@@ -194,17 +180,20 @@ int main(int argc, char ** argv) {
 
     // number of iterations from command line
     n = atoll(argv[1]);
+    uint64_t runs, expect, div;
+    div = 1;
+    runs = n;
 
 #if 1
 #ifdef __arm__
     if(syscall(__NR_null) == 1337) {
-        TEST("null syscall", syscall(__NR_null), n, 0);
+        TESTX("null syscall", syscall(__NR_null));
     } else {
         printf("null syscall not implemented\n");
     }
 #endif
 
-    TEST("getpid()", getpid(), n, 0);
+    TESTX("getpid()", getpid());
     // TEST("time()",   time(NULL), n, 0);
 
 #define FILE "/dev/null"
@@ -213,14 +202,22 @@ int main(int argc, char ** argv) {
 #else
     int fd = open(FILE, O_RDWR, S_IRWXU);
 #endif
-    int tmp[PAGE_SIZE];
-    TEST("read(1B)",   read(fd, &tmp, 1), n, 0);
+    volatile int tmp[PAGE_SIZE];
+
+    /* TEST("read(1B)",   read(fd, &tmp, 1), n, 0); */
+    TESTX("read(1B)",   read(fd, &tmp, 1));
     // TEST("read(4K)",   read(fd, &tmp, PAGE_SIZE), n);
-    TEST("write(1B)",  write(fd, &tmp, 1), n, 0);
+    /* TEST("write(1B)",  write(fd, &tmp, 1), n, 0); */
+    TESTX("write(1B)",  write(fd, &tmp, 1));
+
+    /* TEST("read+write(1B)", tmp[0]++; write(fd, &tmp, 1); read(fd, &tmp, 1), n, 0); */
+    TESTX("read+write(1B)", tmp[0]++; write(fd, &tmp, 1); read(fd, &tmp, 1));
+
     // TEST("write(4K)",  write(fd, &tmp, PAGE_SIZE), n);
     close(fd);
 
-    TEST("clock_gettime()",  clock_gettime(CLOCK_REALTIME, NULL), n, 0);
+    /* TEST("clock_gettime()",  clock_gettime(CLOCK_REALTIME, NULL), n, 0); */
+    TESTX("clock_gettime()",  clock_gettime(CLOCK_REALTIME, NULL));
     /* TEST("sleep(0)",    sleep(0), n, 0); */
     /* TEST("usleep(0)",  usleep(0), n, 0); */
     // TEST("nanosleep(0)",  nanosleep(NULL, NULL), n, 0);
@@ -239,34 +236,143 @@ int main(int argc, char ** argv) {
 
     /* TEST("__builtin_trap()",  __builtin_trap(), n, n); */
 
-    const uint16_t size = 4096;
+    uint32_t x;
+    uint32_t size = n * PAGE_SIZE;
+
     void *taint_page = mmap(NULL, size,
                             PROT_READ | PROT_WRITE,
                             MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE,
                             -1, 0);
  
     *(uintptr_t *)taint_page = 0x1337;
+
+    INIT_ARRAY(taint_page, size);
+    mprotect(taint_page, size, PROT_NONE);
+
+    signal(SIGSEGV, SIG_DFL);
+    signal(SIGTRAP, SIG_DFL);
+
+    mprotect(taint_page, size, PROT_NONE);
+
+    TESTX("mprotect(RWX/N) toggle", mprotect(taint_page, PAGE_SIZE, PROT_READ | PROT_WRITE | PROT_EXEC); mprotect(taint_page, PAGE_SIZE, PROT_NONE));
+    /* TEST("mprotect(RWX/N) toggle", mprotect(taint_page, PAGE_SIZE, PROT_READ | PROT_WRITE | PROT_EXEC); mprotect(taint_page, PAGE_SIZE, PROT_NONE), n/2, 0); */
+    TESTX("mprotect(RWX/N) toggle sweep", mprotect(taint_page + i * PAGE_SIZE, PAGE_SIZE, PROT_READ | PROT_WRITE | PROT_EXEC); mprotect(taint_page + i * PAGE_SIZE, PAGE_SIZE, PROT_NONE));
+ 
+    TESTX("mprotect(RW/N) toggle", mprotect(taint_page, PAGE_SIZE, PROT_READ | PROT_WRITE); mprotect(taint_page, PAGE_SIZE, PROT_NONE));
+    TESTX("mprotect(RW/N) toggle sweep", mprotect(taint_page + i * PAGE_SIZE, PAGE_SIZE, PROT_READ | PROT_WRITE); mprotect(taint_page + i * PAGE_SIZE, PAGE_SIZE, PROT_NONE));
+
+    TESTX("mprotect(R/N) toggle", mprotect(taint_page, PAGE_SIZE, PROT_READ); mprotect(taint_page, PAGE_SIZE, PROT_NONE));
+    TESTX("mprotect(R/N) toggle sweep", mprotect(taint_page + i * PAGE_SIZE, PAGE_SIZE, PROT_READ); mprotect(taint_page + i * PAGE_SIZE, PAGE_SIZE, PROT_NONE));
+
+    runs = n;
+    TESTX("mprotect(N)", mprotect(taint_page, PAGE_SIZE, PROT_NONE));
+    TESTX("mprotect(RW)", mprotect(taint_page, PAGE_SIZE, PROT_NONE));
+    TESTX("mprotect(RWX)", mprotect(taint_page, PAGE_SIZE, PROT_READ | PROT_WRITE | PROT_EXEC));
+    TESTX("mprotect(N) sweep", mprotect(taint_page + i * PAGE_SIZE, PAGE_SIZE, PROT_NONE));
+    TESTX("mprotect(RW) sweep", mprotect(taint_page + i * PAGE_SIZE, PAGE_SIZE, PROT_NONE));
+    TESTX("mprotect(RWX) sweep", mprotect(taint_page + i * PAGE_SIZE, PAGE_SIZE, PROT_READ | PROT_WRITE | PROT_EXEC));
+    TESTX("mprotect(N) sweep", mprotect(taint_page + i * PAGE_SIZE, PAGE_SIZE, PROT_NONE));
+    TESTX("mprotect(RW) sweep", mprotect(taint_page + i * PAGE_SIZE, PAGE_SIZE, PROT_NONE));
+    TESTX("mprotect(RWX) sweep", mprotect(taint_page + i * PAGE_SIZE, PAGE_SIZE, PROT_READ | PROT_WRITE | PROT_EXEC));
+    TESTX("mprotect(N) sweep", mprotect(taint_page + i * PAGE_SIZE, PAGE_SIZE, PROT_NONE));
+    TESTX("mprotect(RWX) sweep", mprotect(taint_page + i * PAGE_SIZE, PAGE_SIZE, PROT_READ | PROT_WRITE | PROT_EXEC));
+    TESTX("mprotect(N) sweep", mprotect(taint_page + i * PAGE_SIZE, PAGE_SIZE, PROT_NONE));
+    TESTX("mprotect(RWX) sweep", mprotect(taint_page + i * PAGE_SIZE, PAGE_SIZE, PROT_READ | PROT_WRITE | PROT_EXEC));
+    //    mprotect(taint_page, size, PROT_NONE);
+
     mprotect(taint_page, size, PROT_NONE);
     fd = open("/proc/self/mem", O_RDWR);
     
     uintptr_t offset  = (uintptr_t)taint_page;
     uintptr_t val;
- 
-    /* pread(fd, &val, sizeof(val), offset); */
-    TEST("pread(4B)", pread(fd, &val, sizeof(val), offset), n, 0);
-    /* printf("mem read: %x\n", val); */
- 
-    // write new value
-    val = 0xdeadbeef;
-    /* pwrite(fd, &val, sizeof(val), offset); */
-    TEST("pwrite(4B)", pwrite(fd, &val, sizeof(val), offset), n, 0);
 
-    // TODO: test lseek + read/write as well
+    runs = n/2;
+    TESTX("pread+pwrite(4B) loop",  val++; pwrite(fd, &val, sizeof(val), offset); pread(fd, &val, sizeof(val), offset));
+    TESTX("pread+pwrite(4B) sweep", val++; pwrite(fd, &val, sizeof(val), offset + i * PAGE_SIZE); pread(fd, &val, sizeof(val), offset + i * PAGE_SIZE));
+ 
+    /* TEST("pread+pwrite(4B) loop",  val++; pwrite(fd, &val, sizeof(val), offset); pread(fd, &val, sizeof(val), offset), n / 2, 0); */
+    /* TEST("pread+pwrite(4B) sweep", val++; pwrite(fd, &val, sizeof(val), offset + i * PAGE_SIZE); pread(fd, &val, sizeof(val), offset + i * PAGE_SIZE), n / 2, 0); */
+
+    runs = n;
+    /* pread(fd, &val, sizeof(val), offset); */
+    /* TESTX("pwrite(4B) loop", pwrite(fd, &val, sizeof(val), offset)); */
+    /* TESTX("pread(4B) loop", pread(fd, &val, sizeof(val), offset)); */
+    TESTX("pwrite(4B) sweep", pwrite(fd, &val, sizeof(val), offset + i * PAGE_SIZE));
+    TESTX("pread(4B) sweep", pread(fd, &val, sizeof(val), offset + i * PAGE_SIZE));
+    /* printf("mem read: %x\n", val); */
+
+
+    char test[PAGE_SIZE];
+
+    /* void *src = (void *)test; */
+
+#if 1
+    void *src = mmap(NULL, size,
+                     PROT_READ | PROT_WRITE,
+                     MAP_PRIVATE | MAP_ANONYMOUS,
+                     -1, 0);
+
+    void *dst = mmap(NULL, size,
+                     PROT_READ | PROT_WRITE,
+                     MAP_PRIVATE | MAP_ANONYMOUS,
+                     -1, 0);
+#else
+    void *src = malloc(size);
+    void *dst = malloc(size);
+#endif
+
+    INIT_ARRAY(src, size);
+    INIT_ARRAY(dst, size);
+
+    mprotect(src, size, PROT_NONE);
+    mprotect(dst, size, PROT_NONE);
+
+    /* ssize_t ret = pwrite(fd, src, PAGE_SIZE, (off_t)dst); */
+
+    TESTX("pwrite(4K)", pwrite(fd, src, PAGE_SIZE, (off_t)dst));
+    TESTX("pread(4K)", pread(fd, src, PAGE_SIZE, (off_t)dst));
+
+    TESTX("pwrite(4K) sweep", pwrite(fd, src + i * PAGE_SIZE, PAGE_SIZE, (off_t)dst + i * PAGE_SIZE));
+    TESTX("pread(4K) sweep", pread(fd, src + i * PAGE_SIZE, PAGE_SIZE, (off_t)dst  + i * PAGE_SIZE));
+
+    off_t off;
+    ssize_t ret;
+
+    TESTX("lseek+read(4B)",
+          off = lseek(fd, (uintptr_t)src + i, SEEK_SET);
+          assert(off == (off_t)addr);
+          ret = __read(fd, &val, sizeof(val));
+          assert(ret = sizeof(val));
+          );
+
+    TESTX("lseek+write(4B)",
+          off = lseek(fd, (uintptr_t)src + i, SEEK_SET);
+          assert(off == (off_t)addr);
+          ret = __write(fd, &val, sizeof(val));
+          assert(ret = sizeof(val));
+          );
+
+    val = 0;
+    mprotect(taint_page, size, PROT_READ | PROT_WRITE);
+    *(uintptr_t *)taint_page = 0x1337;
+    mprotect(taint_page, size, PROT_NONE);
+
+    pread(fd, &val, sizeof(val), (uintptr_t)taint_page);
+    printf("mem read: %x\n", val);
+
+    val = 0xdeadbeef;
+    // write new value
+    pwrite(fd, &val, sizeof(val), offset);
+
+    // enable loads and stores to page
+    mprotect((uintptr_t *)offset, size, PROT_READ | PROT_WRITE);
+    // taint page access will no longer SIGSEGV
+    printf("load val: %x\n", *(uintptr_t *)offset);
  
     // enable loads and stores to page
-    mprotect(taint_page, size, PROT_READ | PROT_WRITE);
+    //    mprotect(taint_page, size, PROT_READ | PROT_WRITE);
     // taint page access will no longer SIGSEGV
     /* printf("load val: %lx\n", *(uintptr_t *)taint_page); */
-
+    close(fd);
     return 0;
 }

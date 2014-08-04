@@ -4,6 +4,7 @@
 #include <anemu.h>
 #include <unistd.h>
 #include <pthread.h>
+#include <sys/mman.h>
 
 int emu = 0;
 
@@ -15,7 +16,7 @@ int test() {
 }
 
 int **x, **y, **o;
-int dimension, runs;
+int dimension, runs, taintcount;
 
 void matrixLoop() {
     int i, j, k;
@@ -33,10 +34,58 @@ void matrixLoop() {
 
 #define TAINT_CAMERA        ((uint32_t)0x00000080)
 
-void matrix() {
-    x = allocateMatrix(dimension, TAINT_CAMERA);
-    y = allocateMatrix(dimension, 0);
-    o = allocateMatrix(dimension, 0);
+void *alloc(size_t size) {
+    void *ret = mmap(NULL, size,
+                     PROT_READ | PROT_WRITE,
+                     MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE,
+                     -1, 0);
+    if (ret == MAP_FAILED) {
+        printf("error: mmap\n");
+        exit(EXIT_FAILURE);
+    }
+
+    /* DEBUG */
+    // printf("%s: %x - %x length: %5d\n", __func__, (intptr_t)ret, (intptr_t)ret + size, size);
+    return ret;
+}
+
+void dealloc(int** mat, int size) {
+    int rows = size;
+    int i;
+    for(i = 0; i < rows; i++) {
+        munmap(mat[i], size);
+    }
+    munmap(mat, size);
+}
+
+int** allocMatrix(int size, int tag, int count) {
+    int rows, cols;
+    rows = cols = size;
+    int **mat = (int **)malloc(rows * sizeof(int*));
+    /* int **mat = (int **)alloc(rows * sizeof(int*)); */
+    // printf("mat %p\n", mat);
+    int i;
+    for(i = 0; i < rows; i++) {
+        mat[i] = (int *)malloc(cols * sizeof(int));
+        /* mat[i] = (int *)alloc(cols * sizeof(int)); */
+        // printf("mat[%d] %p %x\n", i, mat[i], &mat[i]);
+        /* if (tag && count) {  */
+        if (tag &&
+            count &&
+            ((i + 1) % (size / count)) == 0) {
+            /* printf("tainting row %d\n", i); */
+            emu_set_taint_array((intptr_t)mat[i], tag, cols * sizeof(int));
+            /* emu_set_taint_array((intptr_t)mat[i], tag, 1 * sizeof(int)); */
+            // count--;
+        }
+    }
+    return mat;
+}
+
+void matrix(int taintcount) {
+    x = allocMatrix(dimension, TAINT_CAMERA, taintcount);
+    y = allocMatrix(dimension, 0, 0);
+    o = allocMatrix(dimension, 0, 0);
 
     int i, j;
     /* init matrix */
@@ -80,6 +129,9 @@ void matrix() {
     printf("cycles = %lld\n", ns_to_cycles(diff_ns(&start, &end)) / runs);
 
     /* free matrix */
+    /* dealloc(x, dimension); */
+    /* dealloc(y, dimension); */
+    /* dealloc(o, dimension); */
     freeMatrix(x, dimension);
     freeMatrix(y, dimension);
     freeMatrix(o, dimension);
@@ -88,11 +140,12 @@ void matrix() {
 // call with two arguments: <emu on/off> <size>
 int main(int argc, char ** argv) {
     // printf("argc = %d\n", argc);
-    if (argc != 4) return -1;
+    if (argc != 5) return -1;
     emu = atoi(argv[1]);
     dimension = atoi(argv[2]);
     runs = atoi(argv[3]);
-    printf("emu: %d dim: %d runs: %d\n", emu, dimension, runs);
+    taintcount = atoi(argv[4]);
+    printf("emu: %d dim: %d runs: %d taintcount: %d\n", emu, dimension, runs, taintcount);
 
     if (emu) {
         emu_set_target(getpid());
@@ -100,7 +153,7 @@ int main(int argc, char ** argv) {
         emu_hook_thread_entry((void *)pthread_self());
     }
 
-    matrix();
+    matrix(taintcount);
 
     return 0;
 }

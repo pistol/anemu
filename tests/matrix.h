@@ -1,10 +1,12 @@
-int** allocateMatrix(int size) {
+int** allocateMatrix(int size, int tag) {
     int rows, cols;
     rows = cols = size;
     int **mat = (int **)malloc(rows * sizeof(int*));
+    // printf("mat %p\n", mat);
     int i;
     for(i = 0; i < rows; i++) {
         mat[i] = (int *)malloc(cols * sizeof(int));
+        // printf("mat[%d] %p %x\n", i, mat[i], &mat[i]);
         if (tag) emu_set_taint_array((intptr_t)mat[i], tag, cols * sizeof(int));
     }
     return mat;
@@ -19,6 +21,7 @@ void freeMatrix(int** mat, int size) {
     free(mat);
 }
 
+#if 0
 void matrixMulBasic(int dimension) {
     /* alloc matrix */
     int **x = allocateMatrix(dimension);
@@ -64,3 +67,4 @@ void matrixMulBasic(int dimension) {
     freeMatrix(y, dimension);
     freeMatrix(o, dimension);
 }
+#endif
