@@ -89,6 +89,9 @@ uint8_t emu_eval_cond(emu_thread_t *emu) {
     emu_dump_cpsr(emu);
     uint32_t cond = emu->darm.cond;
 
+    // HACK: release STREX mutex (what about status?)
+    // if (emu->darm.instr == STREX) return 1;
+
     switch(cond) {
     case C_EQ: return  CPSR_Z;
     case C_NE: return !CPSR_Z;
@@ -257,6 +260,7 @@ void emu_type_sync(emu_thread_t *emu) {
 
     switch(d->instr) {
     case I_LDREX: {
+        /* LOGE("LDREX\n"); */
         mutex_lock(&emu->lock);
         emu_log_debug("LDREX before:\n");
         emu_log_debug("Rt: %x Rn: %x MEM Rn: %x\n", RREG(Rt), RREG(Rn), RMEM32(RREG(Rn)));
@@ -264,9 +268,29 @@ void emu_type_sync(emu_thread_t *emu) {
         emu->lock_acquired = 1;
         COUNT(instr_ldrex);
         COUNT(instr_load);
+
+#ifndef NO_TAINT
+        uint32_t tag = RTMEM(RREG(Rn));
+        WTREG(Rt, tag);
+#ifndef NDEBUG
+        if (emu->check_trap) {
+            bool stack_taint = stack_addr(RREG(Rn));
+            if (tag) {
+                COUNT(taint_hit);
+                if (stack_taint) COUNT(taint_hit_stack);
+            } else {
+                COUNT(taint_miss);
+                if (stack_taint) COUNT(taint_miss_stack);
+            }
+            emu->check_trap = 0;
+        }
+#endif
+#endif
+
         break;
     }
     case I_STREX: {
+        /* LOGE("STREX\n"); */
         assert(emu->lock_acquired);
         emu_log_debug("STREX before:\n");
         emu_log_debug("Rd: %x Rt: %x MEM Rn: %x\n", RREG(Rd), RREG(Rt), RMEM32(RREG(Rn)));
@@ -274,10 +298,34 @@ void emu_type_sync(emu_thread_t *emu) {
         emu->lock_acquired = 0;
         assert(d->imm == 0);
         WMEM32(RREG(Rn), RREG(Rt));
-        WTMEM(RREG(Rn), RTREG(Rt));
+#ifndef NO_TAINT
+        uint32_t tag = RTREG(Rt);
+        WTMEM(RREG(Rn), tag);
+#endif
         WREG(Rd) = 0;           /* 0: success, 1: fail */
+
+        emu_log_debug("STREX after:\n");
+        emu_log_debug("Rd: %x Rt: %x MEM Rn: %x\n", RREG(Rd), RREG(Rt), RMEM32(RREG(Rn)));
+
         COUNT(instr_strex);
         COUNT(instr_store);
+
+#if !defined NO_TAINT && !defined NDEBUG
+        if (emu->check_trap) {
+            bool stack_taint = stack_addr(RREG(Rn));
+            if (tag) {
+                COUNT(taint_hit);
+                if (stack_taint) COUNT(taint_hit_stack);
+            } else {
+                COUNT(taint_miss);
+                if (stack_taint) COUNT(taint_miss_stack);
+            }
+            emu->check_trap = 0;
+        }
+#endif
+        // FIXME: STREX can be conditional but we need to release lock anyway
+        // problem is if it's conditional this handler won't be called
+        // and hence lock will not be released!
         mutex_unlock(&emu->lock);
         break;
     }
@@ -409,6 +457,11 @@ void emu_type_branch_syscall(emu_thread_t *emu) {
         assert(d->imm == 0);
         SVC();
         COUNT(syscall);
+        emu_log_debug("syscall # %ld\n", CPU(r7));
+        // expect syscalls to succeed
+        if (CPU(r7) != 220) { // ignore madvise syscall (can normally fail)
+            assert((int32_t)CPU(r0) >= 0);
+        }
         break;
     }
         SWITCH_COMMON;
@@ -450,6 +503,9 @@ void emu_type_move_imm(emu_thread_t *emu) {
         WTREG(Rd, TAINT_CLEAR);
         break;
     }
+        // can't clear taint for MOVT half the register is preserved
+        // WARNING: what if register is tainted and then two successive MOVW and MOVT?
+        // that should clear taint but we are unable to detect the case
     case I_MOVT: {
         assert(d->S != B_SET);
         EMU(WREG(Rd) = (RREG(Rd) & ~instr_mask(d->instr)) | (d->imm << 16));
@@ -650,7 +706,7 @@ void emu_type_memory(emu_thread_t *emu) {
             emu_log_warn("unaligned address");
         }
 
-        emu_log_debug("RMEM(%x): %x\n", addr, RMEM32(addr));
+        // emu_log_debug("RMEM(%x): %x\n", addr, RMEM32(addr));
 
         uint32_t data = 0xdeadbeef; /* please compiler gods */
         /* read 1, 2 or 4 bytes depending on instr type */
@@ -747,7 +803,7 @@ void emu_type_memory(emu_thread_t *emu) {
             addr != Align(addr, 4)) { /* unaligned addr */
             emu_log_warn("unaligned address");
         }
-        emu_log_debug("RMEM before:  %x\n", RMEM32(addr));
+        // emu_log_debug("RMEM before:  %x\n", RMEM32(addr));
         /* depending on instr, 1, 2 or 4 bytes of RREG(Rt) will be used and stored to mem */
         uint32_t data = RREG(Rt) & instr_mask(d->instr);
 #ifndef NO_TAINT
@@ -792,7 +848,7 @@ void emu_type_memory(emu_thread_t *emu) {
         if ((d->W == B_SET) || (d->P == B_UNSET)) { /* write-back */
             EMU(WREG(Rn) = offset_addr);
         }
-        emu_log_debug("RMEM after:   %x\n", RMEM32(addr));
+        // emu_log_debug("RMEM after:   %x\n", RMEM32(addr));
         break;
     }
     case I_PUSH:
@@ -927,7 +983,6 @@ void emu_type_bits(emu_thread_t *emu) {
         val |= bits << lsb;
         emu_log_debug("Rd set bits    : %x\n", val);
         WREG(Rd) = val;
-        /* TODO: update taint */
         WTREG1(Rd, Rn);
         break;
     }
@@ -1099,6 +1154,7 @@ bool emu_advance_pc(emu_thread_t *emu) {
 #ifndef NO_TAINT
     if (emu_selective() && !emu_regs_tainted(emu)) {
         emu_log_debug("taint: no tainted regs remaining, enable protection and leave emu\n");
+        /* LOGE("taint: no tainted regs remaining, enable protection and leave emu\n"); */
         emu->stop = 1;
         return !emu->stop;
     }
@@ -1118,6 +1174,7 @@ bool emu_advance_pc(emu_thread_t *emu) {
         if (emu_debug()) emu_dump_taintmaps();
 #endif
         // disable emu handler
+        // FIXME: should still be able to force unprotect all pages
         emu_unprotect_mem();
         signal(SIGSEGV, SIG_DFL);
     } else if (emu_global->stop_handler && emu->instr_count >= emu_global->stop_handler) { /* NOTE: we are using a one time count */
@@ -1128,7 +1185,28 @@ bool emu_advance_pc(emu_thread_t *emu) {
     }
 
 #ifndef NDEBUG
-    if (emu_debug()) emu_dump_taintpages();
+    if (emu_debug()) {
+        emu_dump_taintpages();
+        LOGI("[s] mem read vs tainted: %d %d (%2.1f%%)\n",
+             COUNTER(mem_read),
+             COUNTER(taint_mem_read),
+             COUNTER(taint_mem_read) / (double)COUNTER(mem_read) * 100
+             );
+        LOGI("[s] mem write vs tainted: %d %d (%2.1f%%)\n",
+             COUNTER(mem_write),
+             COUNTER(taint_mem_write),
+             COUNTER(taint_mem_write) / (double)COUNTER(mem_write) * 100
+             );
+        LOGI("[s] taint instr reg (set/unset): %d / %d mem (set/unset): %d / %d total %%: %-2.1f\n",
+             COUNTER(taint_instr_set),
+             COUNTER(taint_instr_unset),
+             COUNTER(taint_instr_mem_set),
+             COUNTER(taint_instr_mem_unset)
+             );
+
+        // sleep(1);
+        // gdb_wait();
+    }
 #endif
     return !emu->stop;
 }
@@ -1283,20 +1361,22 @@ void emu_init() {
 
     emu_log_debug("initializing emu state ...\n");
 
+    // memset(&emu, 0, sizeof(emu_t));
+    // emu.trace_fd      = STDOUT_FILENO; // stdout = 2
+
 #ifdef TRACE
     /* need to initialize log file before any printfs */
     M(emu_init_tracefile());
 #endif
 
 #ifndef NO_TAINT
-#ifndef PROFILE
     /* process maps */
     M(emu_parse_maps(emu_global));
-#endif
     /* taint tag storage */
     M(emu_init_taintmaps(emu_global));
 
     /* memory access via /proc/self/mem */
+    // we init this early on in Zygote fork
     M(emu_init_proc_mem());
 #endif
     M(emu_init_properties());
@@ -1310,6 +1390,7 @@ void emu_init() {
 
 void emu_start(emu_thread_t *emu) {
     emu_log_debug("starting emulation ...\n");
+    // LOGE("selective emu: %d\n", emu_global->selective);
 
     emu_set_running(true);
     emu_set_protect(true);
@@ -1335,6 +1416,7 @@ void emu_stop(emu_thread_t *emu) { // Hammertime!
                  delta,
                  emu->instr_count,
                  delta / emu->instr_count);
+    /* emu_dump_stats(); */
 #endif
 
 #ifndef NO_TAINT
@@ -1352,7 +1434,9 @@ void emu_stop(emu_thread_t *emu) { // Hammertime!
     emu->stop = 0;
     emu->running = 0;
     emu->instr_count = 0;
+    emu->check_trap = 0;
     emu_log_debug(LOG_BANNER_SIG);
+    // assert(!emu->lock_acquired);
     /* if we are not in standalone, we need to restore execution context to latest values */
     if (!emu_global->standalone) {
         setcontext((const ucontext_t *)&emu->current); /* never returns */
@@ -1384,15 +1468,6 @@ uint8_t emu_stop_trigger(emu_thread_t *emu) {
         }
         break;
     }
-    case I_SVC: {
-        if (d->w == MARKER_START) {
-            emu_log_debug("MARKER: starting emu\n");
-            // bypass complete
-            /* advance PC but leave emu enabled */
-            return 1;
-        }
-        break;
-    }
     default: {
         /* empty: avoids unhandled case warnings */
     }
@@ -1414,6 +1489,7 @@ emu_init_handler(int sig,
     if (stack == NULL) {
         emu_abort("unallocated stack");
     }
+    // memset(stack, 0, stack_size);
     stack_t ss, oss;
     ss.ss_sp = stack;
     ss.ss_size = stack_size;
@@ -1449,6 +1525,10 @@ uint32_t emu_function(void (*fun)()) {
     emu_hook_thread_entry((void *)pthread_self());
     emu_thread_t *emu = emu_tls_get();
     assert(emu);
+
+    // need to perform stack allocation before initializing taintmaps
+    // FIXME: emu has been already initialized by set_taint_array
+    emu_init();
     emu_set_standalone(true);
     // should already be set prior to calling
     emu_set_target(getpid());
@@ -1490,6 +1570,7 @@ uint8_t emu_disasm(emu_thread_t *emu, darm_t *d, uint32_t pc) {
 
 #ifdef TRACE
     if (emu_debug()) {
+        //emu_log_debug("darm : %x %x %s\n", pc, d->w, str.total);
 #ifndef PROFILE
         map_t *m = emu_map_lookup(pc);
 #else
@@ -1502,7 +1583,8 @@ uint8_t emu_disasm(emu_thread_t *emu, darm_t *d, uint32_t pc) {
         if (dladdr((void *)pc, &info)) {
             /* FIXME: can't use strdup since it uses dlmalloc... */
             /* HACK: temporarily disable dlmalloc marker to allow call  */
-            char* demangled = emu->lock_acquired ? "locked" : demangle_symbol_name(info.dli_sname);
+            // char* demangled = emu->lock_acquired ? "locked" : demangle_symbol_name(info.dli_sname);
+            char* demangled = NULL;
             symbol_name = demangled ? demangled : info.dli_sname;
             function_offset = (uintptr_t)info.dli_saddr - (uintptr_t)info.dli_fbase;
 
@@ -1532,13 +1614,17 @@ uint8_t emu_disasm(emu_thread_t *emu, darm_t *d, uint32_t pc) {
                 }
                 if (strcmp(m->name, "/system/lib/libicuuc.so") == 0) {
                     if ((strcmp(symbol_name, "utext_openUChars_48") == 0)) { // works, before memset
+                        // if ((strcmp(symbol_name, "utext_clone_48") == 0)) { // fails
+                        // if ((strcmp(symbol_name, "utext_nativeLength_48") == 0)) { // fails
+                        // if ((strcmp(symbol_name, "icu_48::RegexMatcher::reset(UText*)") == 0)) { // fails
+                        // if ((strcmp(symbol_name, "utext_close_48") == 0)) { // fails
                         emu_log_error("SPECIAL avoiding %s %s %x\n", m->name, symbol_name, pc - m->vm_start);
                         emu->skip = 1;
                     }
                 }
             }
 #endif
-            if (!emu->lock_acquired) free(demangled);
+            // if (!emu->lock_acquired) free(demangled);
         } else {
             emu_abort("dladdr failed");
         }
@@ -1769,6 +1855,16 @@ void emu_dump_stats() {
          COUNTER(trampoline_read_taint),
          COUNTER(trampoline_write_taint)
          );
+
+    double taint_ratio  = (COUNTER(taint_instr_set) + COUNTER(taint_instr_unset) + COUNTER(taint_instr_mem_set) + COUNTER(taint_instr_mem_unset)) / (double)COUNTER(instr_total) * 100;
+
+    LOGI("[s] taint instr reg (set/unset): %d / %d mem (set/unset): %d / %d total %%: %-2.1f\n",
+         COUNTER(taint_instr_set),
+         COUNTER(taint_instr_unset),
+         COUNTER(taint_instr_mem_set),
+         COUNTER(taint_instr_mem_unset),
+         taint_ratio
+         );
 }
 
 void emu_reset_stats() {
@@ -1942,6 +2038,7 @@ map_t* emu_map_lookup(uint32_t addr) {
         // 5a920000-5a921000 r--s  7000 103:2 27 /system/app/DrmProvider.apk [1 pages]
         if (addr >= m->vm_start && addr < m->vm_end) {
             emu_log_debug("lib map %8x -> %8x\n", addr, addr - m->vm_start);
+            // TODO: void out emu_map_dump when NDEBUG
             if (emu_debug()) emu_map_dump(m);
             return m;
         }
@@ -1969,7 +2066,9 @@ emu_handler_segv(int sig, siginfo_t *si, void *ucontext) {
 
     assert(emu);
     if (emu->running) {
-        emu_abort("re-trap inside emu!\n");
+        emu_log_error("re-trap inside emu!\n");
+        emu_siginfo(sig, si, uc);
+        gdb_wait();
     }
 #ifndef NDEBUG
     register uint32_t sp asm("sp");
@@ -2015,6 +2114,9 @@ emu_handler_segv(int sig, siginfo_t *si, void *ucontext) {
             emu_log_debug("[-] taint miss %x\n", addr_fault);
             COUNT(taint_miss);
             if (stack_taint) COUNT(taint_miss_stack);
+            // NOTE: we can't just singlestep, a POP instruction may set taint even on a miss!
+            // example: pop {r4-r11, pc}
+            // addr_fault = mem(r4) but is not tainted, yet mem(r7) and mem(r11) can be!
         } else {
             /* instruction accessing tainted memory */
             emu_log_debug("[+] taint hit %x\n", addr_fault);
@@ -2042,7 +2144,8 @@ emu_set_taint_reg(emu_thread_t *emu, darm_reg_t reg, uint32_t tag) {
     assert(reg >= r0 && reg <= r15);
 #ifndef TAINT_PC
     // never taint special regs (overtaint)
-    if (reg == SP || reg == LR || reg == PC) return;
+    // if (reg == SP || reg == LR || reg == PC) return;
+    if (reg == LR || reg == PC) return;
 #endif
     if (emu->taintreg[reg] != TAINT_CLEAR && tag == TAINT_CLEAR) {
         emu_log_debug("taint: un-tainting r%d\n", reg);
@@ -2073,7 +2176,7 @@ emu_regs_tainted(emu_thread_t *emu) {
     for (i = 0; i < N_REGS; i++) {
         if (RTREGN(i) != TAINT_CLEAR) {
             if (
-                // i == SP
+                i == SP ||
 #ifndef TAINT_PC
                 i == LR ||
                 i == PC ||
@@ -2094,8 +2197,12 @@ emu_regs_tainted(emu_thread_t *emu) {
 static int8_t
 mprotectPage(uint32_t addr, uint32_t flags) {
     uint32_t addr_aligned = getAlignedPage(addr); /* align at pageSize */
-    emu_log_debug("update protection on page: %x given addr: %x\n", addr_aligned, addr);
-    emu_map_lookup(addr);
+    // emu_log_debug("update protection on page: %x given addr: %x\n", addr_aligned, addr);
+    // emu_map_lookup(addr);
+    if (addr_aligned == getAlignedPage((uint32_t)__android_log_print)) {
+        emu_log_error("taint whitelist: __android_log_print page %x", addr_aligned);
+        return 0;
+    }
 
     emu_log_debug("mprotecting page: %x\n", addr_aligned);
     int8_t ret = mprotect((void *)addr_aligned, PAGE_SIZE, flags);
@@ -2244,6 +2351,8 @@ emu_dump_taintmaps_slow() {
         uint32_t range_start  = 0;
         uint32_t range_end    = 0;
         uint32_t range_tag    = TAINT_CLEAR;
+        // FIXME: assuming ranges have the same tags but we don't currently enforce it
+        // ultimately we want ranges to be split by tag
         for (offset = 0; offset < tm->bytes >> 2; offset++) {
             uint32_t tag = tm->data[offset];
             if (tag != TAINT_CLEAR) {
@@ -2344,7 +2453,9 @@ emu_dump_taintmaps() {
                 }
             }
         }
-        assert(range_inside == 0);
+        // BUG: when only a single page is tainted, the range_inside check above is
+        // never performed and hence not unset, which will trigger the assert
+        // assert(range_inside == 0);
     }
     // summary of taint pages
     emu_dump_taintpages();
@@ -2391,6 +2502,8 @@ emu_get_taint_mem(uint32_t addr) {
     }
     uint32_t    offset   = (addr - taintmap->start) >> 2;
     uint32_t    tag      = taintmap->data[offset]; /* word (32-bit) based tag storage */
+
+    if (tag) COUNT(taint_mem_read);
     return tag;
 }
 
@@ -2404,6 +2517,8 @@ void emu_set_taint_mem(uint32_t addr, uint32_t tag) {
     if (addr < taintmap->start || addr > taintmap->end) {
         emu_abort("out of bounds addr %x\n", addr);
     }
+
+    if (tag) COUNT(taint_mem_write);
 
     // sanity check offset is valid
     uint32_t    offset     = (addr - taintmap->start) >> 2;
@@ -2435,23 +2550,7 @@ emu_set_taint_array(uint32_t addr, uint32_t tag, uint32_t length) {
     if (!emu_initialized()) emu_init();
 
 
-#if 0
-    for (p = addr; p < (addr + length); p += PAGE_SIZE) {
-        taintpage_t *tp = emu_get_taintpage(p);
-        if (!(*tp == 0 && tag == TAINT_CLEAR)) {
-            uint32_t p_end;
-            // safety check if current page would cross the taint array end
-            if (p + PAGE_SIZE <= (addr + length)) {
-                p_end = p + PAGE_SIZE;
-            } else {
-                p_end = addr + length;
-            }
-            for (x = p; x < p_end; x += 4) {
-                emu_set_taint_mem(x, tag);
-            }
-        }
-    }
-#else
+    // TODO: taintmap and type [STACK/LIB] can be looked up once and cached
     taintmap_t *taintmap = emu_get_taintmap(addr);
     uint32_t p;
     for (p = Align(addr,4); p < (addr + length); p += PAGE_SIZE) {
@@ -2468,7 +2567,7 @@ emu_set_taint_array(uint32_t addr, uint32_t tag, uint32_t length) {
             int16_t increment = 0;
             for (x = p; x < p_end; x+=4) {
                 uint32_t offset = (x - taintmap->start) >> 2;
-                emu_log_debug("p: %x x: %x offset: %x\n", p, x, offset);
+                // emu_log_debug("p: %x x: %x offset: %x\n", p, x, offset);
                 bool update = false;
                 if (tag == TAINT_CLEAR && taintmap->data[offset] != TAINT_CLEAR) {
                     emu_log_taint("taint: un-tainting mem: %x offset: %x\n", x, offset);
@@ -2476,6 +2575,7 @@ emu_set_taint_array(uint32_t addr, uint32_t tag, uint32_t length) {
                     update = true;
                 } else if (tag != TAINT_CLEAR && taintmap->data[offset] == TAINT_CLEAR) {
                     emu_log_taint("taint: tainting mem: %x offset: %x tag: %x\n", x, offset, tag);
+                    /* gdb_wait(); */
                     increment++;
                     update = true;
                 }
@@ -2490,10 +2590,9 @@ emu_set_taint_array(uint32_t addr, uint32_t tag, uint32_t length) {
             }
         }
     }
-#endif
 
 #ifndef PROFILE
-    // emu_dump_taintmaps();
+    emu_dump_taintmaps();
 #endif
 
     emu_log_debug("%s: complete.\n", __func__);
@@ -2650,6 +2749,7 @@ bool emu_check_intercept(emu_thread_t *emu) {
     // NOTE: avoid RMEM32 since it increments stats counters and this is covert
     // if (RMEM32(CPU(pc)) == MARKER_BYPASS) {
     if (*(uint32_t*)(CPU(pc)) == MARKER_BYPASS) {
+        // LOGE("MARKER: bypass\n");
         emu_log_debug("MARKER: bypass\n");
         interceptor_t *i = &emu->interceptor;
         if (i->fun == emu_taint_read) {
@@ -2673,6 +2773,7 @@ bool emu_check_intercept(emu_thread_t *emu) {
         }
         if (intercept) {
             CPU(pc) += 4;
+            // gdb_wait();
             COUNT(intercept_stack);
             emu_stop(emu);      /* doesn't return */
         }
@@ -2680,6 +2781,7 @@ bool emu_check_intercept(emu_thread_t *emu) {
     return intercept;
 }
 
+// TODO: use va_args instead
 __attribute__((always_inline))
 void emu_interceptor(void* fun, size_t argc, void* a0, void* a1, void* a2) {
     emu_thread_t *emu        = emu_tls_get();
@@ -2699,6 +2801,28 @@ uint32_t emu_dump_taintpages() { return 0; }
 #endif  /* NO_TAINT */
 
 #if 0
+// TODO: use page-level bitmap to track tainted pages
+//
+// In order to cover X bytes of memory, track at the page size level of 4096 bytes
+// Total pages = X / 4096
+// Total bytes = X / 4096 / 8 (one bit per page)
+// Total words = X / 4096 / 8 / 4
+// Bitmap offers a reduction in size of 128 times (4096 / 32 = 128)
+//
+// Sample data:
+// mmap lib   range: 20b97000 - 626af000 length: 41b18000
+// Pages: 0x41B18 (269080)
+// Bytes: 0x08363 ( 33635)
+// Words: 0x20D8  (  8408) + 1
+// Bitmap size: 8409 uint32_t
+//
+// mmap stack range: be813000 - be834000 length: 21000
+// Pages: 0x21 (33)
+// Bytes: 0x04 ( 4) + 1
+// Words: 0x01 ( 1) + 1
+// Bitmap size: 2 uint32_t
+//
+// TODO: either make this thread-local or use a global lock
 int emu_mark_page(uint32_t addr) {
     uint32_t page = getAlignedPage(addr);
     uint32_t idx;
@@ -2733,6 +2857,7 @@ int emu_mark_page(uint32_t addr) {
     return added;
 }
 
+// TODO: as mark_page, either make this thread-local or use a global lock
 int emu_unmark_page(uint32_t addr) {
     uint32_t page = getAlignedPage(addr);
     uint32_t idx;
@@ -2752,6 +2877,7 @@ int emu_unmark_page(uint32_t addr) {
     return found;
 }
 
+// TODO: either make this thread-local or use a global lock
 void
 emu_clear_taintpages() {
     emu_log_debug("clearing taintpages...\n");
@@ -2770,6 +2896,9 @@ emu_get_taintpages() {
     return emu_global->taintpages;
 }
 
+// TODO merge protect and unprotect and add new protect true/false flag argument
+// FIXME: we can't set R+W for a page that was R only...
+// do we keep track of the original permissions? likely.....
 // caller must hold taint_lock
 void
 emu_mprotect_mem(bool state) {
@@ -2790,6 +2919,7 @@ emu_mprotect_mem(bool state) {
             taintpage_t count = tm->pages[page_idx];
             if (count) {
                 uint32_t page = tm->start + page_idx * PAGE_SIZE;
+                /* emu_log_error("%sprotect page: %x taint count: %d\n", state ? "" : "un", page, count); */
                 emu_log_debug("%sprotect page: %x taint count: %d\n", state ? "" : "un", page, count);
                 mprotectPage(page, flags);
             }
@@ -3038,6 +3168,7 @@ void dump_backtrace(pid_t tid)
 // mutex wrappers with error checking
 int mutex_lock(pthread_mutex_t *mutex) {
     emu_log_debug("mutex   lock try\n");
+    // dump_backtrace(gettid());
     int ret = pthread_mutex_lock(mutex);
     if (ret != 0) {
         switch(ret) {
@@ -3058,6 +3189,7 @@ int mutex_lock(pthread_mutex_t *mutex) {
 
 int mutex_unlock(pthread_mutex_t *mutex) {
     emu_log_debug("mutex unlock try\n");
+    // dump_backtrace(gettid());
     int ret = pthread_mutex_unlock(mutex);
     if (ret != 0) {
         switch(ret) {
@@ -3205,7 +3337,7 @@ void emu_hook_pthread_internal_free(void *arg) {
 }
 
 void emu_hook_bionic_clone_entry() {
-    dump_backtrace(gettid());
+    // dump_backtrace(gettid());
     emu_thread_count_up();
 
     emu_abort("not implemented yet");
@@ -3233,6 +3365,8 @@ void emu_hook_bionic_atfork_run_child(void *arg) {
 void emu_hook_Zygote_forkAndSpecializeCommon(void *arg) {
     pid_t pid = (pid_t)arg;
     assert(!emu_global->target);
+    // paranoid
+    // memset(emu_global, 0, sizeof(emu_global_t));
     emu_global->target = pid;
 
     char name[16];
@@ -3241,6 +3375,7 @@ void emu_hook_Zygote_forkAndSpecializeCommon(void *arg) {
         emu_log_debug("prctl name: %s\n", name);
     }
 
+    emu_init_proc_mem();
     // reuse handler setup code
     emu_hook_thread_entry((void *)pthread_self());
 }
@@ -3315,6 +3450,7 @@ int32_t emu_set_taint_file(int fd, uint32_t tag)
 #endif  /* NO_TAINT */
 
 ssize_t check_read(int fd, void *buf, size_t count) {
+    /* if (fd > 3) emu_log_debug("%s(%d, %p, %d)\n", __func__, fd, buf, count); */
     ssize_t ret = __read(fd, buf, count);
     if (ret == -1) {
         if (errno != ENOENT) {
@@ -3329,7 +3465,10 @@ ssize_t check_read(int fd, void *buf, size_t count) {
 ssize_t check_write(int fd, void *buf, size_t count) {
     ssize_t ret = __write(fd, buf, count);
     if (ret == -1) {
-        emu_log_error("write(%d, %p, %d) failed with ret: %ld and errno: %d\n", fd, buf, count, ret, errno);
+        emu_log_error("write(%d, %p, %d) failed ret: %ld and errno: %d\n", fd, buf, count, ret, errno);
+        // __write(STDERR_FILENO, buf, count);
+        // emu_log_error("debug: %s\n", buf);
+        // gdb_wait();
         // this should never happen outside emu
         assert(errno != EFAULT);
     }
@@ -3345,10 +3484,13 @@ ssize_t emu_trampoline_read(int fd, void *buf, size_t count) {
     //   emu could set a caller flag that trampoline checks
     //   problem is any functions called from emu could later call trampoline, hard to determine which
     // 3) emu itself calls trampoline due to syscall use -> skip any taint propagation inside trampoline
+    /* emu_log_debug("%s(%d, %p, %d)\n", __func__, fd, buf, count); */
 #ifndef NO_TAINT
     // ssize_t ret = -1;
     register ssize_t ret asm("r0") = -1;
     if (emu_target()) {
+        if (fd > 3) emu_log_debug("%s(%d, %p, %d)\n", __func__, fd, buf, count);
+
         if (emu_running()) {
             // case 2: this must be emu calling otherwise we'd have intercepted it while emulating earlier
             goto no_taint;
@@ -3374,6 +3516,8 @@ no_taint:
 
 #ifndef NO_TAINT
 ssize_t emu_taint_read(int fd, void *buf, size_t count) {
+    emu_log_debug("%s(%d, %p, %d)\n", __func__, fd, buf, count);
+
     uint32_t taint_file = emu_get_taint_file(fd);
     uint32_t taint_buf  = emu_get_taint_array((uint32_t)buf, count);
 
@@ -3409,8 +3553,19 @@ ssize_t emu_taint_read(int fd, void *buf, size_t count) {
 }
 #endif
 
+// TODO: consider piping stdout or stderr to another file
+// this would require knowing if emu is caller - maybe with TLS?
+//
+// avoid emu write deadlock by skipping special fd's. ignore cases:
+// 1) stdin (0), stdout(1) and stderr(2)
+// 2) emu writes to trace file
+// 3) emu was never used yet (only reads can set taint + init emu)
+
+// if (!emu_disabled() && fd > 2 && fd != emu_get_trace_fd() && emu_initialized()) {
+
 ssize_t emu_trampoline_write(int fd, void *buf, size_t count) {
 #ifndef NO_TAINT
+    // ssize_t ret = -1;
     register ssize_t ret asm("r0") = -1;
     if (emu_target()) {
         if (emu_running()) {
@@ -3446,8 +3601,10 @@ ssize_t emu_taint_write(int fd, void *buf, size_t count) {
     if (!taint_file && !taint_buf) {
         // let write go through - this must be Dalvik setting taint
         ret = check_write(fd, buf, count);
+        /* LOGD("write(%d, %p, %d) ret: %ld\n", fd, buf, count, ret); */
         emu_log_debug("write(%d, %p, %d) ret: %ld\n", fd, buf, count, ret);
      } else if (!taint_file && taint_buf) {
+        /* LOGD("write(%d, %p, %d) tainted - sneaking data...\n", fd, buf, count); */
         emu_log_debug("write(%d, %p, %d) tainted - sneaking data...\n", fd, buf, count);
         void *tmp = emu_alloc(count);
         emu_memcpy(tmp, buf, count);
@@ -3506,6 +3663,8 @@ void emu_init_properties() {
 }
 
 void emu_init_tracefile() {
+    // TODO: add getpid() to filename to avoid concurrent writes from multiple processes
+    // TODO: wrap trace file writing with a lock to avoid concurrent writes from multiple threads
     char traceFilename[256];
     snprintf(traceFilename, sizeof(traceFilename), "%s-%d", TRACE_PATH, getpid());
 
@@ -3515,6 +3674,8 @@ void emu_init_tracefile() {
         emu_abort("Can't open trace file %s!\n", traceFilename);
     }
 }
+
+/* TODO: use macros to generate mem_read[bits] functions */
 
 #ifdef NO_TAINT
 inline
@@ -3552,9 +3713,6 @@ uint32_t mem_write32(uint32_t addr, uint32_t val) {
     int32_t fd = emu_global->mem_fd;                   \
     assert(fd);                                        \
     ssize_t bytes;                                     \
-    if (emu_get_taint_mem(addr)) {                     \
-        COUNT(taint_mem_##type);                       \
-    }                                                  \
     if (!stack_addr(addr)) {                           \
         bytes = p##type(fd, &val, sizeof(val), addr);  \
     } else {                                           \
@@ -3663,7 +3821,16 @@ int emu_free(void *addr, size_t size) {
     return ret;
 }
 
+/*
+#define __mem_read(bits)                                               \
+    uint##bits mem_read_##bits(uint32_t addr) {                        \
+        assert(emu_global->mem_fd);                                    \
+        uint##bits_t val = 0;                                          \
+        int8_t b = pread(emu_global->mem_fd, &val, sizeof(val), addr); \
+        assert(b == sizeof(val));                                      \
+        return val;                                                    \
     }
+*/
 
 /* copied from system/core/liblog/logprint.c */
 char filterPriToChar(android_LogPriority pri)
@@ -3685,7 +3852,6 @@ char filterPriToChar(android_LogPriority pri)
 
 #define LOG_BUF_SIZE 256
 #define LOG_HEADER_SIZE 24
-static
 int __log_print(int prio, const char *tag, const char *fmt, ...) {
     va_list ap;
     char buf[LOG_BUF_SIZE];

@@ -1,6 +1,7 @@
 #ifndef _INCLUDE_ANEMU_PRIVATE_H_
 #define _INCLUDE_ANEMU_PRIVATE_H_
 
+#define EMU_BENCH               /* must be before including anemu.h */
 #include "anemu.h"
 #include <dlfcn.h>              /* dladdr */
 #include <errno.h>
@@ -46,6 +47,10 @@
 #define atomic_add __sync_fetch_and_add
 #define atomic_sub __sync_fetch_and_sub
 #define property_get __system_property_get
+
+// TODO: set these in makefile instead
+#undef WITH_VFP
+
 #ifdef NDEBUG
 #define PROFILE
 #else
@@ -68,22 +73,32 @@
 #define LOGV(...) ((void)__android_log_print(ANDROID_LOG_VERBOSE, LOG_TAG, __VA_ARGS__))
 #define LOGE(...) ((void)__android_log_print(ANDROID_LOG_ERROR,   LOG_TAG, __VA_ARGS__))
 #define LOGW(...) ((void)__android_log_print(ANDROID_LOG_WARN,    LOG_TAG, __VA_ARGS__))
-#define printf LOGI
+#undef printf
+// #define printf LOGI
 #endif
 
 #ifndef PROFILE
 // #define emu_log_trace(...) { if (emu.trace_file) { lprintf(emu.trace_file, __VA_ARGS__); fflush(emu.trace_file); }}
-#define emu_log_trace emu_log_info
-#define emu_log_error(...)  { LOGE(__VA_ARGS__); __log_print(ANDROID_LOG_ERROR,  LOG_TAG, __VA_ARGS__); }
-#define emu_log_warn(...)   { LOGW(__VA_ARGS__); __log_print(ANDROID_LOG_WARN,   LOG_TAG, __VA_ARGS__); }
-#define emu_log_info(...)   { LOGI(__VA_ARGS__); __log_print(ANDROID_LOG_INFO,   LOG_TAG, __VA_ARGS__); }
-#define emu_log_debug(...)  { LOGD(__VA_ARGS__); __log_print(ANDROID_LOG_DEBUG,  LOG_TAG, __VA_ARGS__); }
-#else
-#define emu_log_trace(...) (void)(NULL)
+/* #define emu_log_error(...)  { LOGE(__VA_ARGS__); __log_print(ANDROID_LOG_ERROR,  LOG_TAG, __VA_ARGS__); } */
+/* #define emu_log_warn(...)   { LOGW(__VA_ARGS__); __log_print(ANDROID_LOG_WARN,   LOG_TAG, __VA_ARGS__); } */
+/* #define emu_log_info(...)   { LOGI(__VA_ARGS__); __log_print(ANDROID_LOG_INFO,   LOG_TAG, __VA_ARGS__); } */
+/* #define emu_log_debug(...)  { LOGD(__VA_ARGS__); __log_print(ANDROID_LOG_DEBUG,  LOG_TAG, __VA_ARGS__); } */
+/* #define emu_log_debug(...)  { __log_print(ANDROID_LOG_DEBUG,  LOG_TAG, __VA_ARGS__); } */
+// #define emu_log_trace(...) { if (emu_debug()) { LOGI(__VA_ARGS__); __log_print(ANDROID_LOG_ERROR,  LOG_TAG, __VA_ARGS__); } }
+#define emu_log_trace LOGD
 #define emu_log_error LOGE
 #define emu_log_warn  LOGW
 #define emu_log_info  LOGI
+// #define emu_log_taint emu_log_trace
+#define emu_log_taint LOGE
+#define emu_log_debug(...) { if (emu_debug()) LOGD(__VA_ARGS__); }
+#else
+#define emu_log_error      LOGE
+#define emu_log_taint(...) (void)(NULL)
+#define emu_log_trace(...) (void)(NULL)
 #define emu_log_debug(...) (void)(NULL)
+#define emu_log_warn(...)  (void)(NULL)
+#define emu_log_info(...)  (void)(NULL)
 #endif
 
 #define LOG_BANNER_SIG   "\n### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ###\n"
@@ -188,6 +203,10 @@ typedef struct _stats_t {
     uint32_t taint_miss_stack;
     uint32_t taint_mem_read;
     uint32_t taint_mem_write;
+    uint32_t taint_instr_set;
+    uint32_t taint_instr_unset;
+    uint32_t taint_instr_mem_set;
+    uint32_t taint_instr_mem_unset;
     uint32_t mem_read;
     uint32_t mem_write;
     uint32_t instr_load;
@@ -312,7 +331,11 @@ static emu_global_t __emu_global = {
 static emu_global_t *emu_global = &__emu_global;
 
 /* counters for statistics */
+// #ifndef NDEBUG
 #define COUNT(counter)       (COUNTER(counter)++)
+// #else
+// #define COUNT(counter)       (void)(NULL)
+// #endif
 #define COUNTER(counter)     (__emu_global.stats.counter)
 #define WCOUNT(counter, val) (COUNTER(counter) = val)
 
@@ -336,6 +359,7 @@ static emu_global_t *emu_global = &__emu_global;
 #define RMEM16(addr) mem_read16(addr)
 #define RMEM32(addr) mem_read32(addr)
 
+#ifndef TAINT_STATS
 /* taint register by darm specifier */
 #define RTREG(reg)       emu_get_taint_reg(emu, d->reg)
 #define WTREG(reg, tag)  emu_set_taint_reg(emu, d->reg, tag)
@@ -350,6 +374,47 @@ static emu_global_t *emu_global = &__emu_global;
 /* taint memory */
 #define RTMEM(addr)      emu_get_taint_mem(addr)
 #define WTMEM(addr, tag) emu_set_taint_mem(addr, tag)
+
+#else
+
+/* taint register by darm specifier */
+#define RTREG(reg)       emu_get_taint_reg(emu, d->reg)
+#define RTREGN(reg)      emu_get_taint_reg(emu, reg)
+
+#define WTREG(reg, tag)  emu_set_taint_reg(emu, d->reg, tag);       \
+    if (tag != TAINT_CLEAR) COUNT(taint_instr_set);                 \
+    if (tag == TAINT_CLEAR && RTREG(reg)) COUNT(taint_instr_unset);
+
+#define WTREGN(reg, tag) emu_set_taint_reg(emu, reg, tag);            \
+    if (tag != TAINT_CLEAR) COUNT(taint_instr_set);                   \
+    if (tag == TAINT_CLEAR && RTREGN(reg)) COUNT(taint_instr_unset);
+
+#define __WTREG(reg, tag)  emu_set_taint_reg(emu, d->reg, tag)
+#define __WTREGN(reg, tag) emu_set_taint_reg(emu, reg, tag)
+
+#define WTREG1(dest, a)          __WTREG(dest, RTREG(a));               \
+    if (RTREG(a) != TAINT_CLEAR) COUNT(taint_instr_set);                \
+    if (RTREG(a) == TAINT_CLEAR && RTREG(dest)) COUNT(taint_instr_unset);
+
+#define WTREG2(dest, a, b)       __WTREG(dest, RTREG(a) | RTREG(b));   \
+    if ((RTREG(a) | RTREG(b)) != TAINT_CLEAR) COUNT(taint_instr_set);   \
+    if (((RTREG(a) | RTREG(b)) == TAINT_CLEAR) && RTREG(dest)) COUNT(taint_instr_unset);
+
+#define WTREG3(dest, a, b, c)    __WTREG(dest, RTREG(a) | RTREG(b) | RTREG(c)); \
+    if ((RTREG(a) | RTREG(b) | RTREG(c)) != TAINT_CLEAR) COUNT(taint_instr_set); \
+    if (((RTREG(a) | RTREG(b) | RTREG(c)) == TAINT_CLEAR) && RTREG(dest)) COUNT(taint_instr_unset);
+
+#define WTREG4(dest, a, b, c, d) __WTREG(dest, RTREG(a) | RTREG(b) | RTREG(c) | RTREG(d)); \
+    if ((RTREG(a) | RTREG(b) | RTREG(c) | RTREG(d)) != TAINT_CLEAR) COUNT(taint_instr_set); \
+    if (((RTREG(a) | RTREG(b) | RTREG(c) | RTREG(d)) == TAINT_CLEAR) && RTREG(dest)) COUNT(taint_instr_unset);
+
+/* taint memory */
+#define RTMEM(addr)      emu_get_taint_mem(addr)
+#define WTMEM(addr, tag) emu_set_taint_mem(addr, tag);                  \
+    if (tag != TAINT_CLEAR) COUNT(taint_instr_mem_set);                 \
+    if (tag == TAINT_CLEAR && RTMEM(addr)) COUNT(taint_instr_mem_unset);
+
+#endif  /* TAINT_STATS */
 
 /* process two operands according to instr type */
 #define OP(a, b) emu_dataop(emu, a, b)
@@ -459,6 +524,7 @@ formats for S instructions:
 #define TrailingZerosCount(x) __builtin_ctz(x)
 #define LeadingZerosCount(x)  __builtin_clz(x)
 #define BitCheck(x, pos)      ((x) & (1 << (pos)))
+#define BitClear(x, i, j)     (~((1 << j) - (1 << i) ) & x)
 // lsb, msb
 #define BitExtract(x, i, j)   ((((1 << (j+1)) - (1 << i) ) & x) >> i )
 #define SignExtend(x) ((int32_t)((int16_t)x))
@@ -725,10 +791,10 @@ bool emu_check_intercept(emu_thread_t *emu);
 #define emu_init_taintmaps(...)   (void)(NULL)
 // #define emu_get_taintmap(...)     (void)(NULL)
 #define emu_dump_taintmaps(...)   (void)(NULL)
-#define emu_dump_taintpages(...)  (void)(NULL)
+// #define emu_dump_taintpages(...)  (void)(NULL)
 #define emu_get_taint_mem(...)    (void)(NULL)
 #define emu_set_taint_mem(...)    (void)(NULL)
-#define emu_get_taintpage(...)    (void)(NULL)
+// #define emu_get_taintpage(...)    (void)(NULL)
 #define emu_update_taintpage(...) (void)(NULL)
 #define emu_init_proc_mem(...)    (void)(NULL)
 #define emu_intercept(...)        (void)(NULL)
@@ -777,6 +843,5 @@ void BranchWritePC(emu_thread_t *emu, uint32_t addr);
 void BXWritePC(emu_thread_t *emu, uint32_t addr);
 
 /* Logging */
-static int __log_print(int prio, const char *tag, const char *fmt, ...);
 
 #endif  /* _INCLUDE_ANEMU_PRIVATE_H_ */

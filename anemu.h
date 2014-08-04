@@ -124,6 +124,10 @@ int64_t diff_ns(struct timespec *start,
 int64_t ns_to_cycles(int64_t ns);
 
 const char *get_signame(int sig);
+int __log_print(int prio, const char *tag, const char *fmt, ...);
+
+#define LOG_TAG "anemu"
+#define lprintf(...) __log_print(0, LOG_TAG, __VA_ARGS__)
 
 __END_DECLS
 
