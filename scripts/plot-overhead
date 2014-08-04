@@ -28,7 +28,7 @@ set style line 5 lt 1 lw 0 pt 5 lc rgb "purple"
 set boxwidth 0.5 absolute
 #set lmargin 4.5
 
-set title "$title"
+# set title "$title"
 # set xlabel "$xlabel"
 set ylabel "$ylabel"
 # set y2label "$y2label"
@@ -58,7 +58,7 @@ plot '$input' using (\$1/1000): xtic(3) w boxes ls 2 title ''
 ymin = `cat $input | awk '{print $1'} | sort -n | head -1`
 
 set output '$output-normalized.eps'
-set title "System Overhead\nRelative to null syscall"
+# set title "System Overhead\nRelative to null syscall"
 set ylabel "Normalized Overhead\n"
 plot '$input' using (\$1/ymin): xtic(3) w boxes ls 2 title ''
 
