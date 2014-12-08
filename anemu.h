@@ -54,12 +54,12 @@
 
 /* Benchmarking */
 #ifdef EMU_BENCH
-int64_t __tick_start, __tick_end;
+struct timespec __tick_start, __tick_end;
 #define M(x)                                              \
     time_ns(&__tick_start);                               \
     x;                                                    \
     time_ns(&__tick_end);                                               \
-    printf("[*] %s %6"PRId64" cycles.\n", #x, __tick_end - __tick_start);
+    printf("[*] %s %6"PRId64" cycles.\n", #x, ns_to_cycles(diff_ns(&__tick_start, &__tick_end)));
 #else
 #define M(x) x
 #endif

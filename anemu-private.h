@@ -50,6 +50,7 @@
 
 // TODO: set these in makefile instead
 #undef WITH_VFP
+// #define NO_TAINT
 
 #ifdef NDEBUG
 #define PROFILE
@@ -843,5 +844,6 @@ void BranchWritePC(emu_thread_t *emu, uint32_t addr);
 void BXWritePC(emu_thread_t *emu, uint32_t addr);
 
 /* Logging */
+// int __log_print(int prio, const char *tag, const char *fmt, ...);
 
 #endif  /* _INCLUDE_ANEMU_PRIVATE_H_ */

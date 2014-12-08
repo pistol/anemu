@@ -184,6 +184,16 @@ int main(int argc, char **argv)
     SET_BINARY_MODE(stdin);
     SET_BINARY_MODE(stdout);
 
+    /* load all libz.so symbols now as emu can choke inside ld */
+
+    /*
+    void *lib_handle = dlopen("/home/pistol/local/lib/libz.so.1", RTLD_NOW | RTLD_GLOBAL);
+    if (!lib_handle) {
+        fprintf(stderr, "%s\n", dlerror());
+        exit(1);
+    }
+    */
+
     double start, end;
     start = end = 0;
     emulation = atoi(argv[1]);

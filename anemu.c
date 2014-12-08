@@ -1370,8 +1370,10 @@ void emu_init() {
 #endif
 
 #ifndef NO_TAINT
+    // #ifndef PROFILE
     /* process maps */
     M(emu_parse_maps(emu_global));
+    // #endif
     /* taint tag storage */
     M(emu_init_taintmaps(emu_global));
 
@@ -1422,6 +1424,7 @@ void emu_stop(emu_thread_t *emu) { // Hammertime!
 #ifndef NO_TAINT
     if (emu_selective() && emu_regs_tainted(emu)) {
         emu_log_warn("WARNING: stopping emu with tainted regs! instr: %d\n", COUNTER(instr_total));
+        gdb_wait();
     }
 #endif
 #ifndef NDEBUG
@@ -1468,6 +1471,17 @@ uint8_t emu_stop_trigger(emu_thread_t *emu) {
         }
         break;
     }
+#if 0
+    case I_SVC: {
+        if (d->w == MARKER_START) {
+            emu_log_debug("MARKER: starting emu\n");
+            // bypass complete
+            /* advance PC but leave emu enabled */
+            return 1;
+        }
+        break;
+    }
+#endif
     default: {
         /* empty: avoids unhandled case warnings */
     }
@@ -2537,6 +2551,13 @@ void emu_set_taint_mem(uint32_t addr, uint32_t tag) {
     }
 }
 
+// TODO: hierarchy of taint pages, first by page then by addr
+// TODO: ranges instead?
+// Level 1: array indexed by (Align(addr) % getPageSize())
+//          0 : no taint
+//          1 : page fully tainted
+//          2 : partial taint -> need further lookup (Level 2)
+// Level 2: taintmap->data[offset]
 void
 emu_set_taint_array(uint32_t addr, uint32_t tag, uint32_t length) {
     if (emu_disabled()) {
@@ -3617,6 +3638,9 @@ ssize_t emu_taint_write(int fd, void *buf, size_t count) {
     } else { // taint_file
         // NOTE: we never clear file taint if we're writing a non-tainted buffer
         // this is because other parts of the file could still be tainted...
+
+        // TODO: look into pass bench reporting clear
+
         emu_log_debug("write(%d, %p, %d) tainted file but clear buffer...\n", fd, buf, count);
         ret = check_write(fd, buf, count);
     }
@@ -3709,6 +3733,10 @@ uint32_t mem_write32(uint32_t addr, uint32_t val) {
 }
 #else
 
+// TODO: measure false positives on taint, check if value is tainted on a read
+// and for write check if the value written is tainted (how?)
+
+
 #define MEM_OP(type) {                                 \
     int32_t fd = emu_global->mem_fd;                   \
     assert(fd);                                        \
@@ -3799,6 +3827,7 @@ uint32_t mem_write32(uint32_t addr, uint32_t val) {
 
 void *emu_alloc(size_t size) {
     assert(size > 0);
+    /* NOTE: mmap defaults to RWX regardless - WTF? */
     void *ret = mmap(NULL, size,
                      PROT_READ | PROT_WRITE,
                      MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE,

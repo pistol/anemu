@@ -23,7 +23,9 @@ LOCAL_SHARED_LIBRARIES  := libdl
 # LOCAL_WHOLE_STATIC_LIBRARIES  += libdarm libcorkscrew
 LOCAL_WHOLE_STATIC_LIBRARIES  += libdarm
 LOCAL_ARM_MODE          := arm
-LOCAL_SRC_FILES         := anemu.c setcontext.S
+LOCAL_SRC_FILES         := anemu.c
+# If Android Bionic has setcontext then use that, else use our own
+# LOCAL_SRC_FILES         += setcontext.S
 LOCAL_CFLAGS            += -DEMU_TAINT_FILE
 # Atomics need ANDROID_SMP=1
 LOCAL_CFLAGS            += -DANDROID_SMP=1
